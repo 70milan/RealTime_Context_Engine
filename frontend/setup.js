@@ -124,7 +124,8 @@ async function showLicensePrompt() {
         `Your Hardware ID: <strong style="color: #64ff96; user-select: all;">${hwid}</strong>\n\n` +
         `Email this ID to the owner to get your license key.\n\n` +
         `One-time payment of $20 only.\n` +
-        `CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a>\n\n` +
+        `CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a>\n` +
+        `PayPal: <a href="https://paypal.me/passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">paypal.me/passdpawn</a>\n\n` +
         `Click OK to enter license, or Cancel to return to setup.`
     );
 
@@ -540,6 +541,32 @@ function initSession() {
         };
     }
 
+    // Hotkeys button and modal
+    const hotkeysBtn = document.getElementById('btn-hotkeys-setup');
+    const hotkeysModal = document.getElementById('hotkeys-modal');
+    const closeHotkeys = document.getElementById('close-hotkeys');
+
+    if (hotkeysBtn) {
+        hotkeysBtn.onclick = () => {
+            hotkeysModal.style.display = 'flex';
+        };
+    }
+
+    if (closeHotkeys) {
+        closeHotkeys.onclick = () => {
+            hotkeysModal.style.display = 'none';
+        };
+    }
+
+    // Close hotkeys modal when clicking outside
+    if (hotkeysModal) {
+        hotkeysModal.onclick = (e) => {
+            if (e.target === hotkeysModal) {
+                hotkeysModal.style.display = 'none';
+            }
+        };
+    }
+
     // Conversation So Far button and modal
     const convoBtn = document.getElementById('btn-conversation');
     const convoModal = document.getElementById('conversation-modal');
@@ -753,7 +780,8 @@ function initSession() {
                 `Email your Hardware ID to: <a href="mailto:mjulez70@gmail.com" style="color: rgba(100, 255, 150, 0.9);">mjulez70@gmail.com</a>\n\n` +
                 `Your Hardware ID (HWID) is found below the license key input field.\n\n` +
                 `One-time payment of $20 only.\n` +
-                `CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a>`
+                `CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a>\n` +
+                `PayPal: <a href="https://paypal.me/passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">paypal.me/passdpawn</a>`
             );
         };
     }
