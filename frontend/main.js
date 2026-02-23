@@ -35,6 +35,7 @@ if (!gotTheLock) {
 // ============ AUTO-UPDATER SETUP ============
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.logger = console; // Log update progress to console
 
 function showUpdateOverlay(content) {
   if (!win) return;

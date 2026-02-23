@@ -1,6 +1,6 @@
 {
   "name": "windows-runtime-host",
-  "version": "2.0.24",
+  "version": "2.0.31",
   "description": "Interview Assistant - Secure Windows Runtime Host",
   "author": "mjulez70",
   "productName": "Interview Assistant",
@@ -12,7 +12,7 @@
     "prebuild": "node bump-version.js",
     "obfuscate": "node scripts/obfuscate.js obfuscate",
     "restore": "node scripts/obfuscate.js restore",
-    "build": "npm run obfuscate && electron-builder && npm run restore"
+    "build": "electron-builder"
   },
   "build": {
     "appId": "com.windowsruntimehost.app",
@@ -20,7 +20,8 @@
     "publish": {
       "provider": "github",
       "owner": "mjulez70",
-      "repo": "job_bandit"
+      "repo": "job_bandit",
+      "releaseType": "release"
     },
     "directories": {
       "output": "dist"

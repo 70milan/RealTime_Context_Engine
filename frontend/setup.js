@@ -123,6 +123,8 @@ async function showLicensePrompt() {
         `Demo session expired (12 min).\n\n` +
         `Your Hardware ID: <strong style="color: #64ff96; user-select: all;">${hwid}</strong>\n\n` +
         `Email this ID to the owner to get your license key.\n\n` +
+        `One-time payment of $20 only.\n` +
+        `CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a>\n\n` +
         `Click OK to enter license, or Cancel to return to setup.`
     );
 
@@ -750,7 +752,8 @@ function initSession() {
                 `Get a license key for full 2-hour sessions.\n\n` +
                 `Email your Hardware ID to: <a href="mailto:mjulez70@gmail.com" style="color: rgba(100, 255, 150, 0.9);">mjulez70@gmail.com</a>\n\n` +
                 `Your Hardware ID (HWID) is found below the license key input field.\n\n` +
-                `One-time payment of $20 only.`
+                `One-time payment of $20 only.\n` +
+                `CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a>`
             );
         };
     }
