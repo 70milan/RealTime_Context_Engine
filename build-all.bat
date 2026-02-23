@@ -34,7 +34,7 @@ echo.
 
 echo [2/2] Building Frontend (Electron)...
 cd frontend
-call npm run build
+call npm run build -- --publish always
 if %errorlevel% neq 0 (
     echo [ERROR] Frontend build failed!
     pause
