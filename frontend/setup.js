@@ -1,7 +1,8 @@
 // Session Setup & Timer Logic
 
 const FULL_SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
-const DEMO_SESSION_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const DEMO_SESSION_DURATION_MS = 12 * 60 * 1000; // 12 minutes
+
 const DEMO_COOLDOWN_MS = 47 * 60 * 1000; // 47 minutes
 let SESSION_DURATION_MS = DEMO_SESSION_DURATION_MS; // Default to demo
 let sessionEndTime = null;
@@ -119,7 +120,7 @@ async function getHardwareID() {
 async function showLicensePrompt() {
     const hwid = await getHardwareID();
     const result = await customConfirm(
-        `Demo session expired (5 min).\n\n` +
+        `Demo session expired (12 min).\n\n` +
         `Your Hardware ID: <strong style="color: #64ff96; user-select: all;">${hwid}</strong>\n\n` +
         `Email this ID to the owner to get your license key.\n\n` +
         `Click OK to enter license, or Cancel to return to setup.`
@@ -624,6 +625,10 @@ function initSession() {
 
     if (convoBtn) {
         convoBtn.onclick = () => {
+            if (!window.isSessionActive) {
+                window.showSessionError();
+                return;
+            }
             const convoArea = document.getElementById('conversation-area');
             const modalList = document.getElementById('conversation-modal-list');
             const costFooter = document.getElementById('conversation-modal-cost');
@@ -969,7 +974,7 @@ window.openPastSession = async function (sessionName) {
                 // Update timer
                 const timerText = document.getElementById('session-timer-text');
                 if (timerText) {
-                    timerText.innerText = isLicensed ? '2:00:00' : '0:05:00';
+                    timerText.innerText = isLicensed ? '2:00:00' : '0:12:00';
                 }
 
                 const statusText = document.getElementById('status-text');
@@ -1200,8 +1205,8 @@ async function handleCreateSession() {
 
             isLicensed = false;
             SESSION_DURATION_MS = DEMO_SESSION_DURATION_MS;
-            console.log('Demo: 5-minute session');
-            showStatus("Demo: 5-minute session", false);
+            console.log('Demo: 12-minute session');
+            showStatus("Demo: 12-minute session", false);
             if (status) status.style.color = "rgba(228, 147, 61, 0.6)"; // Muted orange for demo
         }
     }
@@ -1281,7 +1286,7 @@ async function handleCreateSession() {
 
         // 4. Session created - hide overlay
         sessionCreated = true;
-        status.innerText = isLicensed ? "Session created!" : "Demo session created (5 min)";
+        status.innerText = isLicensed ? "Session created!" : "Demo session created (12 min)";
         status.style.color = "rgba(100, 255, 150, 0.4)";
 
         // Update timer display to show correct duration
@@ -1290,7 +1295,7 @@ async function handleCreateSession() {
             if (isLicensed) {
                 timerText.innerText = '2:00:00';
             } else {
-                timerText.innerText = '0:05:00';
+                timerText.innerText = '0:12:00';
             }
         }
 
@@ -1326,7 +1331,7 @@ async function handleCreateSession() {
 
 async function startSessionTimer() {
     if (!sessionCreated) {
-        customAlert('Create a session first!');
+        window.showSessionError();
         return;
     }
 
@@ -1362,7 +1367,7 @@ async function startSessionTimer() {
     startBtn.classList.add('active');
     stopBtn.classList.remove('paused');
     if (endBtn) endBtn.classList.remove('ended');
-    statusText.innerText = isLicensed ? 'Session Running' : 'Demo (5 mins)';
+    statusText.innerText = isLicensed ? 'Session Running' : 'Demo (12 mins)';
     if (statusDot) statusDot.className = 'dot connected';
 
     timerInterval = setInterval(() => {
@@ -1424,6 +1429,10 @@ async function startSessionTimer() {
 }
 
 function stopSessionTimer() {
+    if (!sessionCreated) {
+        window.showSessionError();
+        return;
+    }
     const startBtn = document.getElementById('btn-session-start');
     const stopBtn = document.getElementById('btn-session-stop');
     const statusText = document.getElementById('status-text');

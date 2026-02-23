@@ -1,77 +1,69 @@
-# JobAndit: AI Interview Assistant
-> **Contact:** mjulez70@gmail.com
+# Interview Assistant: Professional Prep & Live Aid
+> **Contact:** [mjulez70@gmail.com](mailto:mjulez70@gmail.com)
 
-JobAndit A.K.A Windows Command Controller is a real-time AI interview assistant that captures audio/screen context and provides intelligent, streaming responses to help users navigate technical interviews.
+**Interview Assistant** (internally known as *Windows Runtime Host*) is a professional-grade tool designed to assist candidates during technical and behavioral interviews. By combining real-time audio capture, screen analysis, and high-performance AI reasoning, it provides the edge needed to navigate complex live interview scenarios with confidence.
 
-## Features
-- **Real-time Transcription**: Listens to interview questions via microphone.
-- **Screen Context**: Analyzes shared screen content (coding problems, diagrams) using GPT-4o.
-- **Streaming AI**: Low-latency responses using GPT-3.5/4/5 models.
-- **Session Management**: Save and resume interview sessions.
-- **Stealth Mode**: Mini-overlay for discreet usage.
+---
 
-## Prerequisites
+## 🛡️ Stealth & Professionalism
+Unlike traditional "Co-pilots," this application is built with professional discretion as a core pillar:
+- **Process Disguise**: Appears as "Windows Runtime Host" in Task Manager to maintain a low profile.
+- **Stealth UI**: Minimalist, frosted-glass design that stays inconspicuous on your desktop.
+- **Hotkeys**: Quick controls (Ctrl+Q, Ctrl+K, Ctrl+S) for rapid, silent interaction.
 
-Before running the application, ensure you have:
+---
 
-*   **Node.js** (v18+): [Download here](https://nodejs.org/)
-*   **Python** (v3.10+): [Download here](https://www.python.org/)
+## 🌟 Key Features
+### 1. Multi-Modal Context Awareness
+- **AI with Vision**: Captures and analyzes shared screen frames (coding problems, architectural diagrams) using **GPT-4o**.
+- **Real-time Transcription**: Seamlessly listens to microphone and system audio to capture interviewers' questions.
 
-## Installation
+### 2. High-Performance AI Pipeline
+- **Optimized Streaming**: Server-Sent Events (SSE) provide ultra-low latency responses.
+- **Model Selector**: Switch between GPT-4o, GPT-3.5 Turbo, and high-reasoning **GPT-5 Nano/Mini** models on the fly.
+- **Metric Tracking**: Tracks Time-to-First-Token (TTFT) and total response time to ensure the interview flow is never broken.
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/70milan/job_bandit.git
-cd job_bandit
-```
+### 3. Session & Profile Customization
+- **Tailored Personas**: Set your **Target Role** and **Preferred Language** (e.g., Python, Java) during setup for persona-aligned responses.
+- **Persistent History**: Save, resume, and sort interview sessions by date. Review past performance or export logs to Markdown (`.md`).
+- **Cost Control**: Real-time cumulative API cost tracking per session.
 
-### 2. Frontend Setup
-Install the dependencies for the Electron/React frontend:
-```bash
-cd frontend
-npm install
-```
+### 4. Enterprise-Grade Security
+- **Hardware-Locked Licensing**: RSA-secured licensing system locked to your unique Hardware ID (HWID).
+- **Backend Enforcement**: License and demo limits are enforced at the backend level to prevent unauthorized bypass.
 
-### 3. Backend Setup
-Install the Python dependencies:
-```bash
-cd ../backend
-pip install -r requirements.txt
-```
+---
 
-*(Optional) Create a `.env` file in `backend/` with your OpenAI API key:*
-```env
-OPENAI_API_KEY=sk-proj-...
-```
+## ⚖️ Ethical Usage Policy
+This tool is intended for **assistance and preparation**. We market it as an "Assistant" to support your natural knowledge:
+- Use it to verify complex syntax or double-check architectural patterns.
+- Use it as a real-time prompt for behavioral stories you've already prepared.
+- **Intent**: To augment your human performance, not replace it.
 
-## Running the Application
+---
 
-You need to run both the backend (AI server) and the frontend (UI) simultaneously.
+## 🚀 Getting Started
 
-### Option A: Developer Mode (Two Terminals)
+### Prerequisites
+*   **Node.js** (v18+): [Download](https://nodejs.org/)
+*   **Python** (v3.10+): [Download](https://www.python.org/)
 
-**Terminal 1 (Backend):**
-```bash
-cd backend
-uvicorn main:app --reload --host 127.0.0.1 --port 5050
-```
+### Setup & Run
+1.  **Clone the Repo**:
+    ```bash
+    git clone https://github.com/mjulez70/job_bandit.git
+    cd job_bandit
+    ```
+2.  **Install Dependencies**:
+    - **Frontend**: `cd frontend && npm install`
+    - **Backend**: `cd ../backend && pip install -r requirements.txt`
+3.  **Launch**:
+    - Use the provided `build-all.bat` for a full production environment.
+    - Or run in developer mode using `npm run start:dev` from the `frontend` folder.
 
-**Terminal 2 (Frontend):**
-```bash
-cd frontend
-npm run start:dev
-```
+---
 
-### Option B: Build & Run
-To create the executable:
-```bash
-# Windows
-build-all.bat
-```
-Then run the generated `Windows Command Controller.exe`.
-
-## Project Structure
-- `frontend/`: Electron + Vanilla JS/HTML UI.
-- `backend/`: FastAPI server handling AI logic and state.
-- `backend/resumes/`: Local storage for user resumes (git-ignored).
-- `backend/sessions/`: Local storage for chat history (git-ignored).
+## 📂 Project Architecture
+- `frontend/`: Electron core with Vanilla JS/HTML.
+- `backend/`: FastAPI server managing AI logic, token counts, and session persistence.
+- `scripts/`: Build-time utilities including code obfuscation filters.

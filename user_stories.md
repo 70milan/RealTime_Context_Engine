@@ -41,10 +41,20 @@
 - **User Story 1.9 [Complexity: Medium]:** As a user, I want the application to detect if another instance is already running and show an error message instead of opening a second one, ensuring system stability. *(Implemented `app.requestSingleInstanceLock()` to prevent dual-launch and instantly pull up existing window).*
 - **User Story 1.10 [Complexity: High]:** As a user, I want the application to remain "stealthy" in the Task Manager without requiring a app rename, maintaining a low profile during operation. *(Disguised Frontend as Windows Runtime Host and Backend as WinHostSvc with console=False).*
 - **User Story 5.17 [Complexity: Low]:** As a user, I want my Past Sessions list to be sorted by date descending (newest first) instead of oldest first, so I can easily find my most recent interviews. *(Updated backend `/sessions` endpoint and removed frontend reverse sort).*
+- **User Story 1.12 [Complexity: Medium]:** As a user, I want to be able to successfully update my OpenAI API key in the Setup screen, and understand why certain project-scoped keys might pass initial validation but fail during chat generation. *(Diagnosed OpenAI project key validation discrepancy and resolved local cache issues causing 401 errors).*
+- **User Story 1.13 [Complexity: Medium]:** As a user, I want the application window to scale its internal UI proportionally when using resizing shortcuts and strictly bind window movement to the active display to prevent dragging it out of bounds. *(Implemented `setZoomFactor` scaling synced with window width and added `clampWindowToScreen` boundary enforcement in `main.js`).*
+- **User Story 4.5 [Complexity: High]:** As a developer, I want to include digital signatures and author information in the application to prevent antivirus software from flagging it as malware. *(Created `create_cert.bat` to generate a self-signed PFX certificate, and configured Pyinstaller and Electron-Builder to digitally sign both backend and frontend binaries).*
+- **User Story 6.1 [Complexity: Low]:** As a developer, I want to obfuscate the frontend JavaScript during the build process to deter unauthorized tampering with license and logic. *(Implemented `javascript-obfuscator` pre/post-build scripts natively in `package.json`).*
+- **User Story 6.2 [Complexity: Medium]:** As a developer, I want the backend to independently verify the license status and refuse AI requests if the session is invalid or expired, providing a second layer of security. *(Implemented `check_access_allowed` verification immediately rejecting unauthorized requests on the `/ai/stream` endpoint).*
 - **User Story 3.1 [STRETCH] [Complexity: Very High]:** As a developer, I want to obfuscate the application code and the final executable to protect intellectual property and prevent reverse-engineering. *(SKIPPED/RE-EVALUATED: Deemed unnecessary for a $20 offline app; hardware-locked licensing is sufficient protection for this price point).*
 
 ## Pending
 
-- **User Story 4.5 [Complexity: High]:** As a developer, I want to include digital signatures and author information in the application to prevent antivirus software from flagging it as malware.
+*(All current user stories have been successfully completed!)*
 
-- **User Story 1.11 [Complexity: High]:** As a user, I want the response times for GPT-5 and higher reasoning models to be optimized for interview flow.
+---
+
+## Technical Notes & Context
+- **User Story 3.1:** Re-evaluating. Moved to automated obfuscation (6.1) and backend anchor (6.2).
+- **Update Strategy:** Distribute via a private source repo and a public "releases-only" repo to maintain code privacy while allowing auto-updates.
+

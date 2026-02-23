@@ -3,7 +3,7 @@ const fs = require('fs');
 
 const options = {
     hostname: 'api.github.com',
-    path: '/repos/70milan/job_bandit/releases/latest',
+    path: '/repos/mjulez70/job_bandit/releases/latest',
     method: 'GET',
     headers: {
         'User-Agent': 'Test-App' // GitHub requires a user agent

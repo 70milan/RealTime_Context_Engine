@@ -444,6 +444,11 @@
 </head>
 
 <body>
+  <!-- Session Error Popup -->
+  <div id="session-error-popup"
+    style="display: none; position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(30, 30, 30, 0.95); border: 1px solid rgba(255, 107, 107, 0.5); color: rgba(255, 107, 107, 0.9); padding: 8px 16px; border-radius: 4px; font-size: 11px; z-index: 20000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s ease; opacity: 0; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">
+    Please start the session first
+  </div>
   <style>
     #close-btn {
       position: absolute;
@@ -529,12 +534,12 @@
             <span id="license-info"
               style="cursor: pointer; color: rgba(100, 255, 150, 0.6); font-size: 10px; font-weight: normal;"
               title="Get a license">(?)</span></label>
-          <input type="password" id="setup-license" placeholder="Optional - 5 min demo without license"
+          <input type="password" id="setup-license" placeholder="Optional - 12 mins demo without license"
             autocomplete="off"
             style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 13px; outline: none;" />
           <div id="demo-info-text"
             style="color: rgba(228, 147, 61, 0.4); font-size: 9px; margin-top: 4px; text-align: left; font-weight: 500;">
-            Demo mode (5 mins) resets every 47 mins.
+            Demo mode (12 mins) resets every 47 mins.
           </div>
           <div id="hwid-setup-display"
             style="color: rgba(255, 255, 255, 0.2); font-size: 9px; margin-top: 4px; text-align: left; font-family: monospace; display: none;">
@@ -833,7 +838,8 @@
     <div class="section" id="transcript-section">
       <div class="section-header"><span>Live Transcript</span><span
           style="font-size: 11px; cursor: pointer; color: rgba(255,255,255,0.4); font-family: monospace; transition: all 0.2s;"
-          onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.4)'"
+          onmouseover="this.style.color='#fff'; if(this.textContent==='[clear]') this.textContent='[ctrl+backspace]';"
+          onmouseout="this.style.color='rgba(255,255,255,0.4)'; if(this.textContent==='[ctrl+backspace]') this.textContent='[clear]';"
           onclick="window.clearTranscript(); this.textContent = '[cleared!]'; this.style.color = '#fff'; setTimeout(() => { this.textContent = '[clear]'; this.style.color = 'rgba(255,255,255,0.4)'; }, 2000);">[clear]</span>
       </div>
       <div id="transcript-area" contenteditable="true"></div>
@@ -1286,12 +1292,25 @@
       }
     };
 
-    window.toggleSystemCapture = () => startCapture('system');
-    window.toggleMicCapture = () => startCapture('mic');
-    window.captureScreen = (saveToContext = false) => btnScreen.onclick(saveToContext);
-    window.generateAIOnly = () => btnGenerate.click();
+    window.toggleSystemCapture = () => {
+      if (!window.isSessionActive) { window.showSessionError(); return; }
+      startCapture('system');
+    };
+    window.toggleMicCapture = () => {
+      if (!window.isSessionActive) { window.showSessionError(); return; }
+      startCapture('mic');
+    };
+    window.captureScreen = (saveToContext = false) => {
+      if (!window.isSessionActive) { window.showSessionError(); return; }
+      btnScreen.onclick(saveToContext);
+    };
+    window.generateAIOnly = () => {
+      if (!window.isSessionActive) { window.showSessionError(); return; }
+      btnGenerate.click();
+    };
 
     window.clearTranscript = () => {
+      if (!window.isSessionActive) { window.showSessionError(); return; }
       transcriptArea.innerText = '';
       responseArea.innerText = '';
       transcriptSection.classList.remove('compact');
@@ -1301,6 +1320,7 @@
     };
 
     window.maximizeResponse = () => {
+      if (!window.isSessionActive) { window.showSessionError(); return; }
       if (responseSection.classList.contains('maximized')) {
         transcriptSection.classList.remove('minimized');
         responseSection.classList.remove('maximized');

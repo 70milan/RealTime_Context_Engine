@@ -229,7 +229,27 @@ function startBackend() {
   });
 }
 
-function centerTop(width = 712, height = 600) {
+function clampWindowToScreen(windowToClamp) {
+  if (!windowToClamp) return;
+  const currentBounds = windowToClamp.getBounds();
+  const display = screen.getDisplayMatching(currentBounds);
+  const workArea = display.workArea;
+
+  let x = currentBounds.x;
+  let y = currentBounds.y;
+
+  if (x < workArea.x) x = workArea.x;
+  else if (x + currentBounds.width > workArea.x + workArea.width) x = workArea.x + workArea.width - currentBounds.width;
+
+  if (y < workArea.y) y = workArea.y;
+  else if (y + currentBounds.height > workArea.y + workArea.height) y = workArea.y + workArea.height - currentBounds.height;
+
+  if (x !== currentBounds.x || y !== currentBounds.y) {
+    windowToClamp.setBounds({ x, y, width: currentBounds.width, height: currentBounds.height });
+  }
+}
+
+function centerTop(width = 800, height = 600) {
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
   const x = Math.round((sw - width) / 2);
   const y = Math.round((sh - height) / 2);
@@ -259,6 +279,44 @@ function createWindow() {
   win.setContentProtection(true);
 
   win.loadFile(path.join(__dirname, 'index.html'));
+
+  // Ensure content scales proportionally to the window width, maintaining a 800px base
+  win.on('resize', () => {
+    if (isMiniMode || !win) return;
+    const [width] = win.getSize();
+    // Don't scale if width is less than 400 (which happens during mini mode transition)
+    if (width < 380) return;
+    try {
+      win.webContents.setZoomFactor(width / 800);
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  // Clamp on move
+  win.on('will-move', (e, newBounds) => {
+    if (!win) return;
+    const display = screen.getDisplayMatching(win.getBounds());
+    const workArea = display.workArea;
+
+    let clampedX = newBounds.x;
+    let clampedY = newBounds.y;
+
+    if (clampedX < workArea.x) clampedX = workArea.x;
+    else if (clampedX + newBounds.width > workArea.x + workArea.width) clampedX = workArea.x + workArea.width - newBounds.width;
+
+    if (clampedY < workArea.y) clampedY = workArea.y;
+    else if (clampedY + newBounds.height > workArea.y + workArea.height) clampedY = workArea.y + workArea.height - newBounds.height;
+
+    if (clampedX !== newBounds.x || clampedY !== newBounds.y) {
+      e.preventDefault();
+      win.setBounds({ x: clampedX, y: clampedY, width: newBounds.width, height: newBounds.height });
+    }
+  });
+
+  win.on('moved', () => {
+    clampWindowToScreen(win);
+  });
 }
 
 app.whenReady().then(() => {
@@ -301,12 +359,14 @@ app.whenReady().then(() => {
     if (!win) return;
     const [x, y] = win.getPosition();
     win.setPosition(x - 50, y);
+    clampWindowToScreen(win);
   });
 
   globalShortcut.register('CommandOrControl+Alt+Right', () => {
     if (!win) return;
     const [x, y] = win.getPosition();
     win.setPosition(x + 50, y);
+    clampWindowToScreen(win);
   });
 
   /* ---- move up / down ---- */
@@ -314,12 +374,14 @@ app.whenReady().then(() => {
     if (!win) return;
     const [x, y] = win.getPosition();
     win.setPosition(x, y - 50);
+    clampWindowToScreen(win);
   });
 
   globalShortcut.register('CommandOrControl+Alt+Down', () => {
     if (!win) return;
     const [x, y] = win.getPosition();
     win.setPosition(x, y + 50);
+    clampWindowToScreen(win);
   });
 
   globalShortcut.register('CommandOrControl+R', () => {
@@ -371,15 +433,16 @@ app.whenReady().then(() => {
 
     if (!isMiniMode) {
       // Switch to Mini Mode - small floating icon
+      isMiniMode = true; // Set flag FIRST so resize listener ignores it
       const miniPos = lastMiniPosition || { x: win.getPosition()[0], y: win.getPosition()[1] };
       win.setOpacity(1.0);
       win.setBackgroundColor('#00000000');
       win.setBounds({ x: miniPos.x, y: miniPos.y, width: 50, height: 50 });
+      win.webContents.setZoomFactor(1.0); // Reset zoom for mini icon
       win.setResizable(false);
       win.webContents.executeJavaScript(`
         document.body.classList.add('mini');
       `);
-      isMiniMode = true;
     } else {
       // Save mini position before expanding
       const [mx, my] = win.getPosition();
@@ -390,6 +453,7 @@ app.whenReady().then(() => {
       win.setResizable(true);
       const bounds = centerTop(800, 600);
       win.setBounds(bounds);
+      win.webContents.setZoomFactor(1.0); // Reset zoom to default 800 width
       win.webContents.executeJavaScript(`document.body.classList.remove('mini');`);
       isMiniMode = false;
     }
@@ -411,30 +475,38 @@ app.whenReady().then(() => {
 
   /* ---- Ctrl+Shift++: Incrementally Expand Window ---- */
   globalShortcut.register('CommandOrControl+Shift+Plus', () => {
-    if (!win) return;
+    if (!win || isMiniMode) return;
     const [x, y] = win.getPosition();
     const [width, height] = win.getSize();
-    const newWidth = Math.min(width + 100, 1600);
-    const newHeight = Math.min(height + 75, 1000);
-    win.setBounds({ x: x - 50, y, width: newWidth, height: newHeight });
+    const newWidth = Math.min(width + 80, 1600);
+    const newHeight = Math.round(newWidth * (600 / 800));
+    // Center the resize operation vertically and horizontally
+    win.setBounds({ x: x - 40, y: y - Math.round(((newHeight - height) / 2)), width: newWidth, height: newHeight });
+    win.webContents.setZoomFactor(newWidth / 800);
+    clampWindowToScreen(win);
   });
 
   /* ---- Ctrl+Shift+-: Incrementally Contract Window ---- */
   globalShortcut.register('CommandOrControl+Shift+-', () => {
-    if (!win) return;
+    if (!win || isMiniMode) return;
     const [x, y] = win.getPosition();
     const [width, height] = win.getSize();
-    const newWidth = Math.max(width - 100, 400);
-    const newHeight = Math.max(height - 75, 300);
-    win.setBounds({ x: x + 50, y, width: newWidth, height: newHeight });
+    const newWidth = Math.max(width - 80, 400);
+    const newHeight = Math.round(newWidth * (600 / 800));
+    // Center the resize operation vertically and horizontally
+    win.setBounds({ x: x + 40, y: y + Math.round(((height - newHeight) / 2)), width: newWidth, height: newHeight });
+    win.webContents.setZoomFactor(newWidth / 800);
+    clampWindowToScreen(win);
   });
 
   /* ---- Ctrl+Shift+O: Reset to Default Size ---- */
   globalShortcut.register('CommandOrControl+Shift+O', () => {
-    if (!win) return;
+    if (!win || isMiniMode) return;
     const bounds = centerTop(800, 600);
     win.setBounds(bounds);
+    win.webContents.setZoomFactor(1.0);
     console.log('🔄 Window reset to default size');
+    clampWindowToScreen(win);
   });
 
   /* ---- Ctrl+Shift+Up: Scroll AI Up ---- */
@@ -496,6 +568,7 @@ app.whenReady().then(() => {
     win.setResizable(true);
     const bounds = centerTop(800, 600);
     win.setBounds(bounds);
+    win.webContents.setZoomFactor(1.0);
     win.webContents.executeJavaScript(`document.body.classList.remove('mini');`);
     isMiniMode = false;
   });

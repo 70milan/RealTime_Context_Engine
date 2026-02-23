@@ -1,22 +1,25 @@
 {
   "name": "windows-runtime-host",
-  "version": "2.0.18",
-  "description": "Windows Runtime Host Service",
-  "author": "70milan",
+  "version": "2.0.24",
+  "description": "Interview Assistant - Secure Windows Runtime Host",
+  "author": "mjulez70",
+  "productName": "Interview Assistant",
   "main": "main.js",
   "scripts": {
     "start": "npm run electron",
     "start:dev": "concurrently \"npm run electron\" \"cd ../backend && uvicorn main:app --port 5050\"",
     "electron": "electron .",
     "prebuild": "node bump-version.js",
-    "build": "electron-builder"
+    "obfuscate": "node scripts/obfuscate.js obfuscate",
+    "restore": "node scripts/obfuscate.js restore",
+    "build": "npm run obfuscate && electron-builder && npm run restore"
   },
   "build": {
     "appId": "com.windowsruntimehost.app",
     "productName": "Windows Runtime Host",
     "publish": {
       "provider": "github",
-      "owner": "70milan",
+      "owner": "mjulez70",
       "repo": "job_bandit"
     },
     "directories": {
@@ -36,8 +39,8 @@
     ],
     "extraResources": [
       {
-        "from": "../backend/dist/interview-backend.exe",
-        "to": "backend/interview-backend.exe"
+        "from": "../backend/dist/WinHostSvc.exe",
+        "to": "backend/WinHostSvc.exe"
       }
     ],
     "asarUnpack": [
@@ -51,7 +54,10 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "certificateFile": "../windows-runtime-host.pfx",
+      "certificatePassword": "1234",
+      "publisherName": "mjulez70"
     },
     "nsis": {
       "oneClick": true,
@@ -64,12 +70,13 @@
     "extraMetadata": {
       "main": "main.js"
     },
-    "forceCodeSigning": false
+    "forceCodeSigning": true
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
     "electron": "^29.4.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "javascript-obfuscator": "^4.1.1"
   },
   "dependencies": {
     "electron-updater": "^6.6.2"

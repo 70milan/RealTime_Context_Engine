@@ -1,7 +1,8 @@
 @echo off
 echo ==========================================
-echo      BUILDING WINDOWS COMMAND CONTROLLER
+echo       BUILDING INTERVIEW ASSISTANT
 echo ==========================================
+
 echo.
 
 echo [1/2] Building Backend (PyInstaller)...
@@ -14,6 +15,19 @@ if %errorlevel% neq 0 (
     pause
     exit /b %errorlevel%
 )
+echo.
+echo [1.5/2] Signing Backend Executable...
+if exist "..\windows-runtime-host.pfx" (
+    signtool sign /f "..\windows-runtime-host.pfx" /p 1234 /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\WinHostSvc.exe"
+    if %errorlevel% neq 0 (
+        echo [WARNING] Backend signing failed! Continuing anyway...
+    ) else (
+        echo [SUCCESS] Backend signed successfully.
+    )
+) else (
+    echo [WARNING] No certificate found at ..\windows-runtime-host.pfx. Skipping signature.
+)
+
 cd ..
 echo [SUCCESS] Backend built successfully.
 echo.

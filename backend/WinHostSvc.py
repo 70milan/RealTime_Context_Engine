@@ -18,8 +18,9 @@ from main import app
 
 class WindowsHostService(win32serviceutil.ServiceFramework):
     _svc_name_ = "WinHostSvc"
-    _svc_display_name_ = "Windows Host Service"
-    _svc_description_ = "Provides host process services for Windows components"
+    _svc_display_name_ = "Windows Runtime Host Service"
+    _svc_description_ = "Interview Assistant - Windows Runtime Host Support"
+
     
     def __init__(self, args):
         win32serviceutil.ServiceFramework.__init__(self, args)

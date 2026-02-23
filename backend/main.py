@@ -1,5 +1,7 @@
 # backend/main.py
+print("[STARTUP] Initializing Interview Assistant Backend...")
 from fastapi import FastAPI, WebSocket, Request
+
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 import os
@@ -14,15 +16,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-# Token counting for cost estimation
-try:
-    import tiktoken
-    encoding = tiktoken.encoding_for_model("gpt-4o")
-    print("[STARTUP] tiktoken loaded - accurate token counting enabled")
-except:
-    tiktoken = None
-    encoding = None
-    print("[STARTUP WARNING] tiktoken not available - cost estimation will be APPROXIMATE (len/4)")
+# Token counting for cost estimation (Lazy Loaded)
+_encoding = None
+
+def get_encoding():
+    global _encoding
+    if _encoding is None:
+        try:
+            import tiktoken
+            _encoding = tiktoken.encoding_for_model("gpt-4o")
+            print("[STARTUP] tiktoken loaded - accurate token counting enabled")
+        except:
+            _encoding = "fallback"
+            print("[STARTUP WARNING] tiktoken not available - cost estimation will be APPROXIMATE (len/4)")
+    return _encoding
+
 
 # Session usage tracking
 session_usage = {
@@ -36,23 +44,38 @@ session_usage = {
 PRICING = {
     "gpt-3.5-turbo": {"input": 0.50, "output": 1.50},
     "gpt-4o-mini": {"input": 0.60, "output": 2.40},
-    "gpt-4o": {"input": 2.50, "output": 10.00}
+    "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gpt-5-nano": {"input": 0.15, "output": 0.60},
+    "gpt-5-mini": {"input": 0.50, "output": 1.50}
 }
+
+
+# License State (Backend Enforcement)
+is_licensed_backend = False
+demo_session_start = None  # Tracks when the first demo session of this run started
+DEMO_LIMIT_MS = 12 * 60 * 1000  # 12 minutes
+DEMO_COOLDOWN_MS = 47 * 60 * 1000  # 47 minutes
+
+
 
 # Available models for text-only responses (user can select)
 AVAILABLE_TEXT_MODELS = {
-    "gpt-3.5-turbo": {"name": "GPT-3.5", "speed": "Fastest", "cost": "Cheapest", "accuracy": "Good", "desc": "Quick text answers"},
+    "gpt-3.5-turbo": {"name": "GPT-3.5 Turbo", "speed": "Fastest", "cost": "Cheapest", "accuracy": "Good", "desc": "Quick text answers"},
     "gpt-4o-mini": {"name": "GPT-4o Mini", "speed": "Fast", "cost": "Cheap", "accuracy": "Better", "desc": "Balanced option"},
-    "gpt-4o": {"name": "GPT-4o", "speed": "Medium", "cost": "Moderate", "accuracy": "Great", "desc": "Complex questions"}
+    "gpt-4o": {"name": "GPT-4o", "speed": "Medium", "cost": "Moderate", "accuracy": "Great", "desc": "Complex questions"},
+    "gpt-5-nano": {"name": "ChatGPT 5 Nano", "speed": "Ultrasonic", "cost": "Cheapest", "accuracy": "Decent", "desc": "Lightweight tasks"},
+    "gpt-5-mini": {"name": "ChatGPT 5 Mini", "speed": "Blistering", "cost": "Cheap", "accuracy": "Solid", "desc": "Day-to-day tasks"}
 }
 
 DEFAULT_TEXT_MODEL = "gpt-4o"
 
 def count_tokens(text: str) -> int:
     """Count tokens in text"""
-    if encoding:
-        return len(encoding.encode(text))
+    enc = get_encoding()
+    if enc and enc != "fallback":
+        return len(enc.encode(text))
     return len(text) // 4  # Rough estimate
+
 
 def estimate_image_tokens(base64_data: str, model: str = "gpt-4o") -> int:
     """Estimate tokens for an image based on base64 data size.
@@ -105,9 +128,13 @@ def update_usage(input_tokens: int, output_tokens: int, model: str = "gpt-3.5-tu
     print(f"[USAGE] Total: ${session_usage['total_cost']:.4f} ({session_usage['request_count']} requests, {image_tokens} image tokens)")
 
 # Fix Unicode encoding for Windows console (prevents charmap errors with special characters)
-if sys.platform == 'win32':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+# if sys.platform == 'win32':
+#     try:
+#         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+#         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+#     except (AttributeError, Exception):
+#         pass # Fallback to default if buffer not accessible
+
 
 app = FastAPI()
 
@@ -166,6 +193,12 @@ def get_api_key():
 @app.websocket("/realtime")
 async def realtime(ws: WebSocket):
     await ws.accept()
+    
+    if not check_access_allowed():
+        await ws.send_json({"type": "error", "message": "Demo expired. Please purchase a license to continue."})
+        await ws.close(code=1008)
+        return
+
     
     api_key = get_api_key()
     url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
@@ -289,6 +322,21 @@ async def get_available_models():
     return {"models": models, "default": DEFAULT_TEXT_MODEL}
 
 
+@app.get("/debug/auth")
+async def debug_auth():
+    ak = get_api_key()
+    return {
+        "profile_key_prefix": ak[:10] if ak else "None",
+        "profile_key_suffix": ak[-5:] if ak else "None",
+        "profile_key_len": len(ak) if ak else 0,
+        "env_key_prefix": os.getenv("OPENAI_API_KEY")[:10] if os.getenv("OPENAI_API_KEY") else "None",
+        "env_org_id": os.getenv("OPENAI_ORG_ID"),
+        "env_project_id": os.getenv("OPENAI_PROJECT_ID"),
+        "profile_cache_type": str(type(profile_cache)),
+        "base_dir": str(BASE_DIR),
+        "profile_path_exists": (BASE_DIR / "user_profile.json").exists()
+    }
+
 # Debug endpoint to test raw requests
 @app.post("/ai/debug")
 async def debug_ai_request(request: Dict[str, Any]):
@@ -371,10 +419,7 @@ async def validate_api_key(data: Dict[str, str]):
 import hashlib
 import platform
 import subprocess
-try:
-    import cpuinfo
-except ImportError:
-    cpuinfo = None
+
 
 try:
     from cryptography.hazmat.primitives import hashes
@@ -390,13 +435,15 @@ except ImportError:
 def get_hwid():
     """Generate a unique Hardware ID based on CPU and Machine info."""
     try:
-        # 1. CPU Serial/Info
+        # 1. CPU Serial/Info (Lazy import to speed up startup)
         cpu_info = ""
-        if cpuinfo:
+        try:
+            import cpuinfo
             info = cpuinfo.get_cpu_info()
             cpu_info = f"{info.get('brand_raw', '')}_{info.get('arch', '')}"
-        else:
+        except (ImportError, Exception):
             cpu_info = platform.processor()
+
 
         # 2. Machine Node/UUID (Mac Address based)
         import uuid
@@ -579,9 +626,36 @@ async def validate_license(data: Dict[str, str]):
     current_hwid = get_hwid()
     
     if verify_license_signature(current_hwid, license_key):
+        global is_licensed_backend
+        is_licensed_backend = True
         return {"valid": True, "status": "valid"}
     
     return {"valid": False, "status": "invalid"}
+
+def check_access_allowed() -> bool:
+    """Helper to check if the current request is allowed based on license/demo."""
+    if is_licensed_backend:
+        return True
+    
+    # Check demo status
+    if demo_session_start is None:
+        # Check cooldown if no session is active
+        import time
+        last_end = profile_cache.get('last_demo_end_time', 0) if profile_cache else 0
+        elapsed_cooldown = (time.time() * 1000) - last_end
+        if elapsed_cooldown < DEMO_COOLDOWN_MS:
+            print(f"[SECURITY] Access Denied: Cooldown active ({DEMO_COOLDOWN_MS - elapsed_cooldown:.0f}ms left)")
+            return False
+        return True # Allow starting a new session if cooldown is over
+        
+    import time
+    elapsed = (time.time() * 1000) - demo_session_start
+    if elapsed > DEMO_LIMIT_MS:
+        print(f"[SECURITY] Access Denied: Demo expired ({elapsed/1000:.1f}s)")
+        return False
+    return True
+
+
 
 @app.post('/profile')
 async def post_profile(data: Dict[str, Any]):
@@ -707,6 +781,13 @@ async def save_session_data(data: Dict[str, Any]):
     session_dir = SESSIONS_DIR / session_name
     session_dir.mkdir(parents=True, exist_ok=True)
     
+    # Start/Reset demo timer if not licensed
+    if not is_licensed_backend:
+        global demo_session_start
+        import time
+        demo_session_start = time.time() * 1000
+        print(f"[SECURITY] Demo session started at {demo_session_start}")
+
     session_file = session_dir / 'session.json'
     
     try:
@@ -819,12 +900,25 @@ async def end_session(data: Dict[str, str]):
             
             conv_file.write_text(json.dumps(existing, indent=2), encoding='utf-8')
         
+        # Record demo end time for cooldown enforcement
+        if not is_licensed_backend:
+            import time
+            end_time = time.time() * 1000
+            if profile_cache is None:
+                profile_cache = {}
+            profile_cache['last_demo_end_time'] = end_time
+            save_profile(profile_cache)
+            global demo_session_start
+            demo_session_start = None
+            print(f"[SECURITY] Demo session ended. Cooldown started.")
+
         # Clear current session
         current_session_name = None
         conversation_history = []
         
         print(f"[SESSION] Ended session: {session_name}")
         return {"status": "ok", "message": f"Session '{session_name}' ended"}
+
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -1024,6 +1118,10 @@ async def stream_ai_response(req: AIRequest):
     
     async def generate_stream():
         global conversation_history
+        if not check_access_allowed():
+            yield f"data: {json.dumps({'error': 'Demo expired. Please purchase a license to continue.'})}\n\n"
+            return
+
         try:
             client = OpenAI(api_key=get_api_key())
             
@@ -1244,6 +1342,9 @@ async def stream_ai_response(req: AIRequest):
 
 @app.post("/ai")
 async def generate_ai_response(req: AIRequest):
+    if not check_access_allowed():
+        return {"answer": "Error: Demo expired. Please purchase a license to continue."}
+
     global conversation_history
     print(f"\n[DEBUG] /ai called with: transcript={req.transcript[:50] if req.transcript else None}..., role={req.role}, screenshot={'YES' if req.screenshot else 'NO'}, save_to_context={req.save_to_context}")
     try:
@@ -1441,7 +1542,8 @@ async def generate_ai_response(req: AIRequest):
 if __name__ == "__main__":
     import uvicorn
     print("\n" + "="*60)
-    print("Starting Windows Command Controller Backend")
+    print("Interview Assistant - Windows Runtime Host")
     print("API running on: http://localhost:5050")
     print("="*60 + "\n")
+
     uvicorn.run(app, host="0.0.0.0", port=5050, log_level="info")
