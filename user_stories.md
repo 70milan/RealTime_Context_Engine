@@ -47,6 +47,10 @@
 - **User Story 6.1 [Complexity: Low]:** As a developer, I want to obfuscate the frontend JavaScript during the build process to deter unauthorized tampering with license and logic. *(Implemented `javascript-obfuscator` pre/post-build scripts natively in `package.json`).*
 - **User Story 6.2 [Complexity: Medium]:** As a developer, I want the backend to independently verify the license status and refuse AI requests if the session is invalid or expired, providing a second layer of security. *(Implemented `check_access_allowed` verification immediately rejecting unauthorized requests on the `/ai/stream` endpoint).*
 - **User Story 3.1 [STRETCH] [Complexity: Very High]:** As a developer, I want to obfuscate the application code and the final executable to protect intellectual property and prevent reverse-engineering. *(SKIPPED/RE-EVALUATED: Deemed unnecessary for a $20 offline app; hardware-locked licensing is sufficient protection for this price point).*
+- **User Story 7.1 [Complexity: Low]:** As a business owner, I want my contact email (`mjulez70@gmail.com`) and payment links (CashApp/PayPal) integrated into all licensing prompts for easier customer support.
+- **User Story 7.2 [Complexity: Low]:** As a user, I want a dedicated "Hotkeys" reference modal accessible from the setup screen and the live status bar, starting with **`Ctrl+Q`** for Mini Mode.
+- **User Story 7.3 [Complexity: Low]:** As a user, I want the "Convo" button moved next to the "Process" button for a more ergonomic session workflow.
+- **User Story 7.4 [Complexity: Medium]:** As a developer, I want robust logging and error handling for the auto-updater to resolve "silent failures" and identify machine-specific certificate trust issues.
 
 ## Pending
 

@@ -35,7 +35,23 @@ if (!gotTheLock) {
 // ============ AUTO-UPDATER SETUP ============
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
-autoUpdater.logger = console; // Log update progress to console
+
+// Custom logger to send all update logs to the renderer
+const updateLogger = {
+  info: (msg) => {
+    console.log('[UPDATE] ' + msg);
+    if (win) win.webContents.send('update-log', 'INFO: ' + msg);
+  },
+  warn: (msg) => {
+    console.warn('[UPDATE] ' + msg);
+    if (win) win.webContents.send('update-log', 'WARN: ' + msg);
+  },
+  error: (msg) => {
+    console.error('[UPDATE] ' + msg);
+    if (win) win.webContents.send('update-log', 'ERROR: ' + msg);
+  }
+};
+autoUpdater.logger = updateLogger;
 
 function showUpdateOverlay(content) {
   if (!win) return;
@@ -55,12 +71,12 @@ function showUpdateOverlay(content) {
 
 function updateProgressUI(percent) {
   if (!win) return;
-  win.webContents.executeJavaScript(`
+  win.webContents.executeJavaScript(`{
     const bar = document.getElementById('update-progress-bar');
     const text = document.getElementById('update-progress-text');
     if (bar) bar.style.width = '${percent}%';
     if (text) text.textContent = '${percent}%';
-  `);
+  }`);
 }
 
 function hideUpdateUI() {
@@ -101,17 +117,19 @@ autoUpdater.on('update-available', (info) => {
   showUpdateOverlay(content);
 
   // Wire up buttons via IPC
-  win.webContents.executeJavaScript(`
-    document.getElementById('update-yes-btn').addEventListener('click', () => {
+  win.webContents.executeJavaScript(`{
+    const yesBtn = document.getElementById('update-yes-btn');
+    const noBtn = document.getElementById('update-no-btn');
+    if (yesBtn) yesBtn.addEventListener('click', () => {
       require('electron').ipcRenderer.send('update-accept');
     });
-    document.getElementById('update-no-btn').addEventListener('click', () => {
+    if (noBtn) noBtn.addEventListener('click', () => {
       require('electron').ipcRenderer.send('update-decline');
     });
-  `);
+  }`);
 });
 
-ipcMain.on('update-accept', () => {
+ipcMain.on('update-accept', async () => {
   // Show downloading UI
   const content = `\`
     <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:30px 36px;text-align:center;max-width:340px;width:90%;">
@@ -124,7 +142,15 @@ ipcMain.on('update-accept', () => {
     </div>
   \``;
   showUpdateOverlay(content);
-  autoUpdater.downloadUpdate();
+
+  try {
+    updateLogger.info('Manual download initiated...');
+    await autoUpdater.downloadUpdate();
+  } catch (err) {
+    updateLogger.error('Critical failure in downloadUpdate(): ' + err.message);
+    if (win) win.webContents.send('update-check-result', 'error', 'Download Failed: ' + err.message);
+    hideUpdateUI();
+  }
 });
 
 ipcMain.on('update-decline', () => {
@@ -168,14 +194,16 @@ autoUpdater.on('update-downloaded', (info) => {
   showUpdateOverlay(content);
 
   // Wire up buttons via IPC
-  win.webContents.executeJavaScript(`
-    document.getElementById('update-restart-btn').addEventListener('click', () => {
+  win.webContents.executeJavaScript(`{
+    const restartBtn = document.getElementById('update-restart-btn');
+    const laterBtn = document.getElementById('update-later-btn');
+    if (restartBtn) restartBtn.addEventListener('click', () => {
       require('electron').ipcRenderer.send('update-restart');
     });
-    document.getElementById('update-later-btn').addEventListener('click', () => {
+    if (laterBtn) laterBtn.addEventListener('click', () => {
       require('electron').ipcRenderer.send('update-later');
     });
-  `);
+  }`);
 });
 
 ipcMain.on('update-restart', () => {

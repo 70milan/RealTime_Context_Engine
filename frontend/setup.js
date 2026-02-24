@@ -122,7 +122,7 @@ async function showLicensePrompt() {
     const result = await customConfirm(
         `Demo session expired (12 min).\n\n` +
         `Your Hardware ID: <strong style="color: #64ff96; user-select: all;">${hwid}</strong>\n\n` +
-        `Email this ID to the owner to get your license key.\n\n` +
+        `Email this ID to: <strong style="color: #64ff96; user-select: all;">mjulez70@gmail.com</strong>\n\n` +
         `One-time payment of $20 only.\n` +
         `CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a>\n` +
         `PayPal: <a href="https://paypal.me/passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">paypal.me/passdpawn</a>\n\n` +
@@ -1152,6 +1152,13 @@ async function handleCreateSession() {
         return;
     }
 
+    // Validate disclaimer agreement
+    const disclaimerCheck = document.getElementById('setup-disclaimer-agree');
+    if (disclaimerCheck && !disclaimerCheck.checked) {
+        showStatus('You must agree to the Terms & Ethical Usage Policy first');
+        return;
+    }
+
     // Sanitize session name (remove invalid folder characters)
     const sanitizedSessionName = sessionName.replace(/[<>:"/\\|?*]/g, '_');
 
@@ -1586,9 +1593,14 @@ function resetSessionUI() {
     sessionEndTime = null;
     sessionStartTimestamp = null;
 
-    // Show the setup overlay again
+    // Show the setup overlay again and reset disclaimer
     if (overlay) {
         overlay.style.display = 'flex';
+        const discCheck = document.getElementById('setup-disclaimer-agree');
+        if (discCheck) {
+            discCheck.checked = false;
+            discCheck.disabled = true;
+        }
     }
 
     // Restore license badge if saved license exists
@@ -1854,6 +1866,44 @@ updateHWIDDisplay();
                 updateBtn.style.color = '';
                 updateBtn.style.pointerEvents = 'auto';
             }, 3000);
+        });
+
+        // Debug listener for auto-updater logs
+        ipcRenderer.on('update-log', (event, msg) => {
+            console.log('[AUTO-UPDATER] ' + msg);
+        });
+    }
+})();
+
+// Ethical Usage Modal Logic
+(function () {
+    const modal = document.getElementById('ethical-modal');
+    const openBtn = document.getElementById('btn-ethical-open');
+    const closeBtn = document.getElementById('close-ethical-modal');
+    const agreeBtn = document.getElementById('btn-ethical-agree-modal');
+    const discCheck = document.getElementById('setup-disclaimer-agree');
+
+    if (modal && openBtn && closeBtn && agreeBtn && discCheck) {
+        openBtn.addEventListener('click', () => {
+            modal.style.display = 'flex';
+        });
+
+        const closeAndAgree = () => {
+            modal.style.display = 'none';
+            discCheck.disabled = false; // Enable checkbox only after opening modal
+            discCheck.checked = true;    // Auto-check for convenience once read
+        };
+
+        closeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+            discCheck.disabled = false; // Still enable it even if they just closed it
+        });
+
+        agreeBtn.addEventListener('click', closeAndAgree);
+
+        // Close on outside click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.style.display = 'none';
         });
     }
 })();
