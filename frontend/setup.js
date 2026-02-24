@@ -1769,7 +1769,8 @@ updateHWIDDisplay();
         }
 
         // Initialize model selector
-        window.selectedModel = 'gpt-4o'; // Default to GPT-4o
+        const savedModel = localStorage.getItem('selectedModel');
+        window.selectedModel = savedModel || 'gpt-4o'; // Default to saved or GPT-4o
 
         const modelBtn = document.getElementById('model-selector-btn');
         const modelDropdown = document.getElementById('model-dropdown');
@@ -1797,15 +1798,22 @@ updateHWIDDisplay();
                                 opt.addEventListener('click', () => {
                                     const modelId = opt.dataset.model;
                                     window.selectedModel = modelId;
+                                    localStorage.setItem('selectedModel', modelId); // Persist choice
                                     modelBtn.textContent = opt.querySelector('div').textContent.trim();
                                     modelDropdown.style.display = 'none';
                                     console.log('[MODEL] Selected:', modelId);
                                 });
                             });
 
-                            // Set default
-                            if (data.default) {
+                            // Set default if no existing preference
+                            if (data.default && !savedModel) {
                                 window.selectedModel = data.default;
+                                modelBtn.textContent = (data.models.find(m => m.id === data.default) || { name: 'GPT-4o' }).name;
+                            } else if (savedModel && data.models) {
+                                const found = data.models.find(m => m.id === savedModel);
+                                if (found) {
+                                    modelBtn.textContent = found.name;
+                                }
                             }
                             console.log('[MODEL] Models loaded successfully');
                         }
