@@ -5,7 +5,7 @@
 
 ---
 
-## 🛡️ Stealth & Professionalism
+##  Stealth & Professionalism
 Unlike traditional "Co-pilots," this application is built with professional discretion as a core pillar:
 - **Process Disguise**: Appears as "Windows Runtime Host" in Task Manager to maintain a low profile.
 - **Stealth UI**: Minimalist, frosted-glass design that stays inconspicuous on your desktop.
@@ -13,7 +13,7 @@ Unlike traditional "Co-pilots," this application is built with professional disc
 
 ---
 
-## 🌟 Key Features
+##  Key Features
 ### 1. Multi-Modal Context Awareness
 - **AI with Vision**: Captures and analyzes shared screen frames (coding problems, architectural diagrams) using **GPT-4o**.
 - **Real-time Transcription**: Seamlessly listens to microphone and system audio to capture interviewers' questions.
@@ -34,7 +34,7 @@ Unlike traditional "Co-pilots," this application is built with professional disc
 
 ---
 
-## ⚖️ Ethical Usage Policy
+##  Ethical Usage Policy
 This tool is intended for **assistance and preparation**. We market it as an "Assistant" to support your natural knowledge:
 - Use it to verify complex syntax or double-check architectural patterns.
 - Use it as a real-time prompt for behavioral stories you've already prepared.
@@ -42,7 +42,7 @@ This tool is intended for **assistance and preparation**. We market it as an "As
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 *   **Node.js** (v18+): [Download](https://nodejs.org/)
