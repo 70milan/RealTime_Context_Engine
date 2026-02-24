@@ -1,6 +1,6 @@
 {
   "name": "windows-runtime-host",
-  "version": "2.0.35",
+  "version": "2.0.37",
   "description": "Interview Assistant - Secure Windows Runtime Host",
   "author": "mjulez70 <mjulez70@gmail.com>",
   "productName": "Interview Assistant",
@@ -21,7 +21,7 @@
       "provider": "github",
       "owner": "mjulez70",
       "repo": "job_bandit",
-      "releaseType": "release"
+      "releaseType": "draft"
     },
     "directories": {
       "output": "dist"

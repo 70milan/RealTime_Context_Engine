@@ -1087,6 +1087,17 @@ window.openPastSession = async function (sessionName) {
                     }
                 }
 
+                // Check for disclaimer agreement before resuming
+                const agreed = localStorage.getItem('disclaimer_agreed') === 'true';
+                if (!agreed) {
+                    await customAlert("You must agree to the Terms & Ethical Usage Policy before resuming a session.");
+                    const overlay = document.getElementById('setup-overlay');
+                    if (overlay) overlay.style.display = 'flex';
+                    const pastModal = document.getElementById('past-sessions-modal');
+                    if (pastModal) pastModal.style.display = 'none';
+                    return;
+                }
+
                 console.log(`[SESSION] Resumed past session: ${sessionName}`);
             };
         }
@@ -1158,6 +1169,9 @@ async function handleCreateSession() {
         showStatus('You must agree to the Terms & Ethical Usage Policy first');
         return;
     }
+
+    // Persist agreement
+    localStorage.setItem('disclaimer_agreed', 'true');
 
     // Sanitize session name (remove invalid folder characters)
     const sanitizedSessionName = sessionName.replace(/[<>:"/\\|?*]/g, '_');
@@ -1593,13 +1607,14 @@ function resetSessionUI() {
     sessionEndTime = null;
     sessionStartTimestamp = null;
 
-    // Show the setup overlay again and reset disclaimer
+    // Show the setup overlay again and reset disclaimer only if not persistent
     if (overlay) {
         overlay.style.display = 'flex';
         const discCheck = document.getElementById('setup-disclaimer-agree');
         if (discCheck) {
-            discCheck.checked = false;
-            discCheck.disabled = true;
+            const alreadyAgreed = localStorage.getItem('disclaimer_agreed') === 'true';
+            discCheck.checked = alreadyAgreed;
+            discCheck.disabled = !alreadyAgreed;
         }
     }
 
@@ -1883,6 +1898,13 @@ updateHWIDDisplay();
     const agreeBtn = document.getElementById('btn-ethical-agree-modal');
     const discCheck = document.getElementById('setup-disclaimer-agree');
 
+    // Initialize from persistence
+    if (discCheck) {
+        const alreadyAgreed = localStorage.getItem('disclaimer_agreed') === 'true';
+        discCheck.checked = alreadyAgreed;
+        discCheck.disabled = !alreadyAgreed;
+    }
+
     if (modal && openBtn && closeBtn && agreeBtn && discCheck) {
         openBtn.addEventListener('click', () => {
             modal.style.display = 'flex';
@@ -1890,13 +1912,14 @@ updateHWIDDisplay();
 
         const closeAndAgree = () => {
             modal.style.display = 'none';
-            discCheck.disabled = false; // Enable checkbox only after opening modal
-            discCheck.checked = true;    // Auto-check for convenience once read
+            discCheck.disabled = false;
+            discCheck.checked = true;
+            localStorage.setItem('disclaimer_agreed', 'true'); // Persist immediately on explicit agreement
         };
 
         closeBtn.addEventListener('click', () => {
             modal.style.display = 'none';
-            discCheck.disabled = false; // Still enable it even if they just closed it
+            // Don't enable checkbox here if not already agreed
         });
 
         agreeBtn.addEventListener('click', closeAndAgree);
