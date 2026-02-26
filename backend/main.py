@@ -377,15 +377,81 @@ profile_cache = load_profile()
 # Stores list of {"role": "user"/"assistant", "content": "..."} messages
 conversation_history = []
 
+# ============ CACHED SYSTEM CONTEXT ============
+# The system prompt containing the full resume + job description is VERY expensive
+# (~5000 tokens) if rebuilt and resent on every single request.
+# We build it ONCE when the session starts (or when the profile changes) and cache it.
+# Subsequent questions only send the slim role-instruction system prompt + conversation tail.
+
+_cached_system_context = None   # Full system prompt string (with resume & JD)
+_cached_context_hash = None     # Hash of inputs that produced the cache — used to detect profile changes
+
+def _build_context_hash(role: str, language: str, resume_text: str, job_description: str) -> str:
+    import hashlib
+    raw = f"{role}|{language}|{len(resume_text or '')}|{len(job_description or '')}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+def get_system_context(role: str, language: str, resume_text: str, job_description: str, for_vision: bool = False) -> str:
+    """Return a cached system prompt. Only rebuilds when role/language/resume/JD changes."""
+    global _cached_system_context, _cached_context_hash
+
+    new_hash = _build_context_hash(role, language, resume_text, job_description)
+
+    if _cached_system_context is not None and _cached_context_hash == new_hash and not for_vision:
+        print("[CONTEXT CACHE] Hit — reusing cached system context (0 extra resume tokens)")
+        return _cached_system_context
+
+    print(f"[CONTEXT CACHE] {'Miss' if _cached_system_context else 'Cold start'} — building system context")
+
+    context_block = ""
+    if resume_text and resume_text.strip():
+        context_block += f"\n\n--- CANDIDATE RESUME ---\n{resume_text}\n"
+    if job_description and job_description.strip():
+        context_block += f"\n\n--- JOB DESCRIPTION ---\n{job_description}\n"
+
+    if for_vision:
+        # Vision requests need the context inline — do NOT cache these
+        return (
+            f"CRITICAL: You ARE the job candidate in this interview for a {role} position. "
+            "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience'. "
+            "The resume below is YOUR real work history. When asked about past jobs, refer to YOUR resume. "
+            "Speak in FIRST PERSON as yourself - a real human professional. "
+            "When you see a coding problem, SOLVE IT with working code and clear explanation. "
+            "Use SIMPLE, clear words. Avoid complex vocabulary. Speak naturally like in a real conversation. "
+            "Explain your approach in 8-12 sentences. Write clean code with comments, then explain simply. "
+            "Draw from YOUR resume for all experience-related questions. "
+            f"Prefer {language or 'Python'} for all coding and technical explanations. "
+            "Remember what was discussed earlier."
+            f"{context_block}"
+        )
+
+    system_prompt = (
+        f"CRITICAL: You ARE the job candidate in this interview for a {role} position. "
+        "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience' or 'I cannot'. "
+        "The resume below is YOUR real work history. You ARE this person with this background. "
+        "When asked about previous jobs, projects, or experience - use details from YOUR resume. "
+        "Speak in FIRST PERSON as yourself - a real human professional. "
+        "Use SIMPLE, clear words. Speak naturally like in a real conversation. "
+        "Be confident but humble. Keep answers to 4-6 sentences. Give specific examples from YOUR resume. "
+        "Remember what was discussed earlier in this conversation. "
+        f"Prefer {language or 'Python'} for all coding and technical explanations. "
+        "If you write ANY code, you MUST wrap it strictly inside standard Markdown content blocks specifying the exact language (e.g. ```python ... ```)."
+        f"{context_block}"
+    )
+
+    _cached_system_context = system_prompt
+    _cached_context_hash = new_hash
+    print(f"[CONTEXT CACHE] Cached. System prompt is ~{count_tokens(system_prompt)} tokens")
+    return system_prompt
+
+def invalidate_context_cache():
+    """Call this when the profile/resume is updated so the cache is rebuilt on next request."""
+    global _cached_system_context, _cached_context_hash
+    _cached_system_context = None
+    _cached_context_hash = None
+    print("[CONTEXT CACHE] Invalidated. Will rebuild on next request.")
+
 # Auto-reset disabled - resume will persist between restarts
-# Uncomment below to enable auto-clearing on startup:
-# if profile_cache and isinstance(profile_cache, dict):
-#     if 'resume_text' in profile_cache and profile_cache['resume_text']:
-#         profile_cache['resume_text'] = ""
-#         save_profile(profile_cache)
-#         print("[STARTUP] Resume text cleared - ready for new upload")
-#     else:
-#         print("[STARTUP] No resume to clear - ready for upload")
 
 @app.get('/profile')
 async def get_profile():
@@ -663,6 +729,7 @@ async def post_profile(data: Dict[str, Any]):
     try:
         save_profile(data)
         profile_cache = data
+        invalidate_context_cache()  # Role/JD may have changed, rebuild system context next time
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "error": str(e)}
@@ -678,7 +745,7 @@ async def post_profile(data: Dict[str, Any]):
 SESSIONS_DIR = BASE_DIR / 'sessions'
 current_session_name = None
 
-def save_conversation_to_session(question: str, response: str, had_screenshot: bool = False, model: str = "", response_time: float = 0, total_time: float = 0, cost: float = 0):
+def save_conversation_to_session(question: str, response: str, had_screenshot: bool = False, model: str = "", response_time: float = 0, total_time: float = 0, cost: float = 0, input_tokens: int = 0, output_tokens: int = 0):
     """Helper function to save a Q&A pair to the current session"""
     global current_session_name
     
@@ -703,7 +770,9 @@ def save_conversation_to_session(question: str, response: str, had_screenshot: b
             'model': model,
             'response_time': round(response_time, 1),
             'total_time': round(total_time, 1),
-            'cost': round(cost, 6)
+            'cost': round(cost, 6),
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens
         }
         conversation.append(entry)
         
@@ -991,6 +1060,11 @@ async def load_session(session_name: str):
             profile_cache = {}
         profile_cache['job_description'] = data.get('job_description', '')
         profile_cache['resume_text'] = data.get('resume_text', '')
+        profile_cache['target_role'] = data.get('target_role', '')
+        profile_cache['target_language'] = data.get('target_language', '')
+        
+        # PERSIST: Ensure the AI endpoints (which reload from disk) see this restored context
+        save_profile(profile_cache)
 
         return {
             "status": "ok",
@@ -1094,11 +1168,13 @@ async def upload_resume(file: UploadFile = File(...)):
         
         try:
             save_profile(profile_cache)
+            # Invalidate the cached system context so the new resume is picked up
+            invalidate_context_cache()
             print(f"\n{'='*60}")
             print(f"[RESUME UPLOAD SUCCESS]")
             print(f"File: {filename}")
             print(f"Text extracted: {len(text)} characters")
-            print(f"Saved to profile!")
+            print(f"Saved to profile! Context cache invalidated.")
             print(f"{'='*60}\n")
         except Exception as save_error:
             print(f"\n[RESUME SAVE FAILED]: {save_error}\n")
@@ -1125,79 +1201,53 @@ async def stream_ai_response(req: AIRequest):
         try:
             client = OpenAI(api_key=get_api_key())
             
-            # CRITICAL: Reload profile from disk to get latest resume
             current_profile = load_profile()
-            
-            # Extract resume and job description
-            resume_text = None
-            job_description = None
+            resume_text = ""
+            job_description = ""
             profile_metadata = None
-            
             if current_profile and isinstance(current_profile, dict):
-                resume_text = current_profile.get('resume_text')
-                job_description = current_profile.get('job_description')
-                # Build metadata without resume_text
+                resume_text = current_profile.get('resume_text') or ""
+                job_description = current_profile.get('job_description') or ""
                 profile_metadata = {k: v for k, v in current_profile.items() if k not in ['resume_text', 'job_description']}
             
-            has_resume = bool(resume_text and resume_text.strip())
-            
-            # DEBUG: Print what we're sending
-            print(f"\n{'='*60}")
-            print(f"[STREAMING AI REQUEST]")
-            print(f"Has resume: {has_resume}")
-            print(f"Conversation history length: {len(conversation_history)} messages")
-            if has_resume:
-                print(f"Resume length: {len(resume_text)} characters")
-            if job_description:
-                print(f"Job description length: {len(job_description)} characters")
-            print(f"{'='*60}\n")
+            has_resume = bool(resume_text.strip())
+            print(f"[STREAM] Has resume: {has_resume}, history len: {len(conversation_history)}")
 
             if req.screenshot:
-                # Use vision model for screenshot analysis
-                messages = [
-                    {
-                        "role": "system",
-                        "content": (
-                            f"CRITICAL: You ARE the job candidate in this interview for a {req.role} position. "
-                            "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience'. "
-                            "The resume below is YOUR real work history. When asked about past jobs, refer to YOUR resume. "
-                            "Speak in FIRST PERSON as yourself - a real human professional. "
-                            "When you see a coding problem, SOLVE IT with working code and clear explanation. "
-                            "Use SIMPLE, clear words. Avoid complex vocabulary. Speak naturally like in a real conversation. "
-                            "Explain your approach in 8-12 sentences. Write clean code with comments, then explain simply. "
-                            "Draw from YOUR resume for all experience-related questions. "
-                            f"Prefer {req.target_language or 'Python'} for all coding and technical explanations. "
-                            "Remember what was discussed earlier."
-                        )
-                    }
-                ]
-
-                # Inject resume
+                # Vision model — slim system prompt, resume injected as separate user message
+                system_content = (
+                    f"CRITICAL: You ARE the job candidate in this interview for a {req.role} position. "
+                    "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience'. "
+                    "The resume below is YOUR real work history. When asked about past jobs, refer to YOUR resume. "
+                    "Speak in FIRST PERSON as yourself - a real human professional. "
+                    "When you see a coding problem, SOLVE IT with working code and clear explanation. "
+                    "Use SIMPLE, clear words. Avoid complex vocabulary. Speak naturally like in a real conversation. "
+                    "Explain your approach in 8-12 sentences. Write clean code with comments, then explain simply. "
+                    "Draw from YOUR resume for all experience-related questions. "
+                    f"Prefer {req.target_language or 'Python'} for all coding and technical explanations. "
+                    "Remember what was discussed earlier."
+                )
+                messages = [{"role": "system", "content": system_content}]
+                # Inject resume as separate fixed-position user message (better prompt cache hit)
                 if has_resume:
                     messages.append({"role": "user", "content": "Candidate resume:\n" + resume_text})
                 elif profile_metadata:
                     messages.append({"role": "user", "content": "Candidate profile:\n" + json.dumps(profile_metadata, indent=2)})
-
-                # Include job description
                 if job_description:
                     messages.append({"role": "user", "content": f"Job description:\n{job_description}"})
-
-                # Add conversation history for context
                 messages.extend(conversation_history)
-
-                # Add current question with screenshot
-                current_user_msg = {
+                messages.append({
                     "role": "user",
                     "content": [
                         {"type": "text", "text": req.transcript},
                         {"type": "image_url", "image_url": {"url": req.screenshot}}
                     ]
-                }
-                messages.append(current_user_msg)
+                })
                 model = "gpt-4o"
                 print(f"[STREAM] Using model: {model} (vision)")
             else:
-                # Use text-only model - GPT-3.5-turbo for speed!
+                # Text-only — slim system prompt, resume as separate fixed-position user message
+                # This preserves OpenAI prompt cache hits: resume position is stable across turns.
                 system_content = (
                     f"CRITICAL: You ARE the job candidate in this interview for a {req.role} position. "
                     "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience' or 'I cannot'. "
@@ -1210,29 +1260,20 @@ async def stream_ai_response(req: AIRequest):
                     f"Prefer {req.target_language or 'Python'} for all coding and technical explanations. "
                     "If you write ANY code, you MUST wrap it strictly inside standard Markdown content blocks specifying the exact language (e.g. ```python ... ```)."
                 )
-
-                messages = [
-                    {"role": "system", "content": system_content}
-                ]
-
-                # Inject resume
+                messages = [{"role": "system", "content": system_content}]
+                # Resume injected as a SEPARATE fixed-position user message — not embedded in system prompt.
+                # This is the key: the resume stays at a stable array index so OpenAI's prefix cache hits.
                 if has_resume:
                     messages.append({"role": "user", "content": "Candidate resume:\n" + resume_text})
                 elif profile_metadata:
                     messages.append({"role": "user", "content": "Candidate profile:\n" + json.dumps(profile_metadata, indent=2)})
-
-                # Include job description
                 if job_description:
                     messages.append({"role": "user", "content": f"Job description:\n{job_description}"})
-
-                # Add conversation history for context
                 messages.extend(conversation_history)
-
-                # Add current question
                 messages.append({"role": "user", "content": req.transcript})
-                # Use selected model or default
                 model = req.text_model if req.text_model and req.text_model in AVAILABLE_TEXT_MODELS else DEFAULT_TEXT_MODEL
                 print(f"[STREAM] Using model: {model} (text-only, user selected: {req.text_model})")
+
 
             # GPT-5+ models are reasoning models: they use tokens for internal thinking
             # before producing output, so they need a much higher token limit
@@ -1314,7 +1355,7 @@ async def stream_ai_response(req: AIRequest):
                 if current_session_name:
                     try:
                         _total_time_current = _time.time() - _start_time
-                        save_conversation_to_session(user_msg, full_response, bool(req.screenshot), model, response_time=_ttft, total_time=_total_time_current, cost=response_cost)
+                        save_conversation_to_session(user_msg, full_response, bool(req.screenshot), model, response_time=_ttft, total_time=_total_time_current, cost=response_cost, input_tokens=input_tokens, output_tokens=output_tokens)
                     except Exception as save_err:
                         print(f"[SESSION SAVE ERROR] {save_err}")
                 
@@ -1330,7 +1371,7 @@ async def stream_ai_response(req: AIRequest):
             
             _total_time = _time.time() - _start_time
             # Send completion signal with usage info and per-response cost
-            yield f"data: {json.dumps({'done': True, 'model': model, 'usage': session_usage, 'response_cost': round(response_cost, 6), 'ttft': round(_ttft, 2), 'total_time': round(_total_time, 2)})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'model': model, 'usage': session_usage, 'response_in_tokens': input_tokens, 'response_out_tokens': output_tokens, 'response_cost': round(response_cost, 6), 'ttft': round(_ttft, 2), 'total_time': round(_total_time, 2)})}\n\n"
             
         except Exception as e:
             err_msg = str(e)[:200]
@@ -1350,70 +1391,39 @@ async def generate_ai_response(req: AIRequest):
     try:
         client = OpenAI(api_key=get_api_key())
         
-        # CRITICAL: Reload profile from disk to get latest resume (in case it was uploaded after backend started)
         current_profile = load_profile()
         
-        # Extract resume and profile separately.
-        # Priority: If resume_text exists, send ONLY the resume (ignore JSON profile completely).
-        # Fallback: If no resume, send JSON profile metadata.
-        resume_text = None
-        job_description = None
-        profile_metadata = None
-        
+        resume_text = ""
+        job_description = ""
         if current_profile and isinstance(current_profile, dict):
-            resume_text = current_profile.get('resume_text')
-            job_description = current_profile.get('job_description')
-            # Build metadata without resume_text
-            profile_metadata = {k: v for k, v in current_profile.items() if k not in ['resume_text', 'job_description']}
+            resume_text = current_profile.get('resume_text') or ""
+            job_description = current_profile.get('job_description') or ""
         
-        has_resume = bool(resume_text and resume_text.strip())
-        
-        # DEBUG: Print what we're actually sending
-        print(f"\n{'='*60}")
-        print(f"[AI REQUEST DEBUG]")
-        print(f"Has resume: {has_resume}")
-        print(f"Conversation history length: {len(conversation_history)} messages")
-        if has_resume:
-            print(f"Resume length: {len(resume_text)} characters")
-            print(f"Resume preview: {resume_text[:200]}...")
-        else:
-            print(f"NO RESUME - Using profile metadata instead")
-            print(f"Profile metadata: {profile_metadata}")
-        print(f"{'='*60}\n")
+        has_resume = bool(resume_text.strip())
+        print(f"[AI] Has resume: {has_resume}, history len: {len(conversation_history)}")
 
         if req.screenshot:
-            # Use vision model for screenshot analysis
-            messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        f"CRITICAL: You ARE the job candidate in this interview for a {req.role} position. "
-                        "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience'. "
-                        "The resume below is YOUR real work history. When asked about past jobs, refer to YOUR resume. "
-                        "Speak in FIRST PERSON as yourself - a real human professional. "
-                        "When you see a coding problem, SOLVE IT with working code and clear explanation. "
-                        "Use SIMPLE, clear words. Avoid complex vocabulary. Speak naturally like in a real conversation. "
-                        "Explain your approach in 8-12 sentences. Write clean code with comments, then explain simply. "
-                        "Draw from YOUR resume for all experience-related questions. "
-                        f"Prefer {req.target_language or 'Python'} for all coding and technical explanations. "
-                        "Remember what was discussed earlier."
-                    )
-                }
-            ]
-
-            # Inject resume (if present) or profile metadata (fallback)
+            # Vision model — slim system prompt, resume as separate user message
+            system_content = (
+                f"CRITICAL: You ARE the job candidate in this interview for a {req.role} position. "
+                "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience'. "
+                "The resume below is YOUR real work history. When asked about past jobs, refer to YOUR resume. "
+                "Speak in FIRST PERSON as yourself - a real human professional. "
+                "When you see a coding problem, SOLVE IT with working code and clear explanation. "
+                "Use SIMPLE, clear words. Avoid complex vocabulary. Speak naturally like in a real conversation. "
+                "Explain your approach in 8-12 sentences. Write clean code with comments, then explain simply. "
+                "Draw from YOUR resume for all experience-related questions. "
+                f"Prefer {req.target_language or 'Python'} for all coding and technical explanations. "
+                "Remember what was discussed earlier."
+            )
+            messages = [{"role": "system", "content": system_content}]
             if has_resume:
                 messages.append({"role": "user", "content": "Candidate resume:\n" + resume_text})
             elif profile_metadata:
                 messages.append({"role": "user", "content": "Candidate profile:\n" + json.dumps(profile_metadata, indent=2)})
-
-            # include job description if provided
             if job_description:
                 messages.append({"role": "user", "content": f"Job description:\n{job_description}"})
-
-            # Add conversation history for context
             messages.extend(conversation_history)
-
             messages.append({
                 "role": "user",
                 "content": [
@@ -1423,7 +1433,7 @@ async def generate_ai_response(req: AIRequest):
             })
             model = "gpt-4o"
         else:
-            # Use text-only model - GPT-3.5-turbo for speed!
+            # Text-only — slim system prompt, resume as separate fixed-position user message
             system_content = (
                 f"CRITICAL: You ARE the job candidate in this interview for a {req.role} position. "
                 "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience' or 'I cannot'. "
@@ -1433,45 +1443,20 @@ async def generate_ai_response(req: AIRequest):
                 "Use SIMPLE, clear words. Speak naturally like in a real conversation. "
                 "Be confident but humble. Keep answers to 4-6 sentences. Give specific examples from YOUR resume. "
                 "Remember what was discussed earlier in this conversation. "
-                f"Prefer {req.target_language or 'Python'} for all coding and technical explanations."
+                f"Prefer {req.target_language or 'Python'} for all coding and technical explanations. "
+                "If you write ANY code, you MUST wrap it strictly inside standard Markdown content blocks specifying the exact language (e.g. ```python ... ```)."
             )
-
-            messages = [
-                {"role": "system", "content": system_content}
-            ]
-
-            # Inject resume (if present) or profile metadata (fallback)
+            messages = [{"role": "system", "content": system_content}]
             if has_resume:
                 messages.append({"role": "user", "content": "Candidate resume:\n" + resume_text})
             elif profile_metadata:
                 messages.append({"role": "user", "content": "Candidate profile:\n" + json.dumps(profile_metadata, indent=2)})
-
-            # include job description if provided
             if job_description:
                 messages.append({"role": "user", "content": f"Job description:\n{job_description}"})
-
-            # Add conversation history for context
             messages.extend(conversation_history)
-
             messages.append({"role": "user", "content": req.transcript})
-            # Use selected model or default
             model = req.text_model if req.text_model and req.text_model in AVAILABLE_TEXT_MODELS else DEFAULT_TEXT_MODEL
         
-        # DEBUG: print messages being sent to OpenAI to help diagnose which context is used
-        try:
-            print("=== AI messages START ===")
-            for m in messages:
-                # content can be string or list/dict (for images). Truncate for safety.
-                c = m.get('content')
-                if isinstance(c, str):
-                    preview = c[:1000].replace('\n', ' ') if c else ''
-                else:
-                    preview = str(c)[:1000]
-                print(f"ROLE={m.get('role')} | CONTENT_PREVIEW={preview}")
-            print("=== AI messages END ===")
-        except Exception as _:
-            pass
-
         # GPT-5+ models are reasoning models: they need higher token limit for thinking + output
         token_param = {}
         if model.startswith("gpt-5"):
@@ -1519,7 +1504,7 @@ async def generate_ai_response(req: AIRequest):
             # Save to session folder if active
             if current_session_name:
                 try:
-                    save_conversation_to_session(user_msg, full_response, bool(req.screenshot), model, response_time=_ttft, total_time=_total_time, cost=_response_cost)
+                    save_conversation_to_session(user_msg, full_response, bool(req.screenshot), model, response_time=round(_ttft, 1), total_time=round(_total_time, 1), cost=_response_cost, input_tokens=_input_tokens, output_tokens=_output_tokens)
                 except Exception as save_err:
                     print(f"[SESSION SAVE ERROR] {save_err}")
             
@@ -1533,7 +1518,13 @@ async def generate_ai_response(req: AIRequest):
         
         print(f"[AI] Conversation history now has {len(conversation_history)} messages")
         
-        return {"answer": full_response}
+        return {
+            "answer": full_response,
+            "usage": session_usage,
+            "response_in_tokens": _input_tokens,
+            "response_out_tokens": _output_tokens,
+            "response_cost": round(_response_cost, 6)
+        }
     except Exception as e:
         print(f"AI Generation Error: {e}")
         return {"answer": f"Error: {str(e)}"}

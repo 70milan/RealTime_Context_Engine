@@ -619,7 +619,7 @@
   <div id="session-history-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10002; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 600px; width: 95%; max-height: 80vh; display: flex; flex-direction: column;">
+      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 800px; width: 95%; max-height: 85vh; display: flex; flex-direction: column;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <span id="session-history-title"
           style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Session
@@ -686,7 +686,7 @@
   <div id="conversation-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10002; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 600px; width: 95%; max-height: 80vh; display: flex; flex-direction: column;">
+      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 800px; width: 95%; max-height: 85vh; display: flex; flex-direction: column;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <span id="conversation-modal-title"
           style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Conversation
@@ -1176,6 +1176,10 @@
         socket.onmessage = (event) => {
           const data = JSON.parse(event.data);
           if (data.type === 'transcript') {
+            if (window.shouldClearTranscriptOnNextInput) {
+              transcriptArea.innerText = '';
+              window.shouldClearTranscriptOnNextInput = false;
+            }
             transcriptArea.innerText += data.text;
             transcriptArea.scrollTop = transcriptArea.scrollHeight;
           }
@@ -1387,13 +1391,57 @@
           responseSection.classList.add('expanded');
           responseArea.scrollTop = 0;
 
-          if (capturedScreenshot) {
-            capturedScreenshot = null;
-            btnScreen.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
-            btnScreen.style.color = 'rgba(255, 255, 255, 0.5)';
+          // Update status bar with usage and cost
+          if (data.usage) {
+            const apiInEl = document.getElementById('api-usage-input');
+            const apiOutEl = document.getElementById('api-usage-output');
+            const apiCostEl = document.getElementById('api-cost');
+            if (apiInEl) apiInEl.innerText = data.usage.input_tokens.toLocaleString();
+            if (apiOutEl) apiOutEl.innerText = data.usage.output_tokens.toLocaleString();
+            if (apiCostEl) {
+              const cost = data.usage.total_cost;
+              apiCostEl.innerText = cost < 1.00 ? (cost * 100).toFixed(2) + '¢' : '$' + cost.toFixed(2);
+              if (cost < 0.10) apiCostEl.style.color = 'rgba(120, 200, 180, 0.85)';
+              else if (cost < 0.50) apiCostEl.style.color = 'rgba(200, 170, 120, 0.85)';
+              else apiCostEl.style.color = 'rgba(200, 130, 130, 0.85)';
+            }
           }
 
-          btnGenerate.classList.remove('active');
+          // Capture to Conversation Area
+          const convoArea = document.getElementById('conversation-area');
+          if (convoArea) {
+            const pairDiv = document.createElement('div');
+            pairDiv.style.cssText = 'border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; padding: 8px; background: rgba(255,255,255,0.02);';
+            pairDiv.dataset.cost = data.response_cost || 0;
+            pairDiv.dataset.inTokens = data.response_in_tokens || 0;
+            pairDiv.dataset.outTokens = data.response_out_tokens || 0;
+            pairDiv.dataset.timestamp = new Date().toISOString();
+
+            const qDiv = document.createElement('div');
+            qDiv.style.cssText = 'color: #bbb; font-size: 11px; line-height: 1.4; margin-bottom: 6px; padding: 4px 8px; border-left: 2px solid #666; border-radius: 2px;';
+            qDiv.innerHTML = '<strong style="color: rgba(255,255,255,0.4); font-size: 9px; text-transform: uppercase;">Input</strong><br>(screenshot analysis)';
+            pairDiv.appendChild(qDiv);
+
+            const rDiv = document.createElement('div');
+            rDiv.style.cssText = 'color: #ddd; font-size: 11px; line-height: 1.4; padding: 4px 8px; border-left: 2px solid rgba(100,255,150,0.4); border-radius: 2px;';
+            const cleanResponse = formattedResponse.replace(/<br>/g, '\n').replace(/<[^>]*>/g, '').trim();
+            const formattedConvo = window.formatConvoText ? window.formatConvoText(cleanResponse) : cleanResponse.substring(0, 300);
+            rDiv.innerHTML = '<strong style="color: rgba(100,255,150,0.4); font-size: 9px; text-transform: uppercase;">AI</strong><br>' + formattedConvo;
+            pairDiv.appendChild(rDiv);
+            convoArea.appendChild(pairDiv);
+          }
+
+          if (capturedScreenshot) {
+            capturedScreenshot = null;
+            const btnScreenEl = document.getElementById('btn-screen');
+            if (btnScreenEl) {
+              btnScreenEl.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+              btnScreenEl.style.color = 'rgba(255, 255, 255, 0.5)';
+            }
+          }
+
+          const btnGenEl = document.getElementById('btn-generate');
+          if (btnGenEl) btnGenEl.classList.remove('active');
         } catch (e) {
           console.error('AI Generation Error:', e);
           responseArea.innerText = `Error: ${e.message}\n\nCheck if backend is running on port 5050.`;
@@ -1475,6 +1523,19 @@
       console.log('Auto-starting System Audio...');
       setTimeout(() => startCapture('system'), 1000);
     };
+
+    // Handle conditional transcript clearing on next user input
+    if (transcriptArea) {
+      transcriptArea.addEventListener('keydown', (e) => {
+        if (window.shouldClearTranscriptOnNextInput) {
+          // Clear only on printable characters or backspace/delete
+          if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+            transcriptArea.innerText = '';
+            window.shouldClearTranscriptOnNextInput = false;
+          }
+        }
+      });
+    }
   </script>
   <script src="setup.js"></script>
   <script src="streaming-ai.js"></script>

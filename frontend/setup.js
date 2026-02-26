@@ -595,10 +595,18 @@ function initSession() {
                 }
             }
 
+            let totalIn = 0;
+            let totalOut = 0;
+            Array.from(convoArea.children).forEach(c => {
+                totalIn += parseInt(c.dataset.inTokens || 0);
+                totalOut += parseInt(c.dataset.outTokens || 0);
+            });
+
             let exportText = `# Conversation Export: ${currentSessionName || 'Session'}\n`;
             exportText += `**Exported At:** ${new Date().toLocaleString()}\n`;
             exportText += `**Target Role:** ${window.sessionTargetRole || 'Not Set'}\n`;
-            exportText += `**Cumulative API Cost:** ${costText}\n\n`;
+            exportText += `**Cumulative API Cost:** ${costText}\n`;
+            exportText += `**Cumulative Tokens:** In: ${totalIn.toLocaleString()} | Out: ${totalOut.toLocaleString()}\n\n`;
             exportText += `---\n\n`;
 
             Array.from(convoArea.children).forEach(child => {
@@ -654,10 +662,6 @@ function initSession() {
 
     if (convoBtn) {
         convoBtn.onclick = () => {
-            if (!window.isSessionActive) {
-                window.showSessionError();
-                return;
-            }
             const convoArea = document.getElementById('conversation-area');
             const modalList = document.getElementById('conversation-modal-list');
             const costFooter = document.getElementById('conversation-modal-cost');
@@ -728,7 +732,24 @@ function initSession() {
                     } else {
                         costText = '$' + totalCost.toFixed(2);
                     }
-                    costFooter.innerHTML = '<span style="color: rgba(255, 255, 255, 0.4); text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px;">Cumulative API Cost:</span> <span style="color: rgba(120, 200, 180, 0.85); font-weight: 500; font-size: 11px;">' + costText + '</span>';
+
+                    let totalIn = 0;
+                    let totalOut = 0;
+                    Array.from(convoArea.children).forEach(c => {
+                        totalIn += parseInt(c.dataset.inTokens || 0);
+                        totalOut += parseInt(c.dataset.outTokens || 0);
+                    });
+
+                    costFooter.innerHTML = `
+                        <div style="display: flex; justify-content: flex-end; align-items: center; gap: 20px;">
+                            <span style="display: flex; gap: 12px; margin-right: 10px;">
+                                <span style="color: rgba(255,255,255,0.25); text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;">Tokens In: <span style="color: rgba(255,255,255,0.5); font-weight: 500; font-family: monospace;">${totalIn.toLocaleString()}</span></span>
+                                <span style="color: rgba(255,255,255,0.25); text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;">Tokens Out: <span style="color: rgba(255,255,255,0.5); font-weight: 500; font-family: monospace;">${totalOut.toLocaleString()}</span></span>
+                            </span>
+                            <span style="color: rgba(255, 255, 255, 0.4); text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px;">Cumulative API Cost:</span> 
+                            <span style="color: rgba(120, 200, 180, 0.85); font-weight: 600; font-size: 11px;">${costText}</span>
+                        </div>
+                    `;
                     costFooter.style.display = 'block';
                 } else {
                     costFooter.style.display = 'none';
@@ -990,6 +1011,17 @@ window.openPastSession = async function (sessionName) {
                     console.log('[SESSION] Restored model:', sessionData.text_model);
                 }
 
+                // Reset status bar metrics for the resumed session logic
+                const apiInEl = document.getElementById('api-usage-input');
+                const apiOutEl = document.getElementById('api-usage-output');
+                const apiCostEl = document.getElementById('api-cost');
+                if (apiInEl) apiInEl.innerText = '0';
+                if (apiOutEl) apiOutEl.innerText = '0';
+                if (apiCostEl) {
+                    apiCostEl.innerText = '$0.00';
+                    apiCostEl.style.color = 'rgba(120, 200, 180, 0.85)';
+                }
+
                 // Update license badge
                 const badge = document.getElementById('license-status-badge');
                 if (badge) {
@@ -1023,15 +1055,6 @@ window.openPastSession = async function (sessionName) {
                 const endBtnEl = document.getElementById('btn-session-end');
                 if (endBtnEl) endBtnEl.classList.remove('ended');
 
-                // Reset API cost display to $0 for new run
-                const apiCostEl = document.getElementById('api-cost');
-                if (apiCostEl) {
-                    apiCostEl.innerText = '$0.00';
-                    apiCostEl.style.color = 'rgba(120, 200, 180, 0.85)';
-                }
-
-
-
                 // Reset response time display
                 const responseTimeEl = document.getElementById('response-time');
                 if (responseTimeEl) responseTimeEl.innerText = '0.0s';
@@ -1045,6 +1068,8 @@ window.openPastSession = async function (sessionName) {
                             const pairDiv = document.createElement('div');
                             pairDiv.style.cssText = 'border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; padding: 8px; background: rgba(255,255,255,0.02);';
                             pairDiv.dataset.cost = entry.cost || 0;
+                            pairDiv.dataset.inTokens = entry.input_tokens || 0;
+                            pairDiv.dataset.outTokens = entry.output_tokens || 0;
                             pairDiv.dataset.responseTime = entry.response_time || 0;
                             pairDiv.dataset.totalTime = entry.total_time || 0;
                             pairDiv.dataset.timestamp = entry.timestamp || '';
@@ -1759,9 +1784,15 @@ updateHWIDDisplay();
                     <span id="response-time-tt" style="color: rgba(120, 200, 180, 0.85); font-weight: 500;">--s</span>
                 </div>
 
-                <!-- API Cost -->
-                <div style="display: flex; align-items: center; gap: 4px;">
-                    <span style="color: rgba(255, 255, 255, 0.4);">API Cost:</span>
+                <!-- API Cost & Usage -->
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="color: rgba(255, 255, 255, 0.4);">In:</span>
+                    <span id="api-usage-input" style="color: rgba(255, 255, 255, 0.6); font-weight: 500;">0</span>
+                    <span style="color: rgba(255, 255, 255, 0.2); margin: 0 4px;">|</span>
+                    <span style="color: rgba(255, 255, 255, 0.4);">Out:</span>
+                    <span id="api-usage-output" style="color: rgba(255, 255, 255, 0.6); font-weight: 500;">0</span>
+                    <span style="color: rgba(255, 255, 255, 0.2); margin: 0 6px;">|</span>
+                    <span style="color: rgba(255, 255, 255, 0.4);">Cost:&nbsp;</span>
                     <span id="api-cost" style="color: rgba(120, 200, 180, 0.85); font-weight: 500;">$0.00</span>
                 </div>
             `;

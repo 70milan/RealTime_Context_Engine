@@ -1,6 +1,8 @@
 // streaming-ai.js - Stream AI response handler
 // Override btnGenerate to use streaming endpoint
 
+window.shouldClearTranscriptOnNextInput = false;
+
 // Global: Format text with code blocks for conversation entries
 window.formatConvoText = function (text) {
     if (!text) return '';
@@ -62,6 +64,14 @@ function initializeStreamingAI() {
             return;
         }
 
+        const transcriptArea = document.getElementById('transcript-area');
+        const responseArea = document.getElementById('response-area');
+        const transcriptSection = document.getElementById('transcript-section');
+        const responseSection = document.getElementById('response-section');
+        const btnGenerate = document.getElementById('btn-generate');
+
+        if (!transcriptArea || !responseArea) return;
+
         const transcript = transcriptArea.innerText.trim();
         if (!transcript && !capturedScreenshot) {
             responseArea.innerText = 'No transcript or screenshot to process.';
@@ -99,10 +109,11 @@ function initializeStreamingAI() {
             }
 
             // Clear and start streaming
-            // responseArea.innerText = ''; // Removed to keep "Generating..." visible
             let fullResponse = '';
             let usedModel = '';
             let responseCost = 0;
+            let responseInTokens = 0;
+            let responseOutTokens = 0;
             let ttft = 0; // time to first token
             let totalTime = 0;
             let firstChunkReceived = false;
@@ -158,13 +169,29 @@ function initializeStreamingAI() {
                                         ttEl.innerText = totalTime.toFixed(1) + 's';
                                     }
                                 }
-                                // Capture per-response cost
+                                // Capture per-response cost and tokens
                                 if (data.response_cost !== undefined) {
                                     responseCost = data.response_cost;
+                                }
+                                if (data.response_in_tokens !== undefined) {
+                                    responseInTokens = data.response_in_tokens;
+                                }
+                                if (data.response_out_tokens !== undefined) {
+                                    responseOutTokens = data.response_out_tokens;
                                 }
                                 // Update API cost display with color gradient
                                 if (data.usage && data.usage.total_cost !== undefined) {
                                     const apiCostEl = document.getElementById('api-cost');
+                                    const apiInEl = document.getElementById('api-usage-input');
+                                    const apiOutEl = document.getElementById('api-usage-output');
+
+                                    if (apiInEl && data.usage.input_tokens !== undefined) {
+                                        apiInEl.innerText = data.usage.input_tokens.toLocaleString();
+                                    }
+                                    if (apiOutEl && data.usage.output_tokens !== undefined) {
+                                        apiOutEl.innerText = data.usage.output_tokens.toLocaleString();
+                                    }
+
                                     if (apiCostEl) {
                                         const cost = data.usage.total_cost;
                                         // Show cents when under $1, dollars when $1+
@@ -291,6 +318,8 @@ function initializeStreamingAI() {
                 const pairDiv = document.createElement('div');
                 pairDiv.style.cssText = 'border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; padding: 8px; background: rgba(255,255,255,0.02);';
                 pairDiv.dataset.cost = responseCost || 0;
+                pairDiv.dataset.inTokens = responseInTokens || 0;
+                pairDiv.dataset.outTokens = responseOutTokens || 0;
                 pairDiv.dataset.responseTime = ttft || 0;
                 pairDiv.dataset.totalTime = totalTime || 0;
                 pairDiv.dataset.timestamp = new Date().toISOString();
@@ -331,16 +360,19 @@ function initializeStreamingAI() {
 
             if (capturedScreenshot) {
                 capturedScreenshot = null;
-                btnScreen.style.backgroundColor = '#444';
+                const btnScreenEl = document.getElementById('btn-screen');
+                if (btnScreenEl) btnScreenEl.style.backgroundColor = '#444';
             }
 
             btnGenerate.innerText = 'Generate AI';
-            // Auto-clear transcript on successful generation
-            if (transcriptArea) transcriptArea.innerText = '';
+            btnGenerate.classList.remove('active');
+            // Flag transcript to clear on next user input instead of flashing to empty immediately
+            window.shouldClearTranscriptOnNextInput = true;
         } catch (e) {
             console.error('AI Generation Error:', e);
             responseArea.innerText = `Error: ${e.message}\n\nCheck if backend is running on port 5050.`;
-            btnGenerate.classList.remove('active');
+            const btnGenEl = document.getElementById('btn-generate');
+            if (btnGenEl) btnGenEl.classList.remove('active');
         }
     };
 

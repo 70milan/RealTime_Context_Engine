@@ -51,6 +51,7 @@
 - **User Story 7.2 [Complexity: Low]:** As a user, I want a dedicated "Hotkeys" reference modal accessible from the setup screen and the live status bar, starting with **`Ctrl+Q`** for Mini Mode.
 - **User Story 7.3 [Complexity: Low]:** As a user, I want the "Convo" button moved next to the "Process" button for a more ergonomic session workflow.
 - **User Story 7.4 [Complexity: Medium]:** As a developer, I want robust logging and error handling for the auto-updater to resolve "silent failures" and identify machine-specific certificate trust issues.
+- **User Story 5.18 [Complexity: Low]:** As a user, I want the AI input text to clear only once I start providing the next input, so I can review my previous query after the response is generated. *(Implemented `shouldClearTranscriptOnNextInput` logic to persist text until the next keystroke.)*
 
 ## Pending
 
