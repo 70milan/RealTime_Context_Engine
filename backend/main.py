@@ -184,9 +184,18 @@ async def log_requests(request: Request, call_next):
     return response
 
 def get_api_key():
-    """Get API key from user profile only"""
+    """Get API key from user profile - checks memory cache first, then disk"""
     global profile_cache
+    # 1. Check in-memory cache first (fastest)
     if isinstance(profile_cache, dict) and profile_cache.get('openai_api_key'):
+        return profile_cache['openai_api_key']
+    # 2. Fall back to disk if not in memory (backend restart, session load missing key, etc.)
+    disk_profile = load_profile()
+    if isinstance(disk_profile, dict) and disk_profile.get('openai_api_key'):
+        print("[get_api_key] Key found on disk, restoring to profile_cache")
+        if not isinstance(profile_cache, dict):
+            profile_cache = {}
+        profile_cache['openai_api_key'] = disk_profile['openai_api_key']
         return profile_cache['openai_api_key']
     return None
 
@@ -460,6 +469,7 @@ async def get_profile():
 @app.post('/validate-api-key')
 async def validate_api_key(data: Dict[str, str]):
     """Validate OpenAI API key before allowing session creation"""
+    global profile_cache
     api_key = data.get('api_key', '').strip()
     
     if not api_key:
@@ -471,6 +481,12 @@ async def validate_api_key(data: Dict[str, str]):
     try:
         client = OpenAI(api_key=api_key)
         client.models.list()
+        # Store key immediately on successful validation
+        if not isinstance(profile_cache, dict):
+            profile_cache = {}
+        profile_cache['openai_api_key'] = api_key
+        save_profile(profile_cache)
+        print(f"[validate-api-key] Key validated and persisted to disk.")
         return {"valid": True}
     except Exception as e:
         error_msg = str(e)
@@ -869,7 +885,8 @@ async def save_session_data(data: Dict[str, Any]):
             'target_language': data.get('target_language', ''),
             'created_at': data.get('created_at', ''),
             'updated_at': str(Path('').resolve()),  # Will be updated on each save
-            'text_model': data.get('text_model', DEFAULT_TEXT_MODEL)
+            'text_model': data.get('text_model', DEFAULT_TEXT_MODEL),
+            'openai_api_key': data.get('openai_api_key', '')  # Persisted for session restore
         }
         
         session_file.write_text(json.dumps(session_data, indent=2), encoding='utf-8')
@@ -1056,12 +1073,23 @@ async def load_session(session_name: str):
         }
 
         # Restore profile cache for AI context
+        # Preserve existing API key BEFORE overwriting profile_cache with session data
+        existing_api_key = (profile_cache or {}).get('openai_api_key') or load_profile().get('openai_api_key', '')
+        
         if profile_cache is None:
             profile_cache = {}
         profile_cache['job_description'] = data.get('job_description', '')
         profile_cache['resume_text'] = data.get('resume_text', '')
         profile_cache['target_role'] = data.get('target_role', '')
         profile_cache['target_language'] = data.get('target_language', '')
+        
+        # Restore API key: prefer session.json value, fall back to previously stored key
+        api_key_to_use = data.get('openai_api_key') or existing_api_key
+        if api_key_to_use:
+            profile_cache['openai_api_key'] = api_key_to_use
+            print(f"[SESSION] API key restored for session '{session_name}'")
+        else:
+            print(f"[SESSION] WARNING: No API key available - user must re-enter key")
         
         # PERSIST: Ensure the AI endpoints (which reload from disk) see this restored context
         save_profile(profile_cache)
@@ -1276,10 +1304,11 @@ async def stream_ai_response(req: AIRequest):
 
 
             # GPT-5+ models are reasoning models: they use tokens for internal thinking
-            # before producing output, so they need a much higher token limit
+            # before producing output so they need a much higher token limit.
+            # Do NOT pass temperature or max_tokens to reasoning models - unsupported params.
             token_param = {}
             if model.startswith("gpt-5"):
-                token_param["max_completion_tokens"] = 4096
+                token_param["max_completion_tokens"] = 16384  # reasoning needs headroom for thinking tokens
             else:
                 token_param["max_tokens"] = 2048
                 token_param["temperature"] = 0.7

@@ -3,6 +3,42 @@
 
 window.shouldClearTranscriptOnNextInput = false;
 
+/**
+ * Returns color thresholds for all status bar metrics based on the active model.
+ * Calibrated for a 45-minute technical interview session.
+ *
+ * Model tiers (by speed + pricing):
+ *  - gpt-5+        : reasoning models — slow TTFT (internal thinking), pricey
+ *  - gpt-4-turbo   : moderately slow, ~$10/1M in  → full session ~$1.20
+ *  - gpt-4 (exact) : slowest classic,  ~$30/1M in  → full session ~$3.00
+ *  - gpt-4o / mini : fast, cheap,      ~$2.50/1M in → full session ~$0.35
+ *  - gpt-3.5-turbo : fastest, cheapest
+ */
+function getModelThresholds(model) {
+    const m = (model || '').toLowerCase();
+    if (m.startsWith('gpt-5')) {
+        // Reasoning models: long think time, pricier
+        return { ttft: [8, 20], tt: [30, 70], inTok: [20000, 50000], outTok: [5000, 15000], cost: [0.35, 1.00] };
+    } else if (m === 'gpt-4' || m.startsWith('gpt-4-0')) {
+        // GPT-4 classic: slow, ~$30/1M in — full session ~$3
+        return { ttft: [3, 8], tt: [20, 50], inTok: [20000, 50000], outTok: [5000, 15000], cost: [1.00, 2.20] };
+    } else if (m.includes('turbo')) {
+        // GPT-4-turbo: moderate speed, ~$10/1M in — full session ~$1.20
+        return { ttft: [2, 5], tt: [12, 30], inTok: [20000, 50000], outTok: [5000, 15000], cost: [0.40, 0.90] };
+    } else {
+        // GPT-4o, gpt-4o-mini, gpt-3.5-turbo — fast, cheap (~$0.35 session)
+        return { ttft: [1.5, 3], tt: [6, 15], inTok: [20000, 50000], outTok: [5000, 15000], cost: [0.12, 0.28] };
+    }
+}
+
+function colorByThreshold(value, low, high) {
+    return value < low
+        ? 'rgba(100, 220, 160, 0.9)'   // green
+        : value < high
+            ? 'rgba(220, 185, 90, 0.9)'  // yellow
+            : 'rgba(220, 110, 110, 0.9)'; // red
+}
+
 // Global: Format text with code blocks for conversation entries
 window.formatConvoText = function (text) {
     if (!text) return '';
@@ -146,7 +182,9 @@ function initializeStreamingAI() {
                                     firstChunkReceived = true;
                                     ttft = (Date.now() - startTime) / 1000;
                                     if (ttftEl) {
+                                        const th = getModelThresholds(window.selectedModel);
                                         ttftEl.innerText = ttft.toFixed(1) + 's';
+                                        ttftEl.style.color = colorByThreshold(ttft, th.ttft[0], th.ttft[1]);
                                     }
                                 }
                                 fullResponse += data.chunk;
@@ -156,58 +194,48 @@ function initializeStreamingAI() {
 
                             if (data.done) {
                                 console.log('[STREAM] Complete');
+                                const th = getModelThresholds(window.selectedModel);
+
                                 // Use backend TTFT if available (more accurate)
                                 if (data.ttft && data.ttft > 0) {
                                     ttft = data.ttft;
                                     if (ttftEl) {
                                         ttftEl.innerText = ttft.toFixed(1) + 's';
+                                        ttftEl.style.color = colorByThreshold(ttft, th.ttft[0], th.ttft[1]);
                                     }
                                 }
                                 if (data.total_time && data.total_time > 0) {
                                     totalTime = data.total_time;
                                     if (ttEl) {
                                         ttEl.innerText = totalTime.toFixed(1) + 's';
+                                        ttEl.style.color = colorByThreshold(totalTime, th.tt[0], th.tt[1]);
                                     }
                                 }
                                 // Capture per-response cost and tokens
-                                if (data.response_cost !== undefined) {
-                                    responseCost = data.response_cost;
-                                }
-                                if (data.response_in_tokens !== undefined) {
-                                    responseInTokens = data.response_in_tokens;
-                                }
-                                if (data.response_out_tokens !== undefined) {
-                                    responseOutTokens = data.response_out_tokens;
-                                }
-                                // Update API cost display with color gradient
+                                if (data.response_cost !== undefined) responseCost = data.response_cost;
+                                if (data.response_in_tokens !== undefined) responseInTokens = data.response_in_tokens;
+                                if (data.response_out_tokens !== undefined) responseOutTokens = data.response_out_tokens;
+
+                                // Update API cost/token display with model-aware color thresholds
                                 if (data.usage && data.usage.total_cost !== undefined) {
                                     const apiCostEl = document.getElementById('api-cost');
                                     const apiInEl = document.getElementById('api-usage-input');
                                     const apiOutEl = document.getElementById('api-usage-output');
 
                                     if (apiInEl && data.usage.input_tokens !== undefined) {
-                                        apiInEl.innerText = data.usage.input_tokens.toLocaleString();
+                                        const inTok = data.usage.input_tokens;
+                                        apiInEl.innerText = inTok.toLocaleString();
+                                        apiInEl.style.color = colorByThreshold(inTok, th.inTok[0], th.inTok[1]);
                                     }
                                     if (apiOutEl && data.usage.output_tokens !== undefined) {
-                                        apiOutEl.innerText = data.usage.output_tokens.toLocaleString();
+                                        const outTok = data.usage.output_tokens;
+                                        apiOutEl.innerText = outTok.toLocaleString();
+                                        apiOutEl.style.color = colorByThreshold(outTok, th.outTok[0], th.outTok[1]);
                                     }
-
                                     if (apiCostEl) {
                                         const cost = data.usage.total_cost;
-                                        // Show cents when under $1, dollars when $1+
-                                        if (cost < 1.00) {
-                                            apiCostEl.innerText = (cost * 100).toFixed(2) + '¢';
-                                        } else {
-                                            apiCostEl.innerText = '$' + cost.toFixed(2);
-                                        }
-                                        // Color gradient: green < $0.10, orange $0.10-$0.50, red > $0.50
-                                        if (cost < 0.10) {
-                                            apiCostEl.style.color = 'rgba(120, 200, 180, 0.85)'; // soft teal
-                                        } else if (cost < 0.50) {
-                                            apiCostEl.style.color = 'rgba(200, 170, 120, 0.85)'; // muted amber
-                                        } else {
-                                            apiCostEl.style.color = 'rgba(200, 130, 130, 0.85)'; // soft rose
-                                        }
+                                        apiCostEl.innerText = cost < 1.00 ? (cost * 100).toFixed(2) + '¢' : '$' + cost.toFixed(2);
+                                        apiCostEl.style.color = colorByThreshold(cost, th.cost[0], th.cost[1]);
                                     }
                                 }
                                 // Show which model was used in status bar
@@ -312,11 +340,11 @@ function initializeStreamingAI() {
             responseSection.classList.add('expanded');
             responseArea.scrollTop = 0;
 
-            // === Capture to Conversation So Far ===
+            // === Capture to Conversation So Far (WhatsApp-style chat) ===
             const convoArea = document.getElementById('conversation-area');
             if (convoArea) {
                 const pairDiv = document.createElement('div');
-                pairDiv.style.cssText = 'border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; padding: 8px; background: rgba(255,255,255,0.02);';
+                pairDiv.style.cssText = 'margin-bottom: 14px;';
                 pairDiv.dataset.cost = responseCost || 0;
                 pairDiv.dataset.inTokens = responseInTokens || 0;
                 pairDiv.dataset.outTokens = responseOutTokens || 0;
@@ -324,38 +352,133 @@ function initializeStreamingAI() {
                 pairDiv.dataset.totalTime = totalTime || 0;
                 pairDiv.dataset.timestamp = new Date().toISOString();
 
-                // Input (transcript/question)
-                const inputText = transcript || '(screenshot analysis)';
                 const entryTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                const qDiv = document.createElement('div');
-                qDiv.style.cssText = 'color: #bbb; font-size: 11px; line-height: 1.4; margin-bottom: 6px; padding: 4px 8px; border-left: 2px solid #666; border-radius: 2px;';
-                const formattedInput = window.formatConvoText ? window.formatConvoText(inputText) : inputText.substring(0, 200);
-                qDiv.innerHTML = '<strong style="color: rgba(255,255,255,0.4); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;">Input</strong> <span style="color: rgba(255,255,255,0.25); font-size: 9px;">' + entryTime + '</span><br>' + formattedInput;
-                pairDiv.appendChild(qDiv);
+                const wasScreenshot = requestBody.screenshot;
 
-                // AI response (truncated for readability)
-                const cleanResponse = fullResponse.replace(/\n{3,}/g, '\n').replace(/\[Model Used:.*\]/, '').trim();
-                const rDiv = document.createElement('div');
-                rDiv.style.cssText = 'color: #ddd; font-size: 11px; line-height: 1.4; padding: 4px 8px; border-left: 2px solid rgba(100,255,150,0.4); border-radius: 2px; max-height: 200px; overflow-y: auto;';
-                // Build AI label with model and response time
-                let aiLabel = 'AI';
-                if (usedModel) aiLabel += ' (' + usedModel.toUpperCase() + ')';
-                if (ttft > 0 && totalTime > 0) {
-                    aiLabel += ` [${ttft.toFixed(1)}s START / ${totalTime.toFixed(1)}s TOTAL]`;
-                } else if (ttft > 0) {
-                    aiLabel += ' [' + ttft.toFixed(1) + 's]';
+                // ── USER BUBBLE (right-aligned) ──────────────────────────────
+                const userRow = document.createElement('div');
+                userRow.style.cssText = 'display: flex; justify-content: flex-end; margin-bottom: 6px;';
+                const userBubble = document.createElement('div');
+                userBubble.style.cssText = [
+                    'max-width: 75%; background: rgba(60,60,70,0.7);',
+                    'border: 1px solid rgba(255,255,255,0.08); border-radius: 14px 14px 3px 14px;',
+                    'padding: 8px 12px; font-size: 11px; color: rgba(255,255,255,0.75); line-height: 1.5;',
+                    'word-break: break-word;'
+                ].join('');
+                if (wasScreenshot) {
+                    const labelText = transcript
+                        ? `<div style="margin-bottom:6px;">${window.formatConvoText ? window.formatConvoText(transcript) : transcript}</div>`
+                        : '';
+                    userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:4px;letter-spacing:0.5px;">📷 SCREEN CAPTURE · ${entryTime}</div>${labelText}<img src="${wasScreenshot}" style="max-width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.12);display:block;">`;
+                } else {
+                    const formattedInput = window.formatConvoText ? window.formatConvoText(transcript) : transcript;
+                    userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${entryTime}</div>${formattedInput}`;
                 }
-                const formattedConvo = window.formatConvoText ? window.formatConvoText(cleanResponse) : cleanResponse.substring(0, 300);
-                rDiv.innerHTML = '<strong style="color: rgba(100,255,150,0.4); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;">' + aiLabel + '</strong> <span style="color: rgba(255,255,255,0.25); font-size: 9px;">' + entryTime + '</span><br>' + formattedConvo;
-                pairDiv.appendChild(rDiv);
+                userRow.appendChild(userBubble);
+                pairDiv.appendChild(userRow);
 
-                // Highlight code blocks in conversation entry
-                rDiv.querySelectorAll('pre code').forEach((block) => {
+                // ── AI BUBBLE (left-aligned) ─────────────────────────────────
+                const th = getModelThresholds(window.selectedModel);
+                const aiRow = document.createElement('div');
+                aiRow.style.cssText = 'display: flex; justify-content: flex-start; margin-bottom: 5px;';
+                const aiBubble = document.createElement('div');
+                aiBubble.style.cssText = [
+                    'max-width: 80%; background: rgba(30,40,35,0.7);',
+                    'border: 1px solid rgba(100,255,150,0.12); border-radius: 14px 14px 14px 3px;',
+                    'padding: 8px 12px; font-size: 11px; color: rgba(220,240,225,0.85); line-height: 1.5;',
+                    'word-break: break-word; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;'
+                ].join('');
+
+                const modelLabel = usedModel ? usedModel.toUpperCase() : 'AI';
+                const cleanResponse = fullResponse.replace(/\n{3,}/g, '\n').replace(/\[Model Used:.*\]/, '').trim();
+                const formattedConvo = window.formatConvoText ? window.formatConvoText(cleanResponse) : cleanResponse;
+
+                // Header row: model · time  +  [copy] right-aligned
+                const aiHeader = document.createElement('div');
+                aiHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
+                aiHeader.innerHTML = `
+                    <span style="font-size:9px;color:rgba(100,255,150,0.4);letter-spacing:0.5px;">${modelLabel} · ${entryTime}</span>
+                    <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
+                          onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.25)';"
+                          onmouseout="this.style.color='rgba(255,255,255,0.25)';this.style.borderColor='rgba(255,255,255,0.08)';"
+                          onclick="
+                            const txt = this.closest('[data-timestamp]').querySelector('.ai-body').innerText;
+                            navigator.clipboard.writeText(txt);
+                            this.textContent='copied!';
+                            setTimeout(()=>this.textContent='[copy]',2000);
+                          ">[copy]</span>`;
+
+                // Body: formatted response
+                const aiBody = document.createElement('div');
+                aiBody.className = 'ai-body';
+                aiBody.style.cssText = 'flex: 1; min-height: 0;';
+                aiBody.innerHTML = formattedConvo;
+                aiBody.querySelectorAll('pre code').forEach(block => {
                     if (typeof hljs !== 'undefined') hljs.highlightElement(block);
                 });
 
+                // Footer: stats strip inside bubble
+                const fmt = (v, low, high) => `<span style="color:${colorByThreshold(v, low, high)}">${v.toFixed(1)}s</span>`;
+                const costFmt = responseCost < 1 ? (responseCost * 100).toFixed(3) + '¢' : '$' + responseCost.toFixed(3);
+                const aiFooter = document.createElement('div');
+                aiFooter.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; font-size: 9px; font-family: monospace; color: rgba(255,255,255,0.2); letter-spacing: 0.3px; padding-top: 5px; border-top: 1px solid rgba(100,255,150,0.07); flex-shrink: 0;';
+                aiFooter.innerHTML = [
+                    `TTFT ${ttft > 0 ? fmt(ttft, th.ttft[0], th.ttft[1]) : '<span>--</span>'}`,
+                    `TT ${totalTime > 0 ? fmt(totalTime, th.tt[0], th.tt[1]) : '<span>--</span>'}`,
+                    `IN <span style="color:rgba(180,180,180,0.4)">${responseInTokens.toLocaleString()}</span>`,
+                    `OUT <span style="color:rgba(180,180,180,0.4)">${responseOutTokens.toLocaleString()}</span>`,
+                    `<span style="color:rgba(180,180,180,0.35)">${costFmt}</span>`
+                ].join('<span style="opacity:0.25"> · </span>');
+
+                aiBubble.appendChild(aiHeader);
+                aiBubble.appendChild(aiBody);
+                aiBubble.appendChild(aiFooter);
+                aiRow.appendChild(aiBubble);
+                pairDiv.appendChild(aiRow);
+
                 convoArea.appendChild(pairDiv);
                 convoArea.scrollTop = convoArea.scrollHeight;
+
+                // Send live update to the floating conversation window
+                ipcRenderer.send('convo-update', {
+                    question: wasScreenshot
+                        ? ('📷 (screenshot)' + (transcript ? ' ' + transcript : ''))
+                        : transcript,
+                    response: formattedConvo,
+                    model: usedModel,
+                    timestamp: new Date().toISOString(),
+                    ttft: ttft,
+                    totalTime: totalTime,
+                    responseInTokens: responseInTokens,
+                    responseOutTokens: responseOutTokens,
+                    responseCost: responseCost
+                });
+
+                // Update cumulative avg TTFT / TT in modal footer
+                const allEntries = convoArea.querySelectorAll('[data-response-time]');
+                let sumTtft = 0, sumTt = 0, validTtft = 0, validTt = 0;
+                allEntries.forEach(el => {
+                    const rt = parseFloat(el.dataset.responseTime || 0);
+                    const tt = parseFloat(el.dataset.totalTime || 0);
+                    if (rt > 0) { sumTtft += rt; validTtft++; }
+                    if (tt > 0) { sumTt += tt; validTt++; }
+                });
+                const avgStatsEl = document.getElementById('conversation-modal-avg-stats');
+                const avgTtftEl = document.getElementById('avg-ttft-val');
+                const avgTtEl = document.getElementById('avg-tt-val');
+                const countEl = document.getElementById('avg-exchange-count');
+                if (avgStatsEl) avgStatsEl.style.display = 'flex';
+                if (countEl) countEl.textContent = validTtft;
+                if (avgTtftEl && validTtft > 0) {
+                    const avg = sumTtft / validTtft;
+                    avgTtftEl.textContent = avg.toFixed(1) + 's';
+                    avgTtftEl.style.color = colorByThreshold(avg, th.ttft[0], th.ttft[1]);
+                }
+                if (avgTtEl && validTt > 0) {
+                    const avg = sumTt / validTt;
+                    avgTtEl.textContent = avg.toFixed(1) + 's';
+                    avgTtEl.style.color = colorByThreshold(avg, th.tt[0], th.tt[1]);
+                }
             }
 
             if (capturedScreenshot) {

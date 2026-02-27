@@ -567,207 +567,12 @@ function initSession() {
         };
     }
 
-    // Conversation So Far button and modal
+    // Conversation So Far floating window toggle
     const convoBtn = document.getElementById('btn-conversation');
-    const convoModal = document.getElementById('conversation-modal');
-    const closeConvoX = document.getElementById('close-conversation-modal');
-    const closeConvoBtn = document.getElementById('btn-close-convo-modal');
-    const exportConvoBtn = document.getElementById('export-conversation-btn');
-
-    if (exportConvoBtn) {
-        exportConvoBtn.onclick = async () => {
-            const convoArea = document.getElementById('conversation-area');
-            if (!convoArea || convoArea.children.length === 0) {
-                alert("No conversation history to export yet.");
-                return;
-            }
-
-            let totalCost = 0;
-            Array.from(convoArea.children).forEach(child => {
-                totalCost += parseFloat(child.dataset.cost || 0);
-            });
-            let costText = '$0.00';
-            if (totalCost > 0) {
-                if (totalCost < 1.00) {
-                    costText = (totalCost * 100).toFixed(2) + '¢';
-                } else {
-                    costText = '$' + totalCost.toFixed(2);
-                }
-            }
-
-            let totalIn = 0;
-            let totalOut = 0;
-            Array.from(convoArea.children).forEach(c => {
-                totalIn += parseInt(c.dataset.inTokens || 0);
-                totalOut += parseInt(c.dataset.outTokens || 0);
-            });
-
-            let exportText = `# Conversation Export: ${currentSessionName || 'Session'}\n`;
-            exportText += `**Exported At:** ${new Date().toLocaleString()}\n`;
-            exportText += `**Target Role:** ${window.sessionTargetRole || 'Not Set'}\n`;
-            exportText += `**Cumulative API Cost:** ${costText}\n`;
-            exportText += `**Cumulative Tokens:** In: ${totalIn.toLocaleString()} | Out: ${totalOut.toLocaleString()}\n\n`;
-            exportText += `---\n\n`;
-
-            Array.from(convoArea.children).forEach(child => {
-                const ts = child.dataset.timestamp ? new Date(child.dataset.timestamp).toLocaleTimeString() : '';
-                const qDiv = child.querySelector('div:first-child');
-                const aDiv = child.querySelector('div:nth-child(2)');
-
-                if (qDiv) {
-                    // Extract text but remove the "Input HH:MM:SS" header
-                    let qText = qDiv.innerText.replace(/^Input(\s+\d{1,2}:\d{2}:\d{2}\s*(AM|PM)?)?/i, '').trim();
-                    exportText += `### User ${ts ? '*(' + ts + ')*' : ''}\n\n${qText}\n\n`;
-                }
-
-                if (aDiv) {
-                    let lines = aDiv.innerText.split('\n');
-                    let aiHeader = 'AI';
-                    if (lines.length > 0 && lines[0].startsWith('AI')) {
-                        aiHeader = lines.shift().replace(/(\s+\d{1,2}:\d{2}:\d{2}\s*(AM|PM)?)?$/i, '').trim();
-                    }
-                    let aText = lines.join('\n').trim();
-                    exportText += `### ${aiHeader} ${ts ? '*(' + ts + ')*' : ''}\n\n${aText}\n\n`;
-                }
-
-                exportText += `---\n\n`;
-            });
-
-            if (typeof require !== 'undefined') {
-                const { ipcRenderer } = require('electron');
-                try {
-                    const defaultName = `Conversation_${currentSessionName ? currentSessionName.replace(/[^a-z0-9]/gi, '_') : Date.now()}.md`;
-                    const result = await ipcRenderer.invoke('export-conversation', exportText, defaultName);
-                    if (result && result.success) {
-                        console.log('Exported to:', result.filePath);
-                        exportConvoBtn.style.color = '#4CAF50';
-                        setTimeout(() => { exportConvoBtn.style.color = 'rgba(255,255,255,0.4)'; }, 2000);
-                    }
-                } catch (err) {
-                    console.error('Export failed:', err);
-                    alert('Failed to export conversation.');
-                }
-            } else {
-                // Fallback for non-Electron environment
-                const blob = new Blob([exportText], { type: 'text/markdown' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Conversation_${currentSessionName ? currentSessionName.replace(/[^a-z0-9]/gi, '_') : Date.now()}.md`;
-                a.click();
-                URL.revokeObjectURL(url);
-            }
-        };
-    }
 
     if (convoBtn) {
         convoBtn.onclick = () => {
-            const convoArea = document.getElementById('conversation-area');
-            const modalList = document.getElementById('conversation-modal-list');
-            const costFooter = document.getElementById('conversation-modal-cost');
-            const modalTitle = document.getElementById('conversation-modal-title');
-            if (!modalList) return;
-
-            // Set title with session name
-            if (modalTitle) {
-                const divider = '<span style="color: rgba(255,255,255,0.2); margin: 0 8px;">|</span>';
-                const roleText = window.sessionTargetRole ? divider + ' <span style="color: rgba(255,255,255,0.4);">' + window.sessionTargetRole + '</span>' : '';
-                modalTitle.innerHTML = currentSessionName
-                    ? 'Conversation ' + divider + ' <span style="color: rgba(255,255,255,0.6);">' + currentSessionName + '</span>' + roleText
-                    : 'Conversation So Far';
-            }
-
-            // Copy entries from hidden data container into modal
-            modalList.innerHTML = '';
-            let totalCost = 0;
-            let lastDateStr = '';
-            if (convoArea && convoArea.children.length > 0) {
-                Array.from(convoArea.children).forEach(child => {
-                    // Insert date separator if date changes (date only, no time)
-                    const ts = child.dataset.timestamp;
-                    if (ts) {
-                        try {
-                            const d = new Date(ts);
-                            const dayStr = d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-                            if (dayStr !== lastDateStr) {
-                                lastDateStr = dayStr;
-                                const separator = document.createElement('div');
-                                separator.style.cssText = 'text-align: center; padding: 6px 0; margin: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.06);';
-                                separator.innerHTML = '<span style="color: rgba(255,255,255,0.6); font-size: 10px; letter-spacing: 1px; font-weight: 500;">' + dayStr + '</span>';
-                                modalList.appendChild(separator);
-                            }
-                        } catch (e) { /* skip separator */ }
-                    }
-
-                    const cloned = child.cloneNode(true);
-
-                    // Add [Copy] button to this pair
-                    const copyBtn = document.createElement('div');
-                    copyBtn.style.cssText = 'text-align: right; margin-top: 4px;';
-                    copyBtn.innerHTML = '<span style="color: rgba(255,255,255,0.4); font-size: 11px; cursor: pointer; transition: all 0.2s; font-family: monospace;" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'rgba(255,255,255,0.4)\'">[copy]</span>';
-                    copyBtn.querySelector('span').onclick = function () {
-                        const pair = this.closest('div[data-cost]') || this.parentElement.parentElement;
-                        const text = pair.innerText.replace(/\[copy\]$/i, '').trim();
-                        navigator.clipboard.writeText(text).then(() => {
-                            this.textContent = '[copied!]';
-                            this.style.color = '#4CAF50';
-                            setTimeout(() => { this.textContent = '[copy]'; this.style.color = 'rgba(255,255,255,0.4)'; }, 2000);
-                        });
-                    };
-                    cloned.appendChild(copyBtn);
-
-                    modalList.appendChild(cloned);
-                    totalCost += parseFloat(child.dataset.cost || 0);
-                });
-            } else {
-                modalList.innerHTML = '<div style="color: rgba(255,255,255,0.3); font-size: 12px; text-align: center; padding: 30px;">No conversation yet.</div>';
-            }
-
-            // Show cumulative API cost
-            if (costFooter) {
-                if (totalCost > 0) {
-                    let costText;
-                    if (totalCost < 1.00) {
-                        costText = (totalCost * 100).toFixed(2) + '¢';
-                    } else {
-                        costText = '$' + totalCost.toFixed(2);
-                    }
-
-                    let totalIn = 0;
-                    let totalOut = 0;
-                    Array.from(convoArea.children).forEach(c => {
-                        totalIn += parseInt(c.dataset.inTokens || 0);
-                        totalOut += parseInt(c.dataset.outTokens || 0);
-                    });
-
-                    costFooter.innerHTML = `
-                        <div style="display: flex; justify-content: flex-end; align-items: center; gap: 20px;">
-                            <span style="display: flex; gap: 12px; margin-right: 10px;">
-                                <span style="color: rgba(255,255,255,0.25); text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;">Tokens In: <span style="color: rgba(255,255,255,0.5); font-weight: 500; font-family: monospace;">${totalIn.toLocaleString()}</span></span>
-                                <span style="color: rgba(255,255,255,0.25); text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;">Tokens Out: <span style="color: rgba(255,255,255,0.5); font-weight: 500; font-family: monospace;">${totalOut.toLocaleString()}</span></span>
-                            </span>
-                            <span style="color: rgba(255, 255, 255, 0.4); text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px;">Cumulative API Cost:</span> 
-                            <span style="color: rgba(120, 200, 180, 0.85); font-weight: 600; font-size: 11px;">${costText}</span>
-                        </div>
-                    `;
-                    costFooter.style.display = 'block';
-                } else {
-                    costFooter.style.display = 'none';
-                }
-            }
-
-            if (convoModal) convoModal.style.display = 'flex';
-        };
-    }
-
-    const closeConvoModal = () => {
-        if (convoModal) convoModal.style.display = 'none';
-    };
-    if (closeConvoX) closeConvoX.onclick = closeConvoModal;
-    if (closeConvoBtn) closeConvoBtn.onclick = closeConvoModal;
-    if (convoModal) {
-        convoModal.onclick = (e) => {
-            if (e.target === convoModal) closeConvoModal();
+            ipcRenderer.send('toggle-convo-window');
         };
     }
 
@@ -910,55 +715,86 @@ window.openPastSession = async function (sessionName) {
                 }
 
                 const pairDiv = document.createElement('div');
-                pairDiv.style.cssText = 'border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 12px; background: rgba(255,255,255,0.02);';
+                pairDiv.style.cssText = 'margin-bottom: 14px;';
 
-                // Entry number
-                const numLabel = document.createElement('div');
-                numLabel.style.cssText = 'color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;';
-                numLabel.textContent = `Exchange ${idx + 1}` + (entry.timestamp ? ` — ${new Date(entry.timestamp).toLocaleTimeString()}` : '');
-                pairDiv.appendChild(numLabel);
+                const entryTimeStr = entry.timestamp
+                    ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+                    : '';
 
-                // User question (with code formatting)
+                // ── USER BUBBLE (right-aligned) ──────────────────────────────
                 if (entry.question) {
-                    const qDiv = document.createElement('div');
-                    qDiv.style.cssText = 'color: #ccc; font-size: 12px; line-height: 1.5; margin-bottom: 8px; padding: 6px 10px; background: rgba(255,255,255,0.03); border-left: 2px solid #888; border-radius: 3px;';
-                    const formattedQ = window.formatConvoText ? window.formatConvoText(entry.question) : entry.question;
-                    const entryTimeQ = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-                    qDiv.innerHTML = `<strong style="color: rgba(255,255,255,0.5); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Input</strong>` + (entryTimeQ ? ` <span style="color: rgba(255,255,255,0.25); font-size: 9px;">${entryTimeQ}</span>` : '') + `<br>${formattedQ}`;
-                    pairDiv.appendChild(qDiv);
-                    // Highlight code blocks in question
-                    qDiv.querySelectorAll('pre code').forEach(block => { if (typeof hljs !== 'undefined') hljs.highlightElement(block); });
+                    const userRow = document.createElement('div');
+                    userRow.style.cssText = 'display: flex; justify-content: flex-end; margin-bottom: 6px;';
+                    const userBubble = document.createElement('div');
+                    userBubble.style.cssText = [
+                        'max-width: 75%; background: rgba(60,60,70,0.7);',
+                        'border: 1px solid rgba(255,255,255,0.08); border-radius: 14px 14px 3px 14px;',
+                        'padding: 8px 12px; font-size: 11px; color: rgba(255,255,255,0.75); line-height: 1.5;',
+                        'word-break: break-word;'
+                    ].join('');
+                    const isScreenEntry = entry.question.startsWith('[USER SHARED A SCREENSHOT]');
+                    const displayQ = isScreenEntry
+                        ? entry.question.replace('[USER SHARED A SCREENSHOT] Question about the screenshot: ', '').trim() || '<em style="color:rgba(255,255,255,0.35);">screen only</em>'
+                        : (window.formatConvoText ? window.formatConvoText(entry.question) : entry.question);
+                    const screenLabel = isScreenEntry ? '📷 SCREEN · ' : '';
+                    userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${screenLabel}${entryTimeStr}</div>${displayQ}`;
+                    userBubble.querySelectorAll('pre code').forEach(b => { if (typeof hljs !== 'undefined') hljs.highlightElement(b); });
+                    userRow.appendChild(userBubble);
+                    pairDiv.appendChild(userRow);
                 }
 
-                // AI response (with code formatting)
+                // ── AI BUBBLE (left-aligned) with [copy] header + stats footer ──
                 if (entry.response) {
-                    const rDiv = document.createElement('div');
-                    rDiv.style.cssText = 'color: #eee; font-size: 12px; line-height: 1.5; padding: 6px 10px; background: rgba(100,255,150,0.03); border-left: 2px solid rgba(100,255,150,0.5); border-radius: 3px; max-height: 150px; overflow-y: auto;';
-                    let aiLabel = 'AI';
-                    if (entry.model) aiLabel += ' (' + entry.model + ')';
-                    if (entry.response_time) aiLabel += ' (' + entry.response_time + 's)';
-                    const formattedR = window.formatConvoText ? window.formatConvoText(entry.response) : entry.response;
-                    const entryTimeR = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-                    rDiv.innerHTML = `<strong style="color: rgba(100,255,150,0.5); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">${aiLabel}</strong>` + (entryTimeR ? ` <span style="color: rgba(255,255,255,0.25); font-size: 9px;">${entryTimeR}</span>` : '') + `<br>${formattedR}`;
-                    pairDiv.appendChild(rDiv);
-                    // Highlight code blocks in response
-                    rDiv.querySelectorAll('pre code').forEach(block => { if (typeof hljs !== 'undefined') hljs.highlightElement(block); });
-                }
+                    const aiRow = document.createElement('div');
+                    aiRow.style.cssText = 'display: flex; justify-content: flex-start; margin-bottom: 5px;';
+                    const aiBubble = document.createElement('div');
+                    aiBubble.style.cssText = [
+                        'max-width: 80%; background: rgba(30,40,35,0.7);',
+                        'border: 1px solid rgba(100,255,150,0.12); border-radius: 14px 14px 14px 3px;',
+                        'padding: 8px 12px; font-size: 11px; color: rgba(220,240,225,0.85); line-height: 1.5;',
+                        'word-break: break-word; max-height: 300px; overflow-y: auto;',
+                        'display: flex; flex-direction: column; gap: 6px;'
+                    ].join('');
 
-                // [Copy] button for this pair
-                const copyBtn = document.createElement('div');
-                copyBtn.style.cssText = 'text-align: right; margin-top: 4px;';
-                copyBtn.innerHTML = '<span class="convo-copy-btn" style="color: rgba(255,255,255,0.4); font-size: 11px; cursor: pointer; transition: all 0.2s; font-family: monospace;" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'rgba(255,255,255,0.4)\'">[copy]</span>';
-                copyBtn.querySelector('span').onclick = function () {
-                    const pair = this.closest('div.convo-pair');
-                    const text = pair.innerText.replace(/\[copy\]$/i, '').trim();
-                    navigator.clipboard.writeText(text).then(() => {
-                        this.textContent = '[copied!]';
-                        this.style.color = '#4CAF50';
-                        setTimeout(() => { this.textContent = '[copy]'; this.style.color = 'rgba(255,255,255,0.4)'; }, 2000);
-                    });
-                };
-                pairDiv.appendChild(copyBtn);
+                    const modelLabel = entry.model ? entry.model.toUpperCase() : 'AI';
+
+                    // Header: model · time + [copy]
+                    const aiHeader = document.createElement('div');
+                    aiHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
+                    const responseText = entry.response;
+                    aiHeader.innerHTML = `
+                        <span style="font-size:9px;color:rgba(100,255,150,0.4);letter-spacing:0.5px;">${modelLabel} · ${entryTimeStr}</span>
+                        <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
+                              onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.25)';"
+                              onmouseout="this.style.color='rgba(255,255,255,0.25)';this.style.borderColor='rgba(255,255,255,0.08)';"
+                              onclick="navigator.clipboard.writeText(this.closest('div').nextSibling.innerText);this.textContent='copied!';setTimeout(()=>this.textContent='[copy]',2000);">[copy]</span>`;
+
+                    // Body
+                    const aiBody = document.createElement('div');
+                    aiBody.className = 'ai-body';
+                    aiBody.style.cssText = 'flex: 1; min-height: 0;';
+                    aiBody.innerHTML = window.formatConvoText ? window.formatConvoText(entry.response) : entry.response;
+                    aiBody.querySelectorAll('pre code').forEach(b => { if (typeof hljs !== 'undefined') hljs.highlightElement(b); });
+
+                    // Footer stats
+                    const aiFooter = document.createElement('div');
+                    aiFooter.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; font-size: 9px; font-family: monospace; color: rgba(255,255,255,0.2); letter-spacing: 0.3px; padding-top: 5px; border-top: 1px solid rgba(100,255,150,0.07); flex-shrink: 0;';
+                    const statsItems = [];
+                    if (entry.response_time) statsItems.push(`TTFT <span style="color:rgba(180,220,200,0.6)">${parseFloat(entry.response_time).toFixed(1)}s</span>`);
+                    if (entry.total_time) statsItems.push(`TT <span style="color:rgba(180,220,200,0.6)">${parseFloat(entry.total_time).toFixed(1)}s</span>`);
+                    if (entry.input_tokens) statsItems.push(`IN <span style="color:rgba(180,180,180,0.4)">${Number(entry.input_tokens).toLocaleString()}</span>`);
+                    if (entry.output_tokens) statsItems.push(`OUT <span style="color:rgba(180,180,180,0.4)">${Number(entry.output_tokens).toLocaleString()}</span>`);
+                    if (entry.cost) statsItems.push(`<span style="color:rgba(180,180,180,0.35)">${entry.cost < 1 ? (entry.cost * 100).toFixed(3) + '¢' : '$' + entry.cost.toFixed(3)}</span>`);
+                    aiFooter.innerHTML = statsItems.length > 0
+                        ? statsItems.join('<span style="opacity:0.25"> · </span>')
+                        : '<span style="opacity:0.3">no stats</span>';
+
+                    aiBubble.appendChild(aiHeader);
+                    aiBubble.appendChild(aiBody);
+                    aiBubble.appendChild(aiFooter);
+                    aiRow.appendChild(aiBubble);
+                    pairDiv.appendChild(aiRow);
+                }
 
                 historyList.appendChild(pairDiv);
             });
@@ -1059,58 +895,12 @@ window.openPastSession = async function (sessionName) {
                 const responseTimeEl = document.getElementById('response-time');
                 if (responseTimeEl) responseTimeEl.innerText = '0.0s';
 
-                // Pre-populate Conversation So Far with past session history
-                const convoArea = document.getElementById('conversation-area');
-                if (convoArea) {
-                    convoArea.innerHTML = '';
-                    if (sessionData.history && Array.isArray(sessionData.history) && sessionData.history.length > 0) {
-                        sessionData.history.forEach(entry => {
-                            const pairDiv = document.createElement('div');
-                            pairDiv.style.cssText = 'border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; padding: 8px; background: rgba(255,255,255,0.02);';
-                            pairDiv.dataset.cost = entry.cost || 0;
-                            pairDiv.dataset.inTokens = entry.input_tokens || 0;
-                            pairDiv.dataset.outTokens = entry.output_tokens || 0;
-                            pairDiv.dataset.responseTime = entry.response_time || 0;
-                            pairDiv.dataset.totalTime = entry.total_time || 0;
-                            pairDiv.dataset.timestamp = entry.timestamp || '';
-
-                            if (entry.question) {
-                                const qDiv = document.createElement('div');
-                                qDiv.style.cssText = 'color: #bbb; font-size: 11px; line-height: 1.4; margin-bottom: 6px; padding: 4px 8px; border-left: 2px solid #666; border-radius: 2px;';
-                                const formattedQ = window.formatConvoText ? window.formatConvoText(entry.question) : entry.question.substring(0, 200);
-                                const entryTimeQ = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-                                qDiv.innerHTML = '<strong style="color: rgba(255,255,255,0.4); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;">Input</strong>' + (entryTimeQ ? ' <span style="color: rgba(255,255,255,0.25); font-size: 9px;">' + entryTimeQ + '</span>' : '') + '<br>' + formattedQ;
-                                pairDiv.appendChild(qDiv);
-                                // Highlight code blocks in question
-                                qDiv.querySelectorAll('pre code').forEach(block => { if (typeof hljs !== 'undefined') hljs.highlightElement(block); });
-                            }
-
-                            if (entry.response) {
-                                const rDiv = document.createElement('div');
-                                rDiv.style.cssText = 'color: #ddd; font-size: 11px; line-height: 1.4; padding: 4px 8px; border-left: 2px solid rgba(100,255,150,0.4); border-radius: 2px; max-height: 200px; overflow-y: auto;';
-                                let aiLabel = 'AI';
-                                if (entry.model) aiLabel += ' (' + entry.model + ')';
-                                if (entry.response_time > 0 && entry.total_time > 0) {
-                                    aiLabel += ` [${entry.response_time}s START / ${entry.total_time}s TOTAL]`;
-                                } else if (entry.response_time) {
-                                    aiLabel += ` [${entry.response_time}s]`;
-                                }
-                                const formattedConvo = window.formatConvoText ? window.formatConvoText(entry.response) : entry.response.substring(0, 300);
-                                const entryTimeR = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-                                rDiv.innerHTML = '<strong style="color: rgba(100,255,150,0.4); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;">' + aiLabel + '</strong>' + (entryTimeR ? ' <span style="color: rgba(255,255,255,0.25); font-size: 9px;">' + entryTimeR + '</span>' : '') + '<br>' + formattedConvo;
-                                pairDiv.appendChild(rDiv);
-
-                                // Highlight code blocks
-                                rDiv.querySelectorAll('pre code').forEach((block) => {
-                                    if (typeof hljs !== 'undefined') hljs.highlightElement(block);
-                                });
-                            }
-
-                            convoArea.appendChild(pairDiv);
-                        });
-                        convoArea.scrollTop = convoArea.scrollHeight;
-                    }
-                }
+                // Pre-populate Conversation So Far floating window with past session history
+                ipcRenderer.send('load-convo-history', {
+                    sessionName: sessionName,
+                    role: sessionData.target_role || '',
+                    historyArray: sessionData.history || []
+                });
 
                 // Check for disclaimer agreement before resuming
                 const agreed = localStorage.getItem('disclaimer_agreed') === 'true';
@@ -1544,6 +1334,10 @@ function resetSessionUI() {
     // Clear conversation history on backend
     fetch('http://127.0.0.1:5050/conversation/clear', { method: 'POST' }).catch(() => { });
 
+    // Clear and hide floating conversation window when session ends
+    ipcRenderer.send('clear-convo-history');
+    ipcRenderer.send('hide-convo-window');
+
     // Get DOM elements
     const fileInput = document.getElementById('setup-resume');
     const apiKeyInput = document.getElementById('setup-apikey');
@@ -1774,8 +1568,8 @@ updateHWIDDisplay();
             middleDiv.innerHTML = `
                 <!-- Model -->
                 <div style="display: flex; align-items: center; gap: 4px; position: relative;">
-                    <span style="color: rgba(255, 255, 255, 0.4);">Model:</span>
-                    <button id="model-selector-btn" style="background: rgba(120, 200, 180, 0.05); border: 1px solid rgba(120, 200, 180, 0.85); border-radius: 4px; padding: 2px 8px; color: rgba(120, 200, 180, 0.85); font-size: 10px; cursor: pointer; font-weight: 500; font-family: inherit;"
+                    <span style="color: rgba(255, 255, 255, 0.4);"></span>
+                    <button id="model-selector-btn" style="background: rgba(120, 200, 180, 0.05); border: 1px solid rgba(120, 200, 180, 0.85); border-radius: 4px; padding: 2px 8px; color: rgba(120, 200, 180, 0.85); font-size: 10px; cursor: pointer; font-weight: 500; font-family: inherit; white-space: nowrap; min-width: max-content;"
                         onmouseover="this.style.background='rgba(120, 200, 180, 0.1)'; this.style.color='#fff'" onmouseout="this.style.background='rgba(120, 200, 180, 0.05)'; this.style.color='rgba(120, 200, 180, 0.85)'">
                         GPT-4o
                     </button>
@@ -1783,25 +1577,28 @@ updateHWIDDisplay();
                     </div>
                 </div>
 
-                <!-- Last TTFT & TT -->
-                <div style="display: flex; align-items: center; gap: 4px;">
-                    <span style="color: rgba(255, 255, 255, 0.4);">Last TTFT:</span>
-                    <span id="response-time-ttft" style="color: rgba(120, 200, 180, 0.85); font-weight: 500;">--s</span>
-                    <span style="color: rgba(255, 255, 255, 0.2); margin: 0 4px;">|</span>
-                    <span style="color: rgba(255, 255, 255, 0.4);">Last TT:</span>
-                    <span id="response-time-tt" style="color: rgba(120, 200, 180, 0.85); font-weight: 500;">--s</span>
-                </div>
-
-                <!-- API Cost & Usage -->
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="color: rgba(255, 255, 255, 0.4);">In:</span>
-                    <span id="api-usage-input" style="color: rgba(255, 255, 255, 0.6); font-weight: 500;">0</span>
-                    <span style="color: rgba(255, 255, 255, 0.2); margin: 0 4px;">|</span>
-                    <span style="color: rgba(255, 255, 255, 0.4);">Out:</span>
-                    <span id="api-usage-output" style="color: rgba(255, 255, 255, 0.6); font-weight: 500;">0</span>
-                    <span style="color: rgba(255, 255, 255, 0.2); margin: 0 6px;">|</span>
-                    <span style="color: rgba(255, 255, 255, 0.4);">Cost:&nbsp;</span>
-                    <span id="api-cost" style="color: rgba(120, 200, 180, 0.85); font-weight: 500;">$0.00</span>
+                <!-- Unified Stats Group -->
+                <div style="display: flex; align-items: center; gap: 10px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.05); padding: 4px 14px; border-radius: 6px; box-shadow: inset 0 1px 4px rgba(0,0,0,0.3); font-family: 'Consolas', 'Courier New', monospace; font-size: 9px; white-space: nowrap; letter-spacing: 0.5px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">TTFT:</span>
+                        <span id="response-time-ttft" style="color: rgba(120, 200, 180, 0.9); font-weight: 500; min-width: 28px;">--s</span>
+                        <span style="color: rgba(255, 255, 255, 0.15); margin: 0 2px;">|</span>
+                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">TT:</span>
+                        <span id="response-time-tt" style="color: rgba(120, 200, 180, 0.9); font-weight: 500; min-width: 28px;">--s</span>
+                    </div>
+                    
+                    <div style="width: 1px; height: 12px; background: rgba(255, 255, 255, 0.15); margin: 0 2px;"></div>
+                    
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">In:</span>
+                        <span id="api-usage-input" style="color: rgba(255, 255, 255, 0.7); font-weight: 500;">0</span>
+                        <span style="color: rgba(255, 255, 255, 0.15); margin: 0 2px;">|</span>
+                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">Out:</span>
+                        <span id="api-usage-output" style="color: rgba(255, 255, 255, 0.7); font-weight: 500;">0</span>
+                        <span style="color: rgba(255, 255, 255, 0.15); margin: 0 2px;">|</span>
+                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">Cost:</span>
+                        <span id="api-cost" style="color: rgba(120, 200, 180, 0.9); font-weight: 600; min-width: 36px; display: inline-block; text-align: right;">$0.00</span>
+                    </div>
                 </div>
             `;
             statusBar.insertBefore(middleDiv, statusBar.children[1]); // Insert as 2nd child (between left and right)

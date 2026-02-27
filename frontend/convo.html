@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Conversation</title>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <link href="setup.css" rel="stylesheet" />
+    <!-- Highlight.js CSS -->
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: transparent;
+            color: rgba(255, 255, 255, 0.9);
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+            /* Main window scroll disabled */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Outer Wrapper for floating rounded look */
+        .convo-wrapper {
+            background: rgba(30, 30, 30, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        /* Draggable Top Bar */
+        .title-bar {
+            -webkit-app-region: drag;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(20, 20, 20, 0.6);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            flex-shrink: 0;
+        }
+
+        #convo-session-title {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 500;
+        }
+
+        .window-controls {
+            -webkit-app-region: no-drag;
+            display: flex;
+            gap: 8px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0px 6px;
+            line-height: 1;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+
+        .close-btn:hover {
+            color: rgba(255, 107, 107, 0.8);
+            background: rgba(255, 255, 255, 0.05);
+            transform: scale(1.1);
+        }
+
+        /* Scrolling Chat Area */
+        #conversation-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 10px;
+            /* No justify-content: flex-end - this breaks scrolling.
+               JS scrolls to bottom after each message via scrollTop = scrollHeight */
+        }
+
+        /* Scrollbar Styling - Minimalist */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+
+        /* Firefox scrollbar */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+        }
+
+        .empty-state {
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+            text-align: center;
+            padding: 30px;
+            margin-top: auto;
+        }
+
+        /* Bottom Stats Footer */
+        #convo-avg-stats {
+            padding: 8px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            display: none;
+            /* hidden until valid stats */
+            gap: 18px;
+            justify-content: flex-end;
+            font-family: monospace;
+            flex-shrink: 0;
+        }
+
+        .stats-val-green {
+            color: rgba(100, 220, 160, 0.8);
+        }
+
+        .stats-val-neutral {
+            color: rgba(200, 200, 200, 0.5);
+        }
+
+        #convo-footer {
+            padding: 10px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            display: none;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="convo-wrapper">
+        <!-- Drag Bar Header -->
+        <div class="title-bar">
+            <span id="convo-session-title">Conversation Window</span>
+            <div class="window-controls">
+                <button id="export-btn" class="close-btn"
+                    style="font-size: 14px; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px;"
+                    title="Export Conversation">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                </button>
+                <button id="close-btn" class="close-btn" title="Hide Conversation">&times;</button>
+            </div>
+        </div>
+
+        <!-- Scrollable Chat List -->
+        <div id="conversation-list">
+            <div class="empty-state">No conversation yet.</div>
+        </div>
+
+        <!-- Averages Footer -->
+        <div id="convo-avg-stats">
+            <span>AVG TTFT: <span id="avg-ttft" class="stats-val-green">--</span></span>
+            <span>AVG TT: <span id="avg-tt" class="stats-val-green">--</span></span>
+            <span>TOTAL EXCHANGES: <span id="avg-exchanges" class="stats-val-neutral">0</span></span>
+        </div>
+
+        <!-- Cost Footer -->
+        <div id="convo-footer">
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 20px;">
+                <span style="display: flex; gap: 12px; margin-right: 10px;">
+                    <span
+                        style="color: rgba(255,255,255,0.25); text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;">Tokens
+                        In: <span id="tokens-in"
+                            style="color: rgba(255,255,255,0.5); font-weight: 500; font-family: monospace;">0</span></span>
+                    <span
+                        style="color: rgba(255,255,255,0.25); text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px;">Tokens
+                        Out: <span id="tokens-out"
+                            style="color: rgba(255,255,255,0.5); font-weight: 500; font-family: monospace;">0</span></span>
+                </span>
+                <span
+                    style="color: rgba(255, 255, 255, 0.4); text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px;">Cumulative
+                    API Cost:</span>
+                <span id="api-cost"
+                    style="color: rgba(120, 200, 180, 0.85); font-weight: 600; font-size: 11px;">$0.00</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="convo.js"></script>
+</body>
+
+</html>

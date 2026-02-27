@@ -5,6 +5,7 @@ const { autoUpdater } = require('electron-updater');
 
 let tray = null;
 let win = null;
+let convoWin = null;
 let isRecording = false;
 let isMiniMode = false;
 let backendProcess = null;
@@ -348,6 +349,30 @@ function createWindow() {
   });
 }
 
+function createConvoWindow() {
+  convoWin = new BrowserWindow({
+    width: 450,
+    height: 600,
+    show: false,
+    frame: false,
+    alwaysOnTop: true,
+    transparent: true,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    },
+  });
+
+  convoWin.loadFile(path.join(__dirname, 'convo.html'));
+
+  convoWin.on('close', (e) => {
+    // Prevent actual closing, just hide it so state remains
+    e.preventDefault();
+    convoWin.hide();
+  });
+}
+
 app.whenReady().then(() => {
   // Start backend first
   startBackend();
@@ -355,6 +380,7 @@ app.whenReady().then(() => {
   // Wait for backend to initialize
   setTimeout(() => {
     createWindow();
+    createConvoWindow();
 
     // Check for updates after window is created (only in production)
     if (app.isPackaged) {
@@ -463,7 +489,13 @@ app.whenReady().then(() => {
     if (!isMiniMode) {
       // Switch to Mini Mode - small floating icon
       isMiniMode = true; // Set flag FIRST so resize listener ignores it
-      const miniPos = lastMiniPosition || { x: win.getPosition()[0], y: win.getPosition()[1] };
+
+      // Save full window position BEFORE minimizing
+      const [fx, fy] = win.getPosition();
+      const [fw, fh] = win.getSize();
+      win.lastNormalBounds = { x: fx, y: fy, width: fw, height: fh };
+
+      const miniPos = lastMiniPosition || { x: fx, y: fy };
       win.setOpacity(1.0);
       win.setBackgroundColor('#00000000');
       win.setBounds({ x: miniPos.x, y: miniPos.y, width: 50, height: 50 });
@@ -472,19 +504,43 @@ app.whenReady().then(() => {
       win.webContents.executeJavaScript(`
         document.body.classList.add('mini');
       `);
+
+      // Hide convo window as well
+      if (convoWin && convoWin.isVisible()) {
+        convoWin.userVisibleBeforeMini = true;
+        convoWin.hide();
+      } else if (convoWin) {
+        convoWin.userVisibleBeforeMini = false;
+      }
+
     } else {
       // Save mini position before expanding
       const [mx, my] = win.getPosition();
       lastMiniPosition = { x: mx, y: my };
+
       // Expand back
       win.setOpacity(0.95);
       win.setBackgroundColor('#1e1e1eAA');
       win.setResizable(true);
-      const bounds = centerTop(800, 600);
-      win.setBounds(bounds);
-      win.webContents.setZoomFactor(1.0); // Reset zoom to default 800 width
+
+      // Restore the exact position it had before mini mode
+      if (win.lastNormalBounds) {
+        win.setBounds(win.lastNormalBounds);
+        win.webContents.setZoomFactor(win.lastNormalBounds.width / 800);
+      } else {
+        const bounds = centerTop(800, 600);
+        win.setBounds(bounds);
+        win.webContents.setZoomFactor(1.0);
+      }
+
       win.webContents.executeJavaScript(`document.body.classList.remove('mini');`);
       isMiniMode = false;
+
+      // Restore convo window if it was open
+      if (convoWin && convoWin.userVisibleBeforeMini) {
+        convoWin.show();
+        convoWin.userVisibleBeforeMini = false;
+      }
     }
   });
 
@@ -600,6 +656,56 @@ app.whenReady().then(() => {
     win.webContents.setZoomFactor(1.0);
     win.webContents.executeJavaScript(`document.body.classList.remove('mini');`);
     isMiniMode = false;
+  });
+
+  /* ---- IPC: Convo Window Control ---- */
+  ipcMain.on('toggle-convo-window', () => {
+    if (!convoWin) return;
+    if (convoWin.isVisible()) {
+      convoWin.hide();
+    } else {
+      // Position it generally near the main window, but on the side
+      if (win) {
+        const [mwX, mwY] = win.getPosition();
+        const [mwW, mwH] = win.getSize();
+        // Attempt to put it to the right of the main window
+        convoWin.setPosition(mwX + mwW + 20, mwY);
+        clampWindowToScreen(convoWin);
+      }
+      convoWin.show();
+    }
+  });
+
+  ipcMain.on('hide-convo-window', () => {
+    if (convoWin) convoWin.hide();
+  });
+
+  // Relay historical dump to floating window
+  ipcMain.on('load-convo-history', (event, payload) => {
+    if (convoWin) {
+      convoWin.webContents.send('load-convo-history', payload);
+    }
+  });
+
+  // Relay live response update to floating window
+  ipcMain.on('convo-update', (event, payload) => {
+    if (convoWin) {
+      convoWin.webContents.send('render-convo-update', payload);
+    }
+  });
+
+  // Relay title sets
+  ipcMain.on('set-convo-title', (event, payload) => {
+    if (convoWin) {
+      convoWin.webContents.send('set-convo-title', payload);
+    }
+  });
+
+  // Relay clear commands
+  ipcMain.on('clear-convo-history', () => {
+    if (convoWin) {
+      convoWin.webContents.send('clear-convo-history');
+    }
   });
 
   /* ---- IPC: Close App ---- */

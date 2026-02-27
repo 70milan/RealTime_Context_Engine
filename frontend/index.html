@@ -48,6 +48,34 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      /* Make the whole window draggable */
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    /* All interactive elements must remain clickable */
+    button,
+    input,
+    textarea,
+    [contenteditable],
+    select,
+    .btn,
+    .session-btn,
+    .vol-slider-wrapper,
+    #response-area,
+    #transcript-area,
+    #conversation-area,
+    pre,
+    code,
+    pre code,
+    .model-selector,
+    #model-dropdown,
+    [role="button"],
+    a,
+    .modal,
+    .modal * {
+      -webkit-app-region: no-drag;
+      user-select: text;
     }
 
     body.mini {
@@ -636,7 +664,7 @@
   <div id="session-history-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10002; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 800px; width: 95%; max-height: 85vh; display: flex; flex-direction: column;">
+      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 16px; max-width: 580px; width: 72%; max-height: 64vh; display: flex; flex-direction: column;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <span id="session-history-title"
           style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Session
@@ -699,50 +727,7 @@
     </div>
   </div>
 
-  <!-- Conversation So Far Modal -->
-  <div id="conversation-modal"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10002; align-items: center; justify-content: center;">
-    <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 800px; width: 95%; max-height: 85vh; display: flex; flex-direction: column;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <span id="conversation-modal-title"
-          style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Conversation
-          So Far</span>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <button id="export-conversation-btn" type="button" title="Export Conversation"
-            style="background: none; border: none; color: rgba(255,255,255,0.4); font-size: 14px; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s ease;"
-            onmouseover="this.style.color='#fff'; this.style.background='rgba(255,255,255,0.1)';"
-            onmouseout="this.style.color='rgba(255,255,255,0.4)'; this.style.background='none';">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-          </button>
-          <button id="close-conversation-modal" type="button"
-            style="background: none; border: none; color: rgba(255,255,255,0.5); font-size: 18px; cursor: pointer; padding: 4px 6px; line-height: 1; border-radius: 50%; transition: all 0.2s ease;"
-            onmouseover="this.style.color='rgba(255, 107, 107, 0.8)'; this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1.1)';"
-            onmouseout="this.style.color='rgba(255,255,255,0.5)'; this.style.background='none'; this.style.transform='scale(1)';">&times;</button>
-        </div>
-      </div>
-      <div id="conversation-modal-list"
-        style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
-        <div style="color: rgba(255,255,255,0.3); font-size: 12px; text-align: center; padding: 30px;">No conversation
-          yet.</div>
-      </div>
-      <div id="conversation-modal-cost"
-        style="padding: 8px 10px; border-top: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.3); font-size: 10px; text-align: right; letter-spacing: 0.5px; display: none;">
-      </div>
-      <div
-        style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 15px; display: flex; justify-content: flex-end;">
-        <button id="btn-close-convo-modal" type="button"
-          style="padding: 8px 20px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;"
-          onmouseover="this.style.color='rgba(255,255,255,0.7)'; this.style.borderColor='rgba(255,255,255,0.2)';"
-          onmouseout="this.style.color='rgba(255,255,255,0.5)'; this.style.borderColor='rgba(255,255,255,0.1)';">Close</button>
-      </div>
-    </div>
-  </div>
+
   <!-- Guide Modal -->
   <div id="guide-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10001; align-items: center; justify-content: center;">
@@ -985,8 +970,8 @@
       </div>
       <div id="response-area"></div>
     </div>
-    <div id="status-bar">
-      <div class="status-indicator">
+    <div id="status-bar" style="justify-content: space-between; gap: 10px; padding-right: 8px;">
+      <div class="status-indicator" style="flex-shrink: 0;">
         <div id="status-dot" class="dot"></div><span id="status-text">Ready</span>
         <span id="status-bar-hotkeys"
           style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
@@ -994,9 +979,14 @@
           onmouseout="this.style.color='rgba(255,255,255,0.25)'; this.style.borderColor='rgba(255,255,255,0.1)';"
           onclick="document.getElementById('btn-hotkeys-setup') ? document.getElementById('btn-hotkeys-setup').click() : null">Hotkeys</span>
       </div>
-      <div style="display: flex; gap: 20px; align-items: center; font-size: 11px;">
-        <div style="display: flex; align-items: center; gap: 6px;"><span
-            style="color: rgba(255, 255, 255, 0.4);">VOL:</span>
+      <!-- Middle container injected by setup.js will go here -->
+      <div style="display: flex; gap: 10px; align-items: center; font-size: 11px; flex-shrink: 0; white-space: nowrap;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255, 255, 255, 0.4)" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
           <div
             style="width: 40px; height: 4px; background: rgba(255, 255, 255, 0.05); border-radius: 2px; position: relative; border: 1px solid rgba(255, 255, 255, 0.1);">
             <div id="volume-bar"
@@ -1432,28 +1422,83 @@
             }
           }
 
-          // Capture to Conversation Area
+          // Capture to Conversation Area (WhatsApp-style)
           const convoArea = document.getElementById('conversation-area');
           if (convoArea) {
+            const entryTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
             const pairDiv = document.createElement('div');
-            pairDiv.style.cssText = 'border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; padding: 8px; background: rgba(255,255,255,0.02);';
+            pairDiv.style.cssText = 'margin-bottom: 14px;';
             pairDiv.dataset.cost = data.response_cost || 0;
             pairDiv.dataset.inTokens = data.response_in_tokens || 0;
             pairDiv.dataset.outTokens = data.response_out_tokens || 0;
+            pairDiv.dataset.responseTime = data.ttft || 0;
+            pairDiv.dataset.totalTime = data.total_time || 0;
             pairDiv.dataset.timestamp = new Date().toISOString();
 
-            const qDiv = document.createElement('div');
-            qDiv.style.cssText = 'color: #bbb; font-size: 11px; line-height: 1.4; margin-bottom: 6px; padding: 4px 8px; border-left: 2px solid #666; border-radius: 2px;';
-            qDiv.innerHTML = '<strong style="color: rgba(255,255,255,0.4); font-size: 9px; text-transform: uppercase;">Input</strong><br>(screenshot analysis)';
-            pairDiv.appendChild(qDiv);
+            // USER BUBBLE (right-aligned) — screenshot only path
+            const userRow = document.createElement('div');
+            userRow.style.cssText = 'display: flex; justify-content: flex-end; margin-bottom: 6px;';
+            const userBubble = document.createElement('div');
+            userBubble.style.cssText = 'max-width: 75%; background: rgba(60,60,70,0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px 14px 3px 14px; padding: 8px 12px; font-size: 11px; color: rgba(255,255,255,0.75); line-height: 1.5; word-break: break-word;';
+            userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:4px;letter-spacing:0.5px;">📷 SCREEN CAPTURE · ${entryTime}</div>(screenshot analysis)`;
+            userRow.appendChild(userBubble);
+            pairDiv.appendChild(userRow);
 
-            const rDiv = document.createElement('div');
-            rDiv.style.cssText = 'color: #ddd; font-size: 11px; line-height: 1.4; padding: 4px 8px; border-left: 2px solid rgba(100,255,150,0.4); border-radius: 2px;';
+            // AI BUBBLE (left-aligned) with [copy] header + stats footer
+            const aiRow = document.createElement('div');
+            aiRow.style.cssText = 'display: flex; justify-content: flex-start; margin-bottom: 5px;';
+            const aiBubble = document.createElement('div');
+            aiBubble.style.cssText = 'max-width: 80%; background: rgba(30,40,35,0.7); border: 1px solid rgba(100,255,150,0.12); border-radius: 14px 14px 14px 3px; padding: 8px 12px; font-size: 11px; color: rgba(220,240,225,0.85); line-height: 1.5; word-break: break-word; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;';
+            const usedModelLabel = (data.model || window.selectedModel || 'AI').toUpperCase();
             const cleanResponse = formattedResponse.replace(/<br>/g, '\n').replace(/<[^>]*>/g, '').trim();
-            const formattedConvo = window.formatConvoText ? window.formatConvoText(cleanResponse) : cleanResponse.substring(0, 300);
-            rDiv.innerHTML = '<strong style="color: rgba(100,255,150,0.4); font-size: 9px; text-transform: uppercase;">AI</strong><br>' + formattedConvo;
-            pairDiv.appendChild(rDiv);
+            const formattedConvo = window.formatConvoText ? window.formatConvoText(cleanResponse) : cleanResponse;
+
+            const aiHeader = document.createElement('div');
+            aiHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
+            aiHeader.innerHTML = `
+              <span style="font-size:9px;color:rgba(100,255,150,0.4);letter-spacing:0.5px;">${usedModelLabel} · ${entryTime}</span>
+              <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
+                    onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.25)';"
+                    onmouseout="this.style.color='rgba(255,255,255,0.25)';this.style.borderColor='rgba(255,255,255,0.08)';"
+                    onclick="navigator.clipboard.writeText(this.closest('div').nextSibling.innerText);this.textContent='copied!';setTimeout(()=>this.textContent='[copy]',2000);">[copy]</span>`;
+
+            const aiBody = document.createElement('div');
+            aiBody.className = 'ai-body';
+            aiBody.style.cssText = 'flex: 1; min-height: 0;';
+            aiBody.innerHTML = formattedConvo;
+            aiBody.querySelectorAll('pre code').forEach(b => { if (typeof hljs !== 'undefined') hljs.highlightElement(b); });
+
+            const aiFooter = document.createElement('div');
+            aiFooter.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; font-size: 9px; font-family: monospace; color: rgba(255,255,255,0.2); letter-spacing: 0.3px; padding-top: 5px; border-top: 1px solid rgba(100,255,150,0.07); flex-shrink: 0;';
+            const rCost = data.response_cost || 0;
+            aiFooter.innerHTML = [
+              data.ttft > 0 ? `TTFT <span style="color:rgba(180,220,200,0.6)">${parseFloat(data.ttft).toFixed(1)}s</span>` : null,
+              data.total_time > 0 ? `TT <span style="color:rgba(180,220,200,0.6)">${parseFloat(data.total_time).toFixed(1)}s</span>` : null,
+              data.response_in_tokens ? `IN <span style="color:rgba(180,180,180,0.4)">${Number(data.response_in_tokens).toLocaleString()}</span>` : null,
+              data.response_out_tokens ? `OUT <span style="color:rgba(180,180,180,0.4)">${Number(data.response_out_tokens).toLocaleString()}</span>` : null,
+              rCost > 0 ? `<span style="color:rgba(180,180,180,0.35)">${rCost < 1 ? (rCost * 100).toFixed(3) + '¢' : '$' + rCost.toFixed(3)}</span>` : null
+            ].filter(Boolean).join('<span style="opacity:0.25"> · </span>');
+
+            aiBubble.appendChild(aiHeader);
+            aiBubble.appendChild(aiBody);
+            aiBubble.appendChild(aiFooter);
+            aiRow.appendChild(aiBubble);
+            pairDiv.appendChild(aiRow);
             convoArea.appendChild(pairDiv);
+            convoArea.scrollTop = convoArea.scrollHeight;
+
+            // Send live update to the floating conversation window
+            ipcRenderer.send('convo-update', {
+              question: '\ud83d\udcf7 SCREEN CAPTURE',
+              response: formattedConvo,
+              model: data.model || window.selectedModel || 'AI',
+              timestamp: new Date().toISOString(),
+              ttft: data.ttft || 0,
+              totalTime: data.total_time || 0,
+              responseInTokens: data.response_in_tokens || 0,
+              responseOutTokens: data.response_out_tokens || 0,
+              responseCost: data.response_cost || 0
+            });
           }
 
           if (capturedScreenshot) {
@@ -1507,6 +1552,10 @@
       if (!window.isSessionActive) { window.showSessionError(); return; }
       transcriptArea.innerText = '';
       responseArea.innerText = '';
+
+      // Note: Do NOT clear convo window here - conversation history persists across transcript clears
+      // The floating window only resets when a full session ends (resetSessionUI).
+
       transcriptSection.classList.remove('compact');
       responseSection.classList.remove('expanded');
       transcriptSection.classList.remove('minimized');
