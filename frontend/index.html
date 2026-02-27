@@ -471,6 +471,14 @@
       background: rgba(255, 255, 255, 0.05);
       transform: scale(1.1);
     }
+
+    #btn-start-session:focus,
+    #btn-start-session:active,
+    #btn-start-session:focus-visible {
+      outline: none !important;
+      box-shadow: none !important;
+      -webkit-tap-highlight-color: transparent;
+    }
   </style>
   <div id="setup-overlay"
     style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(30, 30, 30, 0.95); z-index: 9999; align-items: stretch; justify-content: stretch;">
@@ -485,108 +493,117 @@
       style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; z-index: 10001;"></span>
 
     <div
-      style="width: 100%; height: 100%; display: flex; flex-direction: column; padding: 12px 20px 12px 20px; box-sizing: border-box; overflow: hidden;">
+      style="width: 80%; max-width: 800px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; padding: 32px 20px 12px 20px; box-sizing: border-box; overflow: hidden;">
       <form autocomplete="off"
         style="display: flex; flex-direction: column; gap: 5px; flex: 1; align-items: stretch; max-width: 100%; overflow-y: auto; padding-right: 4px;">
-        <div style="width: 100%; display: flex; flex-direction: row; align-items: center; justify-content: flex-start;">
-          <div style="display: flex; gap: 10px;">
+        <div
+          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; justify-content: flex-start; margin-bottom: 2px; flex-shrink: 0;">
+          <div style="width: 100%; display: flex; gap: 8px;">
             <button id="btn-past-sessions" type="button"
-              style="padding: 10px 16px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 10px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">Past
+              style="flex: 1; padding: 6px 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; outline: none;">Past
               Sessions</button>
             <button id="btn-guide" type="button"
-              style="padding: 10px 16px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 10px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">Guide</button>
+              style="flex: 1; padding: 6px 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; outline: none;">Guide</button>
             <button id="btn-hotkeys-setup" type="button"
-              style="padding: 10px 16px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 10px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">Hotkeys</button>
+              style="flex: 1; padding: 6px 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; outline: none;">Hotkeys</button>
           </div>
-        </div>
-        <div style="width: 100%; display: flex; flex-direction: row; gap: 10px;">
-          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
-              style="color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Session
-              Name</label>
-            <input type="text" id="setup-session-name" placeholder="e.g., Google_Manager_Dec2025" autocomplete="off"
-              style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 13px; outline: none;" />
-          </div>
-          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
-              style="color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Resume</label>
-            <div style="display: flex; align-items: center; gap: 5px;">
-              <input type="file" id="setup-resume" accept=".docx" style="display: none;" />
-              <button type="button" id="resume-btn" onclick="document.getElementById('setup-resume').click()"
-                style="padding: 7px 12px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); font-size: 10px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;">Choose</button>
-              <span id="resume-filename"
-                style="color: rgba(255, 255, 255, 0.4); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;">Empty</span>
-              <button type="button" id="resume-detach-btn"
-                style="display: none; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 14px; cursor: pointer; padding: 2px 5px; line-height: 1; border-radius: 50%; transition: all 0.2s ease;"
-                title="Remove resume">&times;</button>
-            </div>
-          </div>
-        </div>
-        <div style="width: 100%; display: flex; flex-direction: row; gap: 10px;">
-          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
-              style="color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500; display: flex; align-items: center; gap: 6px;">OpenAI
-              API Key
-              <span id="apikey-info"
-                style="cursor: pointer; color: rgba(100, 255, 150, 0.6); font-size: 10px; font-weight: normal;"
-                title="API Key Info">(?)</span></label>
-            <input type="password" id="setup-apikey" placeholder="sk-..." autocomplete="new-password"
-              style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 13px; outline: none;" />
-          </div>
-          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
-              style="color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500; display: flex; align-items: center; gap: 6px;">License
-              Key
-              <span id="license-info"
-                style="cursor: pointer; color: rgba(100, 255, 150, 0.6); font-size: 10px; font-weight: normal;"
-                title="Get a license">(?)</span></label>
-            <input type="password" id="setup-license" placeholder="Demo (12m)" autocomplete="off"
-              style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 13px; outline: none;" />
-            <div id="hwid-setup-display"
-              style="color: rgba(255, 255, 255, 0.2); font-size: 8px; margin-top: 2px; text-align: left; font-family: monospace; display: none;">
-              HWID: <span style="color: rgba(100, 255, 150, 0.4);">Fetching...</span></div>
-          </div>
-        </div>
-        <div style="width: 100%; display: flex; flex-direction: row; gap: 10px;">
-          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
-              style="color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Target
-              Role <span style="color: #ff6b6b; font-size: 12px;">*</span></label>
-            <input type="text" id="setup-role" placeholder="e.g., Data Engineer" autocomplete="off"
-              style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 13px; outline: none;" />
-          </div>
-          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
-              style="color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Target
-              Language <span style="color: #ff6b6b; font-size: 12px;">*</span></label>
-            <input type="text" id="setup-language" placeholder="e.g., Python" autocomplete="off"
-              style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 13px; outline: none;" />
-          </div>
-        </div>
-        <div style="width: 100%; display: flex; flex-direction: column; align-items: stretch; flex: 1;"><label
-            style="color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Job
-            Description</label><textarea id="setup-jobdesc" autocomplete="off"
-            style="width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; resize: none; flex: 1; min-height: 40px; font-size: 13px; outline: none;"
-            placeholder="Paste job description..."></textarea></div>
-        <div id="setup-status"
-          style="color: rgba(255, 255, 255, 0.4); font-size: 11px; min-height: 20px; width: 100%; text-align: left;">
         </div>
         <div
-          style="width: 100%; display: flex; flex-direction: column; gap: 4px; margin-bottom: 5px; padding: 10px; background: rgba(255, 107, 107, 0.03); border: 1px solid rgba(255, 107, 107, 0.15); border-radius: 4px;">
-          <div style="color: rgba(255, 255, 255, 0.5); font-size: 10px; line-height: 1.3;">
-            By creating or loading a session, you agree to the
-            <span id="btn-ethical-open"
-              style="color: rgba(100, 255, 150, 0.8); cursor: pointer; text-decoration: underline;">Ethical Usage
-              Policy</span>.
+          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0;">
+          <label
+            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Session
+            Name</label>
+          <input type="text" id="setup-session-name" placeholder="e.g., Google_Manager_Dec2025" autocomplete="off"
+            style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
+        </div>
+        <div style="width: 100%; box-sizing: border-box; display: flex; flex-direction: row; gap: 8px; flex-shrink: 0;">
+          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
+              style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Target
+              Role <span style="color: #ff6b6b; font-size: 10px;">*</span></label>
+            <input type="text" id="setup-role" placeholder="e.g., Data Engineer" autocomplete="off"
+              style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
           </div>
+          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
+              style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Output
+              Language <span style="color: #ff6b6b; font-size: 10px;">*</span></label>
+            <input type="text" id="setup-language" placeholder="e.g., Python" autocomplete="off"
+              style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
+          </div>
+        </div>
+        <div
+          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0;">
+          <label
+            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Resume</label>
+          <div style="display: flex; align-items: center; gap: 5px; width: 100%; box-sizing: border-box;">
+            <input type="file" id="setup-resume" accept=".docx" style="display: none;" />
+            <button type="button" id="resume-btn" onclick="document.getElementById('setup-resume').click()"
+              style="padding: 5px 10px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; outline: none; flex-shrink: 0;">Choose</button>
+            <span id="resume-filename"
+              style="color: rgba(255, 255, 255, 0.4); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; flex: 1;">Empty</span>
+            <button type="button" id="resume-detach-btn"
+              style="display: none; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 12px; cursor: pointer; padding: 2px 5px; line-height: 1; border-radius: 50%; transition: all 0.2s ease; outline: none; flex-shrink: 0;"
+              title="Remove resume">&times;</button>
+          </div>
+        </div>
+        <div
+          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0;">
+          <label
+            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500; display: flex; align-items: center; gap: 6px;">OpenAI
+            API Key
+            <span id="apikey-info"
+              style="cursor: pointer; color: rgba(100, 255, 150, 0.6); font-size: 9px; font-weight: normal;"
+              title="API Key Info">(?)</span>
+          </label>
+          <input type="password" id="setup-apikey" placeholder="sk-..." autocomplete="new-password"
+            style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
+        </div>
+        <div
+          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0;">
+          <label
+            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500; display: flex; align-items: center; gap: 6px;">License
+            Key
+            <span id="license-info"
+              style="cursor: pointer; color: rgba(100, 255, 150, 0.6); font-size: 9px; font-weight: normal;"
+              title="Get a license">(?)</span>
+          </label>
+          <input type="password" id="setup-license" placeholder="Demo (12m)" autocomplete="off"
+            style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
+          <div id="hwid-setup-display"
+            style="color: rgba(255, 255, 255, 0.2); font-size: 8px; margin-top: 2px; text-align: left; font-family: monospace; display: none;">
+            HWID: <span style="color: rgba(100, 255, 150, 0.4);">Fetching...</span>
+          </div>
+        </div>
+        <div
+          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex: 1; min-height: 48px; flex-shrink: 0;">
+          <label
+            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Job
+            Description</label>
+          <textarea id="setup-jobdesc" autocomplete="off"
+            style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; resize: none; flex: 1; min-height: 25px; font-size: 11px; outline: none;"
+            placeholder="Paste job description..."></textarea>
+        </div>
+        <div id="setup-status"
+          style="color: rgba(255, 255, 255, 0.4); font-size: 9px; min-height: 14px; width: 100%; box-sizing: border-box; text-align: left; margin: 0; flex-shrink: 0;">
+        </div>
+        <div
+          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; margin-bottom: 2px; padding: 6px 10px; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px; flex-shrink: 0;">
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
             <input type="checkbox" id="setup-disclaimer-agree" disabled
               style="cursor: pointer; accent-color: rgba(100, 255, 150, 0.6);" />
-            <span style="color: rgba(255, 255, 255, 0.6); font-size: 10px; font-weight: 500;">I AGREE to the terms and
-              outcomes policy</span>
+            <span style="color: rgba(255, 255, 255, 0.5); font-size: 9px; line-height: 1.2;">
+              By creating or loading a session, you agree to the
+              <span id="btn-ethical-open"
+                style="color: rgba(100, 255, 150, 0.8); cursor: pointer; text-decoration: underline;">Ethical Usage
+                Policy</span>.
+            </span>
           </label>
         </div>
         <button id="btn-start-session" type="button"
-          style="width: 100%; box-sizing: border-box; padding: 10px 0; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; color: rgba(255, 255, 255, 0.5); font-weight: 500; cursor: pointer; font-size: 11px; transition: all 0.2s; letter-spacing: 1.5px; text-transform: uppercase;"
-          onmouseover="this.style.color='rgba(255, 255, 255, 0.85)'; this.style.background='rgba(255, 255, 255, 0.15)';"
-          onmouseout="this.style.color='rgba(255, 255, 255, 0.5)'; this.style.background='rgba(255, 255, 255, 0.1)';">Create
-          Session</button>
+          style="width: 100%; box-sizing: border-box; padding: 8px 0; background: rgba(100, 200, 150, 0.15); border: 1px solid rgba(100, 200, 150, 0.3); border-radius: 4px; color: rgba(255, 255, 255, 0.9); font-weight: 600; cursor: pointer; font-size: 11px; transition: all 0.2s; letter-spacing: 1.5px; text-transform: uppercase; outline: none; flex-shrink: 0;"
+          onmouseover="this.style.background='rgba(100, 200, 150, 0.25)';"
+          onmouseout="this.style.background='rgba(100, 200, 150, 0.15)';">Create Session</button>
         <div
-          style="text-align: center; color: rgba(255,255,255,0.25); font-size: 10px; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          style="text-align: center; color: rgba(255,255,255,0.25); font-size: 10px; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;">
           <span class="app-version">v2.0.0</span>
           <span style="color: rgba(255,255,255,0.15);">|</span>
           <span id="check-update-btn" style="cursor: pointer; transition: color 0.2s;"
@@ -929,11 +946,16 @@
   <div id="mini-icon">⌘</div>
   <div id="main-container">
     <div id="controls"><button id="btn-system" class="btn">System (Ctrl+R)</button><button id="btn-mic" class="btn">Mic
-        (Ctrl+M)</button><button id="btn-screen" class="btn"
-        style="flex-direction: column; line-height: 1.2; padding: 4px 10px; height: auto;">
-        <span>Screen (K)</span>
-        <span style="font-size: 9px; opacity: 0.7;">Save Screen (S)</span>
-      </button><button id="btn-generate" class="btn">Process (Ctrl+Enter)</button>
+        (Ctrl+M)</button>
+      <div
+        style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; gap: 0;">
+        <button id="btn-screen-k" class="btn"
+          style="flex: 1; border: none; border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 9px;"
+          title="Screenshot + AI Solution">Screen (K)</button>
+        <button id="btn-screen-s" class="btn"
+          style="flex: 1; border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 8px; opacity: 0.8;"
+          title="Screenshot + Save to AI Context">Save (S)</button>
+      </div><button id="btn-generate" class="btn">Process (Ctrl+Enter)</button>
       <button id="btn-conversation" class="btn" title="View conversation history">Convo</button>
       <div id="session-timer"
         style="padding: 4px 10px; background: rgba(255,255,255,0.03); border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); font-weight: 600; font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; gap: 6px; flex-shrink: 0; letter-spacing: 1.5px; transition: all 0.5s ease;">
@@ -1001,7 +1023,8 @@
     const statusDot = document.getElementById('status-dot');
     const btnSystem = document.getElementById('btn-system');
     const btnMic = document.getElementById('btn-mic');
-    const btnScreen = document.getElementById('btn-screen');
+    const btnScreenK = document.getElementById('btn-screen-k');
+    const btnScreenS = document.getElementById('btn-screen-s');
     const btnGenerate = document.getElementById('btn-generate');
 
     let socket = null;
@@ -1273,7 +1296,7 @@
       startCapture('mic');
     };
 
-    btnScreen.onclick = async (saveToContext = false) => {
+    const handleScreenCapture = async (saveToContext = false, activeBtn) => {
       if (!window.isSessionActive) {
         window.showSessionError();
         return;
@@ -1322,8 +1345,10 @@
 
         stream.getTracks().forEach(track => track.stop());
 
-        btnScreen.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-        btnScreen.style.color = 'rgba(255, 255, 255, 0.9)';
+        if (activeBtn) {
+          activeBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+          activeBtn.style.color = 'rgba(255, 255, 255, 0.9)';
+        }
         responseArea.innerText = 'Generating...';
 
         try {
@@ -1433,10 +1458,13 @@
 
           if (capturedScreenshot) {
             capturedScreenshot = null;
-            const btnScreenEl = document.getElementById('btn-screen');
-            if (btnScreenEl) {
-              btnScreenEl.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
-              btnScreenEl.style.color = 'rgba(255, 255, 255, 0.5)';
+            if (btnScreenK) {
+              btnScreenK.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+              btnScreenK.style.color = 'rgba(255, 255, 255, 0.5)';
+            }
+            if (btnScreenS) {
+              btnScreenS.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+              btnScreenS.style.color = 'rgba(255, 255, 255, 0.5)';
             }
           }
 
@@ -1454,6 +1482,9 @@
       }
     };
 
+    if (btnScreenK) btnScreenK.onclick = () => handleScreenCapture(false, btnScreenK);
+    if (btnScreenS) btnScreenS.onclick = () => handleScreenCapture(true, btnScreenS);
+
     window.toggleSystemCapture = () => {
       if (!window.isSessionActive) { window.showSessionError(); return; }
       startCapture('system');
@@ -1464,7 +1495,8 @@
     };
     window.captureScreen = (saveToContext = false) => {
       if (!window.isSessionActive) { window.showSessionError(); return; }
-      btnScreen.onclick(saveToContext);
+      const activeBtn = saveToContext ? btnScreenS : btnScreenK;
+      handleScreenCapture(saveToContext, activeBtn);
     };
     window.generateAIOnly = () => {
       if (!window.isSessionActive) { window.showSessionError(); return; }

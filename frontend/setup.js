@@ -1220,10 +1220,18 @@ async function handleCreateSession() {
     }
 
     const langInput = document.getElementById('setup-language');
-    const targetLang = langInput ? langInput.value.trim() : '';
+    let targetLang = langInput ? langInput.value.trim() : '';
     if (!targetLang) {
-        showStatus('Target Language is required');
+        showStatus('Output Language is required');
         return;
+    }
+
+    // Default invalid output languages to Python
+    const validLangs = ['python', 'java', 'c++', 'cpp', 'c#', 'csharp', 'javascript', 'js', 'typescript', 'ts', 'go', 'golang', 'ruby', 'php', 'swift', 'kotlin', 'rust', 'sql', 'bash', 'shell'];
+    if (!validLangs.includes(targetLang.toLowerCase())) {
+        console.log(`[DEBUG] Unknown target language "${targetLang}". Defaulting to Python.`);
+        targetLang = 'Python';
+        if (langInput) langInput.value = 'Python';
     }
 
     // Save globals for this session
