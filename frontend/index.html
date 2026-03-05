@@ -634,7 +634,7 @@
           style="text-align: center; color: rgba(255,255,255,0.25); font-size: 10px; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;">
           <span class="app-version">v2.0.0</span>
           <span style="color: rgba(255,255,255,0.15);">|</span>
-          <span id="check-update-btn" style="cursor: pointer; transition: color 0.2s;"
+          <span id="check-update-btn" style="cursor: pointer; transition: color 0.2s; -webkit-app-region: no-drag;"
             onmouseover="this.style.color='rgba(255,255,255,0.5)'"
             onmouseout="this.style.color='rgba(255,255,255,0.25)'">Check for updates</span>
         </div>
@@ -999,11 +999,25 @@
     </div>
   </div>
   <script>
-    const { ipcRenderer } = require('electron');
+    // Robust global IPC access
+    if (typeof window.ipcRenderer === 'undefined') {
+      try {
+        window.ipcRenderer = require('electron').ipcRenderer;
+      } catch (e) {
+        console.error('Failed to load ipcRenderer:', e);
+      }
+    }
+    const ipcRenderer = window.ipcRenderer;
 
-    // Set version from package.json automatically
-    const appVersion = require('./package.json').version;
-    document.querySelectorAll('.app-version').forEach(el => el.textContent = 'v' + appVersion);
+    // Set version from package.json automatically via IPC
+    (async function () {
+      try {
+        const appVersion = await ipcRenderer.invoke('get-app-version');
+        document.querySelectorAll('.app-version').forEach(el => el.textContent = 'v' + appVersion);
+      } catch (e) {
+        console.error('Failed to get app version:', e);
+      }
+    })();
 
     const transcriptArea = document.getElementById('transcript-area');
     const responseArea = document.getElementById('response-area');
@@ -1581,23 +1595,46 @@
     /* ---- Close Button Logic ---- */
     const closeBtn = document.getElementById('close-btn');
     if (closeBtn) {
-      console.log('Close button found');
-      closeBtn.onclick = () => {
-        console.log('Close button clicked');
+      console.log('Close button found, attaching listener...');
+      closeBtn.addEventListener('click', () => {
+        console.log('Close button clicked - sending close-app');
         try {
-          if (typeof ipcRenderer !== 'undefined') {
-            ipcRenderer.send('close-app');
+          if (window.ipcRenderer) {
+            window.ipcRenderer.send('close-app');
           } else {
-            console.warn('ipcRenderer not found, trying window.close()');
             window.close();
           }
         } catch (err) {
-          console.error('Error closing app:', err);
+          console.error('Error in close handler:', err);
           window.close();
         }
-      };
-    } else {
-      console.error('Close button not found');
+      });
+    }
+
+    if (window.ipcRenderer) {
+      window.ipcRenderer.on('update-check-result', (event, status, msg) => {
+        const updateBtn = document.getElementById('check-update-btn');
+        if (!updateBtn) return;
+        if (status === 'latest') {
+          updateBtn.textContent = 'You are on the latest version';
+          updateBtn.style.color = 'rgba(100, 255, 150, 0.4)';
+        } else if (status === 'error') {
+          updateBtn.textContent = 'Update Error';
+          updateBtn.style.color = 'rgba(255, 107, 107, 0.5)';
+        } else if (status === 'available') {
+          updateBtn.textContent = 'Update Available';
+          updateBtn.style.color = 'rgba(100, 200, 255, 0.8)';
+        }
+        setTimeout(() => {
+          updateBtn.textContent = 'Check for updates';
+          updateBtn.style.color = '';
+          updateBtn.style.pointerEvents = 'auto';
+        }, 3000);
+      });
+
+      window.ipcRenderer.on('update-log', (event, msg) => {
+        console.log('[AUTO-UPDATER] ' + msg);
+      });
     }
 
     window.onload = () => {

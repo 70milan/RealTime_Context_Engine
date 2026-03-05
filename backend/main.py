@@ -1297,7 +1297,8 @@ async def stream_ai_response(req: AIRequest):
                     messages.append({"role": "user", "content": "Candidate profile:\n" + json.dumps(profile_metadata, indent=2)})
                 if job_description:
                     messages.append({"role": "user", "content": f"Job description:\n{job_description}"})
-                messages.extend(conversation_history)
+                # Only send last 3 turns (6 messages) to OpenAI — enough for multi-step follow-ups without compounding tokens
+                messages.extend(conversation_history[-6:])
                 messages.append({"role": "user", "content": req.transcript})
                 model = req.text_model if req.text_model and req.text_model in AVAILABLE_TEXT_MODELS else DEFAULT_TEXT_MODEL
                 print(f"[STREAM] Using model: {model} (text-only, user selected: {req.text_model})")
@@ -1388,9 +1389,9 @@ async def stream_ai_response(req: AIRequest):
                     except Exception as save_err:
                         print(f"[SESSION SAVE ERROR] {save_err}")
                 
-                # Limit history to last 10 exchanges (20 messages) to control costs
-                if len(conversation_history) > 20:
-                    conversation_history = conversation_history[-20:]
+                # Keep only last 3 Q&A pairs (6 msgs) in memory — enough for multi-step follow-ups, cost stays flat
+                if len(conversation_history) > 6:
+                    conversation_history = conversation_history[-6:]
                 
                 print(f"[STREAM] Conversation history now has {len(conversation_history)} messages")
             else:
@@ -1537,9 +1538,9 @@ async def generate_ai_response(req: AIRequest):
                 except Exception as save_err:
                     print(f"[SESSION SAVE ERROR] {save_err}")
             
-            # Limit history to last 10 exchanges (20 messages) to control costs
-            if len(conversation_history) > 20:
-                conversation_history = conversation_history[-20:]
+            # Keep only last 3 Q&A pairs (6 msgs) in memory — enough for multi-step follow-ups, cost stays flat
+            if len(conversation_history) > 6:
+                conversation_history = conversation_history[-6:]
             
             print(f"[AI] Conversation history now has {len(conversation_history)} messages")
         else:

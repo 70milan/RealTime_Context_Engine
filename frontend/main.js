@@ -1,7 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, screen, ipcMain, desktopCapturer, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
-const { autoUpdater } = require('electron-updater');
+const { spawn, execSync, exec } = require('child_process');
+let autoUpdater = null;
 
 let tray = null;
 let win = null;
@@ -10,6 +10,7 @@ let isRecording = false;
 let isMiniMode = false;
 let backendProcess = null;
 let lastMiniPosition = null; // Remember where the mini icon was dragged to
+let isQuitting = false; // Track explicit quit to prevent close aborting
 
 // ============ SINGLE INSTANCE LOCK ============
 const gotTheLock = app.requestSingleInstanceLock();
@@ -33,30 +34,46 @@ if (!gotTheLock) {
   });
 }
 
-// ============ AUTO-UPDATER SETUP ============
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = false;
+// This will be initialized in app.whenReady
+let updateLogger = null;
 
-// Custom logger to send all update logs to the renderer
-const updateLogger = {
-  info: (msg) => {
-    console.log('[UPDATE] ' + msg);
-    if (win) win.webContents.send('update-log', 'INFO: ' + msg);
-  },
-  warn: (msg) => {
-    console.warn('[UPDATE] ' + msg);
-    if (win) win.webContents.send('update-log', 'WARN: ' + msg);
-  },
-  error: (msg) => {
-    console.error('[UPDATE] ' + msg);
-    if (win) win.webContents.send('update-log', 'ERROR: ' + msg);
+function initAutoUpdater() {
+  try {
+    autoUpdater = require('electron-updater').autoUpdater;
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.allowPrerelease = true;
+
+    // Custom logger to send all update logs to the renderer
+    updateLogger = {
+      info: (msg) => {
+        console.log('[UPDATE] ' + msg);
+        if (win) win.webContents.send('update-log', 'INFO: ' + msg);
+      },
+      warn: (msg) => {
+        console.warn('[UPDATE] ' + msg);
+        if (win) win.webContents.send('update-log', 'WARN: ' + msg);
+      },
+      error: (msg) => {
+        console.error('[UPDATE] ' + msg);
+        if (win) win.webContents.send('update-log', 'ERROR: ' + msg);
+      }
+    };
+    autoUpdater.logger = updateLogger;
+
+    // Re-wire events here...
+    setupAutoUpdaterEvents();
+  } catch (err) {
+    console.error('Failed to initialize auto-updater:', err);
   }
-};
-autoUpdater.logger = updateLogger;
+}
 
-function showUpdateOverlay(content) {
-  if (!win) return;
-  win.webContents.executeJavaScript(`
+function setupAutoUpdaterEvents() {
+  if (!autoUpdater) return;
+
+  function showUpdateOverlay(content) {
+    if (!win) return;
+    win.webContents.executeJavaScript(`
     (function() {
       let el = document.getElementById('update-overlay');
       if (!el) {
@@ -68,38 +85,39 @@ function showUpdateOverlay(content) {
       el.innerHTML = ${content};
     })()
   `);
-}
+  }
 
-function updateProgressUI(percent) {
-  if (!win) return;
-  win.webContents.executeJavaScript(`{
+  function updateProgressUI(percent) {
+    if (!win) return;
+    win.webContents.executeJavaScript(`{
     const bar = document.getElementById('update-progress-bar');
     const text = document.getElementById('update-progress-text');
     if (bar) bar.style.width = '${percent}%';
     if (text) text.textContent = '${percent}%';
   }`);
-}
+  }
 
-function hideUpdateUI() {
-  if (!win) return;
-  win.webContents.executeJavaScript(`
+  function hideUpdateUI() {
+    if (!win) return;
+    win.webContents.executeJavaScript(`
     const el = document.getElementById('update-overlay');
     if (el) el.remove();
   `);
-}
+  }
 
-let updateVersion = '';
+  let updateVersion = '';
 
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for updates...');
-});
+  autoUpdater.on('checking-for-update', () => {
+    console.log('Checking for updates...');
+  });
 
-autoUpdater.on('update-available', (info) => {
-  console.log('Update available:', info.version);
-  updateVersion = info.version;
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info.version);
+    updateVersion = info.version;
+    if (win) win.webContents.send('update-check-result', 'available');
 
-  // Custom in-app prompt matching app design
-  const content = `\`
+    // Custom in-app prompt matching app design
+    const content = `\`
     <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:30px 36px;text-align:center;max-width:340px;width:90%;">
       <div style="color:rgba(255,255,255,0.5);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Update Available</div>
       <div style="color:rgba(255,255,255,0.8);font-size:16px;font-weight:500;margin-bottom:6px;">Version ${info.version}</div>
@@ -115,10 +133,10 @@ autoUpdater.on('update-available', (info) => {
     </div>
   \``;
 
-  showUpdateOverlay(content);
+    showUpdateOverlay(content);
 
-  // Wire up buttons via IPC
-  win.webContents.executeJavaScript(`{
+    // Wire up buttons via IPC
+    win.webContents.executeJavaScript(`{
     const yesBtn = document.getElementById('update-yes-btn');
     const noBtn = document.getElementById('update-no-btn');
     if (yesBtn) yesBtn.addEventListener('click', () => {
@@ -128,11 +146,11 @@ autoUpdater.on('update-available', (info) => {
       require('electron').ipcRenderer.send('update-decline');
     });
   }`);
-});
+  });
 
-ipcMain.on('update-accept', async () => {
-  // Show downloading UI
-  const content = `\`
+  ipcMain.on('update-accept', async () => {
+    // Show downloading UI
+    const content = `\`
     <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:30px 36px;text-align:center;max-width:340px;width:90%;">
       <div style="color:rgba(255,255,255,0.5);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Downloading Update</div>
       <div style="color:rgba(255,255,255,0.4);font-size:13px;margin-bottom:18px;">v${updateVersion}</div>
@@ -142,41 +160,41 @@ ipcMain.on('update-accept', async () => {
       <div id="update-progress-text" style="color:rgba(255,255,255,0.5);font-size:13px;margin-top:12px;letter-spacing:0.5px;">0%</div>
     </div>
   \``;
-  showUpdateOverlay(content);
+    showUpdateOverlay(content);
 
-  try {
-    updateLogger.info('Manual download initiated...');
-    await autoUpdater.downloadUpdate();
-  } catch (err) {
-    updateLogger.error('Critical failure in downloadUpdate(): ' + err.message);
-    if (win) win.webContents.send('update-check-result', 'error', 'Download Failed: ' + err.message);
+    try {
+      updateLogger.info('Manual download initiated...');
+      await autoUpdater.downloadUpdate();
+    } catch (err) {
+      updateLogger.error('Critical failure in downloadUpdate(): ' + err.message);
+      if (win) win.webContents.send('update-check-result', 'error', 'Download Failed: ' + err.message);
+      hideUpdateUI();
+    }
+  });
+
+  ipcMain.on('update-decline', () => {
+    console.log('User declined update');
     hideUpdateUI();
-  }
-});
+  });
 
-ipcMain.on('update-decline', () => {
-  console.log('User declined update');
-  hideUpdateUI();
-});
+  autoUpdater.on('update-not-available', () => {
+    console.log('No updates available');
+    if (win) {
+      win.webContents.send('update-check-result', 'latest');
+    }
+  });
 
-autoUpdater.on('update-not-available', () => {
-  console.log('No updates available');
-  if (win) {
-    win.webContents.send('update-check-result', 'latest');
-  }
-});
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Math.round(progress.percent);
+    console.log(`Download progress: ${percent}%`);
+    updateProgressUI(percent);
+  });
 
-autoUpdater.on('download-progress', (progress) => {
-  const percent = Math.round(progress.percent);
-  console.log(`Download progress: ${percent}%`);
-  updateProgressUI(percent);
-});
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info.version);
 
-autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded:', info.version);
-
-  // Show restart prompt in-app
-  const content = `\`
+    // Show restart prompt in-app
+    const content = `\`
     <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:30px 36px;text-align:center;max-width:340px;width:90%;">
       <div style="color:rgba(255,255,255,0.5);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Update Ready</div>
       <div style="color:rgba(255,255,255,0.8);font-size:16px;font-weight:500;margin-bottom:6px;">Version ${info.version}</div>
@@ -192,10 +210,10 @@ autoUpdater.on('update-downloaded', (info) => {
     </div>
   \``;
 
-  showUpdateOverlay(content);
+    showUpdateOverlay(content);
 
-  // Wire up buttons via IPC
-  win.webContents.executeJavaScript(`{
+    // Wire up buttons via IPC
+    win.webContents.executeJavaScript(`{
     const restartBtn = document.getElementById('update-restart-btn');
     const laterBtn = document.getElementById('update-later-btn');
     if (restartBtn) restartBtn.addEventListener('click', () => {
@@ -205,24 +223,26 @@ autoUpdater.on('update-downloaded', (info) => {
       require('electron').ipcRenderer.send('update-later');
     });
   }`);
-});
+  });
 
-ipcMain.on('update-restart', () => {
-  autoUpdater.quitAndInstall(true, true);
-});
+  ipcMain.on('update-restart', () => {
+    autoUpdater.quitAndInstall(true, true);
+  });
 
-ipcMain.on('update-later', () => {
-  console.log('User chose to install later');
-  hideUpdateUI();
-});
+  ipcMain.on('update-later', () => {
+    console.log('User chose to install later');
+    hideUpdateUI();
+  });
 
-autoUpdater.on('error', (err) => {
-  console.error('Auto-updater error:', err);
-  if (win) {
-    win.webContents.send('update-check-result', 'error', err.message);
-  }
-  hideUpdateUI();
-});
+  autoUpdater.on('error', (err) => {
+    console.error('Auto-updater error:', err);
+    if (win) {
+      win.webContents.send('update-check-result', 'error', err.message);
+    }
+    hideUpdateUI();
+  });
+}
+
 // ============ END AUTO-UPDATER ============
 
 function startBackend() {
@@ -347,6 +367,11 @@ function createWindow() {
   win.on('moved', () => {
     clampWindowToScreen(win);
   });
+
+  win.on('closed', () => {
+    win = null;
+    app.quit();
+  });
 }
 
 function createConvoWindow() {
@@ -367,9 +392,15 @@ function createConvoWindow() {
   convoWin.loadFile(path.join(__dirname, 'convo.html'));
 
   convoWin.on('close', (e) => {
-    // Prevent actual closing, just hide it so state remains
-    e.preventDefault();
-    convoWin.hide();
+    if (!isQuitting) {
+      // Prevent actual closing, just hide it so state remains
+      e.preventDefault();
+      convoWin.hide();
+    }
+  });
+
+  convoWin.on('closed', () => {
+    convoWin = null;
   });
 }
 
@@ -385,7 +416,10 @@ app.whenReady().then(() => {
     // Check for updates after window is created (only in production)
     if (app.isPackaged) {
       setTimeout(() => {
-        autoUpdater.checkForUpdates();
+        if (!autoUpdater) initAutoUpdater();
+        if (autoUpdater) {
+          autoUpdater.checkForUpdates().catch(e => console.error('Update check failed:', e));
+        }
       }, 3000);
     }
   }, 2000);
@@ -402,7 +436,7 @@ app.whenReady().then(() => {
 
   /* ---- Ctrl+F: Maximize AI Response Window ---- */
   globalShortcut.register('CommandOrControl+F', () => {
-    if (!win) return;
+    if (!win || win.isDestroyed()) return;
     console.log('🔍 Maximize Response Triggered');
     win.webContents.executeJavaScript(`
       if (window.maximizeResponse) { window.maximizeResponse(); }
@@ -411,14 +445,14 @@ app.whenReady().then(() => {
 
   /* ---- move left / right ---- */
   globalShortcut.register('CommandOrControl+Alt+Left', () => {
-    if (!win) return;
+    if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
     win.setPosition(x - 50, y);
     clampWindowToScreen(win);
   });
 
   globalShortcut.register('CommandOrControl+Alt+Right', () => {
-    if (!win) return;
+    if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
     win.setPosition(x + 50, y);
     clampWindowToScreen(win);
@@ -426,21 +460,21 @@ app.whenReady().then(() => {
 
   /* ---- move up / down ---- */
   globalShortcut.register('CommandOrControl+Alt+Up', () => {
-    if (!win) return;
+    if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
     win.setPosition(x, y - 50);
     clampWindowToScreen(win);
   });
 
   globalShortcut.register('CommandOrControl+Alt+Down', () => {
-    if (!win) return;
+    if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
     win.setPosition(x, y + 50);
     clampWindowToScreen(win);
   });
 
   globalShortcut.register('CommandOrControl+R', () => {
-    if (!win) return;
+    if (!win || win.isDestroyed()) return;
     console.log('System Audio Capture Triggered');
     win.webContents.executeJavaScript(`
       if (window.toggleSystemCapture) { window.toggleSystemCapture(); }
@@ -715,8 +749,30 @@ app.whenReady().then(() => {
 
   /* ---- IPC: Manual Update Check ---- */
   ipcMain.on('manual-update-check', () => {
-    console.log('[UPDATE] Manual check requested');
-    autoUpdater.checkForUpdates();
+    console.log('[UPDATE] Manual check requested from UI');
+    try {
+      if (!app.isPackaged) {
+        console.log('[UPDATE] Skipping real update check in development mode');
+        if (win) {
+          setTimeout(() => {
+            win.webContents.send('update-check-result', 'latest');
+          }, 1500);
+        }
+        return;
+      }
+
+      if (!autoUpdater) initAutoUpdater();
+      if (autoUpdater) {
+        autoUpdater.checkForUpdates().catch(err => {
+          console.error('[UPDATE ERROR] Manual check failed:', err);
+          if (win) win.webContents.send('update-check-result', 'error', err.message);
+        });
+      } else {
+        console.error('[UPDATE ERROR] autoUpdater not available after init');
+      }
+    } catch (err) {
+      console.error('[UPDATE ERROR] Crash in manual-update-check handler:', err);
+    }
   });
 
   /* ---- IPC: Get App Version ---- */
@@ -727,33 +783,57 @@ app.whenReady().then(() => {
   if (app.dock) app.dock.hide();
 });
 
-// Configure logger for autoUpdater
-autoUpdater.logger = console;
 
 // Robust backend cleanup function
 function cleanupBackend() {
+  console.log('[EXIT] Starting synchronous cleanup...');
+  const { execSync } = require('child_process');
+
+  // 1. Kill the tracked backend process if still alive
   if (backendProcess && !backendProcess.killed) {
     try {
-      console.log('Stopping backend process...');
+      console.log(`[EXIT] Killing tracked PID: ${backendProcess.pid}`);
       if (process.platform === 'win32') {
-        // Kill by PID using taskkill
-        try {
-          require('child_process').execSync(`taskkill /pid ${backendProcess.pid} /T /F`, { stdio: 'ignore' });
-        } catch (e) { }
+        execSync(`taskkill /pid ${backendProcess.pid} /T /F`, { stdio: 'ignore' });
       } else {
         backendProcess.kill('SIGKILL');
       }
     } catch (e) {
-      console.log('Backend cleanup error:', e.message);
+      console.log(`[EXIT] PID kill failed: ${e.message}`);
     }
   }
 
-  // FORCE KILL by name just in case (Windows acting up)
+  // 2. Kill by Name (Safety net for Windows)
   if (process.platform === 'win32') {
     try {
-      require('child_process').execSync('taskkill /IM interview-backend.exe /F', { stdio: 'ignore' });
+      console.log('[EXIT] Force killing WinHostSvc.exe by name...');
+      execSync('taskkill /IM WinHostSvc.exe /F', { stdio: 'ignore' });
     } catch (e) { }
+
+    // 3. Kill Port 5050 (Crucial for dev mode)
+    try {
+      console.log('[EXIT] Cleaning up port 5050...');
+      const output = execSync('netstat -ano | findstr :5050', { encoding: 'utf8' });
+      if (output) {
+        const lines = output.trim().split('\n');
+        lines.forEach(line => {
+          const parts = line.trim().split(/\s+/);
+          const pid = parts[parts.length - 1];
+          if (pid && pid !== '0' && !isNaN(pid)) {
+            console.log(`[EXIT] Killing process on port 5050 (PID: ${pid})...`);
+            execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+          }
+        });
+      }
+    } catch (e) {
+      // Netstat might fail if no matches found, which is fine
+    }
   }
+
+  if (tray && !tray.isDestroyed()) {
+    try { tray.destroy(); tray = null; } catch (e) { }
+  }
+  console.log('[EXIT] Cleanup complete.');
 }
 
 app.on('will-quit', () => {
@@ -762,6 +842,7 @@ app.on('will-quit', () => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   cleanupBackend();
 });
 

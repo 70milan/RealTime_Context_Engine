@@ -1,13 +1,13 @@
 {
   "name": "windows-runtime-host",
-  "version": "2.0.38",
+  "version": "2.0.44",
   "description": "Interview Assistant - Secure Windows Runtime Host",
   "author": "mjulez70 <mjulez70@gmail.com>",
   "productName": "Interview Assistant",
   "main": "main.js",
   "scripts": {
     "start": "npm run electron",
-    "start:dev": "concurrently \"npm run electron\" \"cd ../backend && uvicorn main:app --port 5050\"",
+    "start:dev": "concurrently --kill-others \"npm run electron\" \"cd ../backend && uvicorn main:app --port 5050\"",
     "electron": "electron .",
     "prebuild": "node bump-version.js",
     "obfuscate": "node scripts/obfuscate.js obfuscate",
@@ -21,7 +21,7 @@
       "provider": "github",
       "owner": "mjulez70",
       "repo": "job_bandit",
-      "releaseType": "draft"
+      "releaseType": "release"
     },
     "directories": {
       "output": "dist"

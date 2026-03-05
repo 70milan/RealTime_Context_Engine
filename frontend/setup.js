@@ -1,4 +1,6 @@
 // Session Setup & Timer Logic
+// Session Setup & Timer Logic
+
 
 const FULL_SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
 const DEMO_SESSION_DURATION_MS = 12 * 60 * 1000; // 12 minutes
@@ -611,6 +613,8 @@ function initSession() {
             );
         };
     }
+
+
 }
 
 // Load and show history for a past session
@@ -1679,60 +1683,6 @@ updateHWIDDisplay();
     }
 })();
 
-// App Version & Update Check
-(async function () {
-    if (typeof ipcRenderer !== 'undefined') {
-        try {
-            const version = await ipcRenderer.invoke('get-app-version');
-            const versionSpans = document.querySelectorAll('.app-version');
-            versionSpans.forEach(span => span.textContent = `v${version}`);
-        } catch (err) {
-            console.error('Failed to get app version:', err);
-        }
-
-        const updateBtn = document.getElementById('check-update-btn');
-        if (updateBtn) {
-            updateBtn.onclick = () => {
-                updateBtn.textContent = 'Checking...';
-                updateBtn.style.pointerEvents = 'none';
-                ipcRenderer.send('manual-update-check');
-
-                // Reset after 5 seconds if no response from main (which shows its own overlay)
-                setTimeout(() => {
-                    if (updateBtn.textContent === 'Checking...') {
-                        updateBtn.textContent = 'Check for updates';
-                        updateBtn.style.pointerEvents = 'auto';
-                    }
-                }, 5000);
-            };
-        }
-
-        ipcRenderer.on('update-check-result', (event, status, msg) => {
-            const updateBtn = document.getElementById('check-update-btn');
-            if (!updateBtn) return;
-
-            if (status === 'latest') {
-                updateBtn.textContent = 'You are on the latest version';
-                updateBtn.style.color = 'rgba(100, 255, 150, 0.4)';
-            } else if (status === 'error') {
-                updateBtn.textContent = 'Update Error';
-                updateBtn.style.color = 'rgba(255, 107, 107, 0.5)';
-                console.error('Update Check Failed:', msg);
-            }
-
-            setTimeout(() => {
-                updateBtn.textContent = 'Check for updates';
-                updateBtn.style.color = '';
-                updateBtn.style.pointerEvents = 'auto';
-            }, 3000);
-        });
-
-        // Debug listener for auto-updater logs
-        ipcRenderer.on('update-log', (event, msg) => {
-            console.log('[AUTO-UPDATER] ' + msg);
-        });
-    }
-})();
 
 // Ethical Usage Modal Logic
 (function () {
@@ -1774,3 +1724,44 @@ updateHWIDDisplay();
         });
     }
 })();
+
+// Update Button Logic
+console.log('[DEBUG] Executing Update Button Logic block...');
+let updateBtnAttached = false;
+const mountInterval = setInterval(() => {
+    if (updateBtnAttached) {
+        clearInterval(mountInterval);
+        return;
+    }
+    const updateBtn = document.getElementById('check-update-btn');
+    if (updateBtn) {
+        console.log('[DEBUG] Attaching click listener to updateBtn');
+        updateBtnAttached = true;
+        updateBtn.addEventListener('click', () => {
+            console.log('[DEBUG] updateBtn clicked!');
+            updateBtn.textContent = 'Checking...';
+            updateBtn.style.pointerEvents = 'none';
+
+            // We use standard require if window.ipcRenderer isn't ready yet, as a fallback
+            const ipc = window.ipcRenderer || (typeof require !== 'undefined' ? require('electron').ipcRenderer : null);
+
+            if (ipc) {
+                ipc.send('manual-update-check');
+            } else {
+                console.log('Update check triggered (dev style - no IPC)');
+                updateBtn.textContent = 'Check for updates';
+                updateBtn.style.pointerEvents = 'auto';
+            }
+
+            // Fallback timeout in case no IPC response
+            setTimeout(() => {
+                if (updateBtn.textContent === 'Checking...') {
+                    updateBtn.textContent = 'Error checking';
+                    updateBtn.style.pointerEvents = 'auto';
+                }
+            }, 10000);
+        });
+        clearInterval(mountInterval);
+    }
+}, 500);
+
