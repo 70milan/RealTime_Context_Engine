@@ -810,6 +810,12 @@
             <span
               style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+H</span><span>Toggle
               Window Visibility</span>
+            <span
+              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+C</span><span>Toggle
+              Convo Window</span>
+            <span
+              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+Shift+↑↓←→</span><span>Move
+              Convo Window</span>
           </div>
         </div>
         <div style="margin-bottom: 14px;">
@@ -908,6 +914,12 @@
           <span
             style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Alt+Arrows</span><span>Move
             Window Position</span>
+          <span
+            style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Alt+C</span><span>Toggle
+            Convo Window</span>
+          <span
+            style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Alt+Shift+Arrows</span><span>Move
+            Convo Window</span>
         </div>
       </div>
     </div>
@@ -1654,6 +1666,13 @@
         }
       });
     }
+
+    // Master mousedown listener to bring main window to front
+    document.addEventListener('mousedown', () => {
+      if (window.ipcRenderer) {
+        window.ipcRenderer.send('focus-main-window');
+      }
+    });
   </script>
   <script src="setup.js"></script>
   <script src="streaming-ai.js"></script>

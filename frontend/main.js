@@ -226,7 +226,16 @@ function setupAutoUpdaterEvents() {
   });
 
   ipcMain.on('update-restart', () => {
-    autoUpdater.quitAndInstall(true, true);
+    console.log('[UPDATE] Restarting for update. Cleaning up backend first...');
+    // Mark as quitting so cleanup doesn't abort
+    isQuitting = true;
+    // Force kill the backend processes and free port 5050
+    cleanupBackend();
+
+    // Wait a brief moment for OS to release file locks, then install
+    setTimeout(() => {
+      autoUpdater.quitAndInstall(true, true);
+    }, 1500);
   });
 
   ipcMain.on('update-later', () => {
@@ -329,6 +338,13 @@ function createWindow() {
   win.setContentProtection(true);
 
   win.loadFile(path.join(__dirname, 'index.html'));
+
+  // Force default zoom factor to ignore Electron's persistent zoom cache
+  win.webContents.once('dom-ready', () => {
+    try {
+      win.webContents.setZoomFactor(1.0);
+    } catch (e) { }
+  });
 
   // Ensure content scales proportionally to the window width, maintaining a 800px base
   win.on('resize', () => {
@@ -471,6 +487,54 @@ app.whenReady().then(() => {
     const [x, y] = win.getPosition();
     win.setPosition(x, y + 50);
     clampWindowToScreen(win);
+  });
+
+  /* ---- move convo left / right ---- */
+  globalShortcut.register('CommandOrControl+Alt+Shift+Left', () => {
+    if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
+    const [x, y] = convoWin.getPosition();
+    convoWin.setPosition(x - 50, y);
+    clampWindowToScreen(convoWin);
+  });
+
+  globalShortcut.register('CommandOrControl+Alt+Shift+Right', () => {
+    if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
+    const [x, y] = convoWin.getPosition();
+    convoWin.setPosition(x + 50, y);
+    clampWindowToScreen(convoWin);
+  });
+
+  /* ---- move convo up / down ---- */
+  globalShortcut.register('CommandOrControl+Alt+Shift+Up', () => {
+    if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
+    const [x, y] = convoWin.getPosition();
+    convoWin.setPosition(x, y - 50);
+    clampWindowToScreen(convoWin);
+  });
+
+  globalShortcut.register('CommandOrControl+Alt+Shift+Down', () => {
+    if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
+    const [x, y] = convoWin.getPosition();
+    convoWin.setPosition(x, y + 50);
+    clampWindowToScreen(convoWin);
+  });
+
+  /* ---- Ctrl+Alt+C: Toggle Convo Window ---- */
+  globalShortcut.register('CommandOrControl+Alt+C', () => {
+    if (!convoWin || convoWin.isDestroyed()) return;
+    if (convoWin.isVisible()) {
+      convoWin.hide();
+    } else {
+      if (win && !win.isDestroyed()) {
+        const [mwX, mwY] = win.getPosition();
+        const [mwW, mwH] = win.getSize();
+        convoWin.setPosition(mwX + mwW + 20, mwY);
+        clampWindowToScreen(convoWin);
+      }
+      convoWin.show();
+      convoWin.moveTop();
+      convoWin.focus();
+    }
   });
 
   globalShortcut.register('CommandOrControl+R', () => {
@@ -699,7 +763,7 @@ app.whenReady().then(() => {
       convoWin.hide();
     } else {
       // Position it generally near the main window, but on the side
-      if (win) {
+      if (win && !win.isDestroyed()) {
         const [mwX, mwY] = win.getPosition();
         const [mwW, mwH] = win.getSize();
         // Attempt to put it to the right of the main window
@@ -707,11 +771,30 @@ app.whenReady().then(() => {
         clampWindowToScreen(convoWin);
       }
       convoWin.show();
+      convoWin.moveTop();
+      convoWin.focus();
     }
   });
 
   ipcMain.on('hide-convo-window', () => {
     if (convoWin) convoWin.hide();
+  });
+
+  // Focus managers to ensure clicked windows go to the top of the alwaysOnTop stack
+  ipcMain.on('focus-main-window', () => {
+    if (win && !win.isDestroyed()) {
+      win.moveTop();
+      win.focus();
+    }
+  });
+
+  ipcMain.on('focus-convo-window', () => {
+    if (convoWin && !convoWin.isDestroyed()) {
+      convoWin.moveTop();
+      if (convoWin.isVisible()) {
+        convoWin.focus();
+      }
+    }
   });
 
   // Relay historical dump to floating window
