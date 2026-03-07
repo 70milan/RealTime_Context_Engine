@@ -781,19 +781,29 @@ app.whenReady().then(() => {
   });
 
   // Focus managers to ensure clicked windows go to the top of the alwaysOnTop stack
+  function stackWindows(frontWin, backWin) {
+    // Both windows must be alwaysOnTop: true.
+    // On Windows, the last window to receive the AlwaysOnTop flag gets the highest Z-order.
+    if (backWin && !backWin.isDestroyed() && backWin.isVisible()) {
+      backWin.setAlwaysOnTop(false);
+      backWin.setAlwaysOnTop(true, 'floating');
+    }
+    if (frontWin && !frontWin.isDestroyed() && frontWin.isVisible()) {
+      frontWin.setAlwaysOnTop(false);
+      frontWin.setAlwaysOnTop(true, 'floating');
+      frontWin.focus();
+    }
+  }
+
   ipcMain.on('focus-main-window', () => {
     if (win && !win.isDestroyed()) {
-      win.moveTop();
-      win.focus();
+      stackWindows(win, convoWin);
     }
   });
 
   ipcMain.on('focus-convo-window', () => {
     if (convoWin && !convoWin.isDestroyed()) {
-      convoWin.moveTop();
-      if (convoWin.isVisible()) {
-        convoWin.focus();
-      }
+      stackWindows(convoWin, win);
     }
   });
 
