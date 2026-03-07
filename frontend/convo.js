@@ -48,9 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportBtn = document.getElementById('export-btn');
     if (exportBtn) {
         exportBtn.addEventListener('click', async () => {
-            // Build a plain text representation of the current conversation
-            let textContent = `Session: ${titleEl.innerText.replace('Conversation | ', '')}\n`;
-            textContent += `Exported: ${new Date().toLocaleString()}\n`;
+            // Build a clean multi-line header from stored session data
+            const sessionName = titleEl.dataset.sessionName || 'Unknown Session';
+            const targetRole = titleEl.dataset.role || '';
+            let textContent = `Session:      ${sessionName}\n`;
+            if (targetRole) textContent += `Target Role:  ${targetRole}\n`;
+            textContent += `Exported:     ${new Date().toLocaleString()}\n`;
             textContent += `--------------------------------------------------\n\n`;
 
             const pairs = convoList.children;
@@ -85,8 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Strip the weird Unicode separator that innerText might pull from the title
-            textContent = textContent.replace(/\| /g, '');
+
 
             try {
                 // Determine a default filename based on title
@@ -240,6 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const roleText = payload.role
             ? divider + ' <span style="color: rgba(255,255,255,0.4);">' + payload.role + '</span>'
             : '';
+        titleEl.dataset.sessionName = payload.sessionName || '';
+        titleEl.dataset.role = payload.role || '';
         titleEl.innerHTML = payload.sessionName
             ? 'Conversation ' + divider + ' <span style="color: rgba(255,255,255,0.6);">' + payload.sessionName + '</span>' + roleText
             : 'Conversation Window';
@@ -324,6 +328,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const roleText = titlePayload.role
             ? divider + ' <span style="color: rgba(255,255,255,0.4);">' + titlePayload.role + '</span>'
             : '';
+        titleEl.dataset.sessionName = titlePayload.sessionName || '';
+        titleEl.dataset.role = titlePayload.role || '';
         titleEl.innerHTML = titlePayload.sessionName
             ? 'Conversation ' + divider + ' <span style="color: rgba(255,255,255,0.6);">' + titlePayload.sessionName + '</span>' + roleText
             : 'Conversation Window';
