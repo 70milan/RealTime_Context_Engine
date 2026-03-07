@@ -59,6 +59,12 @@ function initAutoUpdater() {
         if (win) win.webContents.send('update-log', 'ERROR: ' + msg);
       }
     };
+    // BYPASS NSIS CERTIFICATE CHECK IN WINDOWS
+    autoUpdater.verifyUpdateCodeSignature = async (publisherName, installPath) => {
+      console.log('[UPDATE] Bypassing code signature verification for', publisherName);
+      return null; // Return null to indicate the signature is valid
+    };
+
     autoUpdater.logger = updateLogger;
 
     // Re-wire events here...
@@ -99,10 +105,10 @@ function setupAutoUpdaterEvents() {
 
   function hideUpdateUI() {
     if (!win) return;
-    win.webContents.executeJavaScript(`
-    const el = document.getElementById('update-overlay');
+    win.webContents.executeJavaScript(`{
+    let el = document.getElementById('update-overlay');
     if (el) el.remove();
-  `);
+  }`);
   }
 
   let updateVersion = '';
