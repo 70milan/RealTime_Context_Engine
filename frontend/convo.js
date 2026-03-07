@@ -10,6 +10,54 @@ let currentSessionStats = {
     totalCost: 0
 };
 
+// Format markdown text with code blocks, inline code, bold, etc.
+function formatConvoText(text) {
+    if (!text) return '';
+    let formatted = text;
+    const codeBlocks = [];
+    const inlineCodeBlocks = [];
+
+    // Normalize line endings
+    formatted = formatted.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // Fenced code blocks: ```lang\n...\n```
+    formatted = formatted.replace(/`{3,}\s*([a-zA-Z0-9_#\+\-]+)?\s*\n([\s\S]*?)\n?\s*`{3,}/g, (match, lang, code) => {
+        const language = lang || 'plaintext';
+        const trimmedCode = code.replace(/^\n+|\n+$/g, '');
+        const escapedCode = trimmedCode.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const placeholder = `___CONVO_CODE_${codeBlocks.length}___`;
+        codeBlocks.push(`<pre style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:8px;margin:4px 0;overflow-x:auto;"><code class="language-${language}" style="font-size:10px;line-height:1.3;">${escapedCode}</code></pre>`);
+        return placeholder;
+    });
+
+    // Inline code: `code`
+    formatted = formatted.replace(/`([^`]+)`/g, (match, code) => {
+        const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const placeholder = `___CONVO_INLINE_${inlineCodeBlocks.length}___`;
+        inlineCodeBlocks.push(`<code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px;font-size:10px;">${escapedCode}</code>`);
+        return placeholder;
+    });
+
+    // Bold **text** → <strong>
+    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // Remove markdown headings (### Heading → Heading)
+    formatted = formatted.replace(/^#{1,6}\s+/gm, '');
+
+    // Newlines to <br>
+    formatted = formatted.replace(/\n/g, '<br>');
+
+    // Restore placeholders
+    codeBlocks.forEach((block, i) => {
+        formatted = formatted.replace(`___CONVO_CODE_${i}___`, block);
+    });
+    inlineCodeBlocks.forEach((code, i) => {
+        formatted = formatted.replace(`___CONVO_INLINE_${i}___`, code);
+    });
+
+    return formatted;
+}
+
 window.copyToClipboard = function (element) {
     // Walk up to aiBubble, find .ai-body sibling
     const aiBubble = element.closest('.ai-bubble');
@@ -203,7 +251,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const aiBody = document.createElement('div');
             aiBody.className = 'ai-body';
             aiBody.style.cssText = 'flex: 1; min-height: 0;';
-            aiBody.innerHTML = entry.response;
+            // Format raw markdown response (from backend) into proper HTML
+            // Live updates already arrive as formatted HTML, but restored
+            // session history contains raw markdown that needs formatting
+            const isRawMarkdown = entry.response && !entry.response.includes('<pre') && !entry.response.includes('<br>');
+            aiBody.innerHTML = isRawMarkdown ? formatConvoText(entry.response) : entry.response;
             aiBody.querySelectorAll('pre code').forEach(b => {
                 if (typeof hljs !== 'undefined') hljs.highlightElement(b);
             });

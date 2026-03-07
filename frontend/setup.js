@@ -1188,6 +1188,12 @@ async function handleCreateSession() {
             const endBtnEl = document.getElementById('btn-session-end');
             if (endBtnEl) endBtnEl.classList.remove('ended');
 
+            // Set convo window title for new sessions
+            ipcRenderer.send('set-convo-title', {
+                sessionName: sanitizedSessionName,
+                role: targetRole
+            });
+
             // Reset API cost display
             const apiCostEl = document.getElementById('api-cost');
             if (apiCostEl) {
