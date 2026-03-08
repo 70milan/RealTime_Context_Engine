@@ -62,6 +62,7 @@
     .btn,
     .session-btn,
     .vol-slider-wrapper,
+    #status-bar-hotkeys,
     #response-area,
     #transcript-area,
     #conversation-area,
@@ -859,71 +860,50 @@
       </div>
     </div>
   </div>
-  <!-- Hotkeys Modal -->
+
+  <!-- Hotkeys Modal (Setup Screen Only) -->
   <div id="hotkeys-modal"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10002; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10001; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 500px; width: 95%; max-height: 80vh; display: flex; flex-direction: column;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 25px 30px; max-width: 500px; width: 95%; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <span
-          style="color: rgba(255,255,255,0.6); font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Keyboard
+          style="color: rgba(100,255,150,0.9); font-size: 13px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Keyboard
           Shortcuts</span>
         <button id="close-hotkeys" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.5); font-size: 20px; cursor: pointer; padding: 4px 6px; line-height: 1; border-radius: 50%; transition: all 0.2s ease;"
-          onmouseover="this.style.color='rgba(255, 107, 107, 0.8)'; this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1.1)';"
-          onmouseout="this.style.color='rgba(255,255,255,0.5)'; this.style.background='none'; this.style.transform='scale(1)';">&times;</button>
+          style="background: none; border: none; color: rgba(255,255,255,0.4); font-size: 24px; cursor: pointer; padding: 0 5px; line-height: 1; transition: all 0.2s;"
+          onmouseover="this.style.color='#ff5555'"
+          onmouseout="this.style.color='rgba(255,255,255,0.4)'">&times;</button>
       </div>
       <div
-        style="flex: 1; overflow-y: auto; color: rgba(255,255,255,0.7); font-size: 12px; line-height: 1.6; padding-right: 8px;">
-        <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px 18px;">
-          <span
-            style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px; font-weight: 600;">Ctrl+Q</span><span>Toggle
-            Mini Mode / Main Window (Stealth)</span>
-          <span
-            style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px; font-weight: 600;">Ctrl+R</span><span>Start/Stop
-            System Audio Recording</span>
-          <span
-            style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px; font-weight: 600;">Ctrl+M</span><span>Start/Stop
-            Microphone Recording</span>
-          <span
-            style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px; font-weight: 600;">Ctrl+K</span><span>Screenshot
-            + AI Solution (Contextless)</span>
-          <span
-            style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px; font-weight: 600;">Ctrl+S</span><span>Screenshot
-            + Save to AI Context</span>
-          <span
-            style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px; font-weight: 600;">Ctrl+Enter</span><span>Process
-            Transcription with AI</span>
-          <span
-            style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px; font-weight: 600;">Ctrl+Backspace</span><span>Clear
-            Transcript Area</span>
-          <span
-            style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px; font-weight: 600;">Ctrl+Shift+Q</span><span>Quit
-            Application</span>
+        style="display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; color: rgba(255,255,255,0.7); font-size: 12px; line-height: 1.6;">
+        <!-- Group 1 -->
+        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl +
+          R</span><span>Toggle System Audio</span>
+        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl +
+          M</span><span>Toggle Mic Audio</span>
+        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl + K</span><span>Quick
+          Solve (No context)</span>
+        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl + S</span><span>Solve
+          + Save Context</span>
+        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl +
+          Enter</span><span>Process with AI</span>
 
-          <div style="grid-column: 1 / -1; height: 1px; background: rgba(255,255,255,0.06); margin: 6px 0;"></div>
-          <span
-            style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Shift+↑/↓</span><span>Scroll
-            Response Up/Down</span>
-          <span style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Shift++/
-            -</span><span>Resize
-            Window (Scale)</span>
-          <span
-            style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Shift+O</span><span>Reset
-            to Original Size</span>
-          <span
-            style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Alt+Arrows</span><span>Move
-            Window Position</span>
-          <span
-            style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Alt+C</span><span>Toggle
-            Convo Window</span>
-          <span
-            style="color: rgba(255,255,255,0.4); font-family: monospace; font-size: 11px;">Ctrl+Alt+Shift+Arrows</span><span>Move
-            Convo Window</span>
-        </div>
+        <div style="grid-column: 1 / -1; height: 1px; background: rgba(255,255,255,0.08); margin: 6px 0;"></div>
+
+        <!-- Group 2 -->
+        <span style="color: rgba(255,255,255,0.4); font-family: monospace;">Ctrl + Q</span><span>Toggle Stealth
+          Mode</span>
+        <span style="color: rgba(255,255,255,0.4); font-family: monospace;">Ctrl + Alt + C</span><span>Toggle Convo
+          Window</span>
+        <span style="color: rgba(255,255,255,0.4); font-family: monospace;">Ctrl + Shift + Arrows</span><span>Scroll AI
+          Response</span>
+        <span style="color: rgba(255,255,255,0.4); font-family: monospace;">Ctrl + Alt + Sht + +/-</span><span>Resize
+          Convo Tab</span>
       </div>
     </div>
   </div>
+
   <!-- Custom Alert/Confirm Modal -->
   <div id="custom-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10002; align-items: center; justify-content: center;">
@@ -986,10 +966,7 @@
       <div class="status-indicator" style="flex-shrink: 0;">
         <div id="status-dot" class="dot"></div><span id="status-text">Ready</span>
         <span id="status-bar-hotkeys"
-          style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
-          onmouseover="this.style.color='rgba(255,255,255,0.6)'; this.style.borderColor='rgba(255,255,255,0.3)';"
-          onmouseout="this.style.color='rgba(255,255,255,0.25)'; this.style.borderColor='rgba(255,255,255,0.1)';"
-          onclick="document.getElementById('btn-hotkeys-setup') ? document.getElementById('btn-hotkeys-setup').click() : null">Hotkeys</span>
+          style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default;">Hotkeys</span>
       </div>
       <!-- Middle container injected by setup.js will go here -->
       <div style="display: flex; gap: 10px; align-items: center; font-size: 11px; flex-shrink: 0; white-space: nowrap;">
@@ -1016,8 +993,14 @@
       try {
         window.ipcRenderer = require('electron').ipcRenderer;
       } catch (e) {
-        console.error('Failed to load ipcRenderer:', e);
+        console.warn('[IPC] Failed to require ipcRenderer:', e);
       }
+    }
+
+    if (window.ipcRenderer) {
+      window.ipcRenderer.on('debug-log', (event, message) => {
+        console.log(`[MAIN_DEBUG] ${message}`);
+      });
     }
     const ipcRenderer = window.ipcRenderer;
 
@@ -1631,7 +1614,7 @@
           updateBtn.textContent = 'You are on the latest version';
           updateBtn.style.color = 'rgba(100, 255, 150, 0.4)';
         } else if (status === 'error') {
-          updateBtn.textContent = 'Update Error';
+          updateBtn.innerHTML = `Update Error ${(msg ? `<span title="${msg.replace(/"/g, '&quot;')}">(?)</span>` : '')}`;
           updateBtn.style.color = 'rgba(255, 107, 107, 0.5)';
         } else if (status === 'available') {
           updateBtn.textContent = 'Update Available';
@@ -1641,13 +1624,14 @@
           updateBtn.textContent = 'Check for updates';
           updateBtn.style.color = '';
           updateBtn.style.pointerEvents = 'auto';
-        }, 3000);
+        }, 5000); // Wait slightly longer for error reading
       });
 
       window.ipcRenderer.on('update-log', (event, msg) => {
         console.log('[AUTO-UPDATER] ' + msg);
       });
     }
+
 
     window.onload = () => {
       console.log('Auto-starting System Audio...');
@@ -1667,15 +1651,11 @@
       });
     }
 
-    // Master mousedown listener to bring main window to front
-    document.addEventListener('mousedown', () => {
-      if (window.ipcRenderer) {
-        window.ipcRenderer.send('focus-main-window');
-      }
-    }, true);
+    // Master mousedown listener removed
   </script>
-  <script src="setup.js"></script>
-  <script src="streaming-ai.js"></script>
+
+  <script src="setup.js?v=3.2"></script>
+  <script src="streaming-ai.js?v=3.2"></script>
 </body>
 
 </html>

@@ -48,15 +48,15 @@ function initAutoUpdater() {
     updateLogger = {
       info: (msg) => {
         console.log('[UPDATE] ' + msg);
-        if (win) win.webContents.send('update-log', 'INFO: ' + msg);
+        if (win && !win.isDestroyed()) win.webContents.send('update-log', 'INFO: ' + msg);
       },
       warn: (msg) => {
         console.warn('[UPDATE] ' + msg);
-        if (win) win.webContents.send('update-log', 'WARN: ' + msg);
+        if (win && !win.isDestroyed()) win.webContents.send('update-log', 'WARN: ' + msg);
       },
       error: (msg) => {
         console.error('[UPDATE] ' + msg);
-        if (win) win.webContents.send('update-log', 'ERROR: ' + msg);
+        if (win && !win.isDestroyed()) win.webContents.send('update-log', 'ERROR: ' + msg);
       }
     };
     // BYPASS NSIS CERTIFICATE CHECK IN WINDOWS
@@ -66,6 +66,13 @@ function initAutoUpdater() {
     };
 
     autoUpdater.logger = updateLogger;
+
+    // Prevent attaching multiple listener instances
+    autoUpdater.removeAllListeners();
+    ipcMain.removeAllListeners('update-accept');
+    ipcMain.removeAllListeners('update-decline');
+    ipcMain.removeAllListeners('update-restart');
+    ipcMain.removeAllListeners('update-later');
 
     // Re-wire events here...
     setupAutoUpdaterEvents();
@@ -235,13 +242,19 @@ function setupAutoUpdaterEvents() {
     console.log('[UPDATE] Restarting for update. Cleaning up backend first...');
     // Mark as quitting so cleanup doesn't abort
     isQuitting = true;
-    // Force kill the backend processes and free port 5050
-    cleanupBackend();
 
-    // Wait a brief moment for OS to release file locks, then install
+    try {
+      // Run cleanup
+      cleanupBackend();
+    } catch (err) {
+      console.error('[UPDATE ERROR] Backend cleanup failed during update-restart:', err);
+    }
+
+    // Wait slightly longer (3000ms) for OS to release file locks reliably, then install
     setTimeout(() => {
+      console.log('[UPDATE] Attempting quitAndInstall...');
       autoUpdater.quitAndInstall(true, true);
-    }, 1500);
+    }, 3000);
   });
 
   ipcMain.on('update-later', () => {
@@ -345,6 +358,8 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, 'index.html'));
 
+  // Removed auto-open DevTools
+
   // Force default zoom factor to ignore Electron's persistent zoom cache
   win.webContents.once('dom-ready', () => {
     try {
@@ -381,8 +396,14 @@ function createWindow() {
     else if (clampedY + newBounds.height > workArea.y + workArea.height) clampedY = workArea.y + workArea.height - newBounds.height;
 
     if (clampedX !== newBounds.x || clampedY !== newBounds.y) {
-      e.preventDefault();
-      win.setBounds({ x: clampedX, y: clampedY, width: newBounds.width, height: newBounds.height });
+    }
+  });
+
+  win.on('focus', () => {
+    // When the user clicks the main window, bring it to the front
+    console.log('[DEBUG_FOCUS] Main window clicked/focused by OS');
+    if (convoWin && !convoWin.isDestroyed() && convoWin.isVisible()) {
+      stackWindows(win, convoWin);
     }
   });
 
@@ -408,10 +429,18 @@ function createConvoWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
-    },
+    }
   });
 
   convoWin.loadFile(path.join(__dirname, 'convo.html'));
+
+  convoWin.on('focus', () => {
+    // When the user clicks the convo window, bring it to the front
+    console.log('[DEBUG_FOCUS] Convo window clicked/focused by OS');
+    if (win && !win.isDestroyed() && win.isVisible()) {
+      stackWindows(convoWin, win);
+    }
+  });
 
   convoWin.on('close', (e) => {
     if (!isQuitting) {
@@ -425,6 +454,38 @@ function createConvoWindow() {
     convoWin = null;
   });
 }
+
+// Focus managers to ensure clicked windows go to the top of the alwaysOnTop stack
+function stackWindows(frontWin, backWin) {
+  if (!frontWin || frontWin.isDestroyed()) return;
+
+  console.log(`[DEBUG_FOCUS] Attempting to stack windows natively. Restoring frontWin visibility.`);
+
+  // Push the background window down to the standard floating layer
+  if (backWin && !backWin.isDestroyed() && backWin.isVisible()) {
+    backWin.setAlwaysOnTop(true, 'floating');
+    console.log(`[DEBUG_FOCUS] Background window pushed to 'floating' layer.`);
+  }
+
+  // Pull the active window specifically to the highest possible layer to skip OS focus glitches
+  frontWin.setAlwaysOnTop(true, 'screen-saver');
+  const logMsg = `[DEBUG_FOCUS] Stacking ${frontWin === win ? 'Main' : 'Convo'} in FRONT (screen-saver layer).`;
+  console.log(logMsg);
+  if (win && !win.isDestroyed()) win.webContents.send('debug-log', logMsg);
+
+  if (!frontWin.isVisible()) {
+    console.log(`[DEBUG_FOCUS] Front window was hidden. showing...`);
+    frontWin.show();
+  }
+
+  // Prevent infinite loops if stackWindows is called inside a 'focus' event
+  if (!frontWin.isFocused()) {
+    console.log(`[DEBUG_FOCUS] Triggering native element focus!`);
+    frontWin.focus();
+  }
+}
+
+
 
 app.whenReady().then(() => {
   // Start backend first
@@ -456,8 +517,23 @@ app.whenReady().then(() => {
     }));
   });
 
+  // Helper to log shortcut registration
+  const registerShortcut = (keys, callback) => {
+    const success = globalShortcut.register(keys, callback);
+    if (success) {
+      console.log(`[SUCCESS] Registered shortcut: ${keys}`);
+    } else {
+      console.error(`[ERROR] Failed to register shortcut: ${keys}`);
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('debug-log', `FAILED TO REGISTER SHORTCUT: ${keys}`);
+      }
+    }
+    return success;
+  };
+
   /* ---- Ctrl+F: Maximize AI Response Window ---- */
-  globalShortcut.register('CommandOrControl+F', () => {
+  registerShortcut('CommandOrControl+F', () => {
+
     if (!win || win.isDestroyed()) return;
     console.log('🔍 Maximize Response Triggered');
     win.webContents.executeJavaScript(`
@@ -466,14 +542,14 @@ app.whenReady().then(() => {
   });
 
   /* ---- move left / right ---- */
-  globalShortcut.register('CommandOrControl+Alt+Left', () => {
+  registerShortcut('CommandOrControl+Alt+Left', () => {
     if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
     win.setPosition(x - 50, y);
     clampWindowToScreen(win);
   });
 
-  globalShortcut.register('CommandOrControl+Alt+Right', () => {
+  registerShortcut('CommandOrControl+Alt+Right', () => {
     if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
     win.setPosition(x + 50, y);
@@ -481,14 +557,14 @@ app.whenReady().then(() => {
   });
 
   /* ---- move up / down ---- */
-  globalShortcut.register('CommandOrControl+Alt+Up', () => {
+  registerShortcut('CommandOrControl+Alt+Up', () => {
     if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
     win.setPosition(x, y - 50);
     clampWindowToScreen(win);
   });
 
-  globalShortcut.register('CommandOrControl+Alt+Down', () => {
+  registerShortcut('CommandOrControl+Alt+Down', () => {
     if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
     win.setPosition(x, y + 50);
@@ -496,14 +572,14 @@ app.whenReady().then(() => {
   });
 
   /* ---- move convo left / right ---- */
-  globalShortcut.register('CommandOrControl+Alt+Shift+Left', () => {
+  registerShortcut('CommandOrControl+Alt+Shift+Left', () => {
     if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
     const [x, y] = convoWin.getPosition();
     convoWin.setPosition(x - 50, y);
     clampWindowToScreen(convoWin);
   });
 
-  globalShortcut.register('CommandOrControl+Alt+Shift+Right', () => {
+  registerShortcut('CommandOrControl+Alt+Shift+Right', () => {
     if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
     const [x, y] = convoWin.getPosition();
     convoWin.setPosition(x + 50, y);
@@ -511,22 +587,50 @@ app.whenReady().then(() => {
   });
 
   /* ---- move convo up / down ---- */
-  globalShortcut.register('CommandOrControl+Alt+Shift+Up', () => {
+  registerShortcut('CommandOrControl+Alt+Shift+Up', () => {
     if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
     const [x, y] = convoWin.getPosition();
     convoWin.setPosition(x, y - 50);
     clampWindowToScreen(convoWin);
   });
 
-  globalShortcut.register('CommandOrControl+Alt+Shift+Down', () => {
+  registerShortcut('CommandOrControl+Alt+Shift+Down', () => {
     if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
     const [x, y] = convoWin.getPosition();
     convoWin.setPosition(x, y + 50);
     clampWindowToScreen(convoWin);
   });
 
+  /* ---- resize convo ---- */
+  registerShortcut('CommandOrControl+Alt+Shift+=', () => {
+    if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
+    const [w, h] = convoWin.getSize();
+    const display = screen.getDisplayMatching(convoWin.getBounds());
+    const workArea = display.workArea;
+    const newW = Math.min(w + 50, workArea.width);
+    const newH = Math.min(h + 50, workArea.height);
+    convoWin.setSize(newW, newH);
+    clampWindowToScreen(convoWin);
+  });
+
+  registerShortcut('CommandOrControl+Alt+Shift+-', () => {
+    if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
+    const [w, h] = convoWin.getSize();
+    const newW = Math.max(w - 50, 300);
+    const newH = Math.max(h - 50, 400);
+    convoWin.setSize(newW, newH);
+    clampWindowToScreen(convoWin);
+  });
+
+  registerShortcut('CommandOrControl+Alt+Shift+O', () => {
+    if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
+    convoWin.setSize(450, 600);
+    clampWindowToScreen(convoWin);
+  });
+
+
   /* ---- Ctrl+Alt+C: Toggle Convo Window ---- */
-  globalShortcut.register('CommandOrControl+Alt+C', () => {
+  registerShortcut('CommandOrControl+Alt+C', () => {
     if (!convoWin || convoWin.isDestroyed()) return;
     if (convoWin.isVisible()) {
       convoWin.hide();
@@ -538,12 +642,12 @@ app.whenReady().then(() => {
         clampWindowToScreen(convoWin);
       }
       convoWin.show();
-      convoWin.moveTop();
-      convoWin.focus();
+      stackWindows(convoWin, win);
     }
   });
 
-  globalShortcut.register('CommandOrControl+R', () => {
+
+  registerShortcut('CommandOrControl+R', () => {
     if (!win || win.isDestroyed()) return;
     console.log('System Audio Capture Triggered');
     win.webContents.executeJavaScript(`
@@ -552,7 +656,7 @@ app.whenReady().then(() => {
   });
 
   /* ---- Ctrl+Enter: Generate AI ---- */
-  globalShortcut.register('CommandOrControl+Return', () => {
+  registerShortcut('CommandOrControl+Return', () => {
     if (!win) return;
     console.log('Generate AI Triggered');
     win.webContents.executeJavaScript(`
@@ -561,7 +665,7 @@ app.whenReady().then(() => {
   });
 
   /* ---- Ctrl+M: Toggle Mic Capture ---- */
-  globalShortcut.register('CommandOrControl+M', () => {
+  registerShortcut('CommandOrControl+M', () => {
     if (!win) return;
     console.log('🎤 Mic Capture Triggered');
     win.webContents.executeJavaScript(`
@@ -570,7 +674,7 @@ app.whenReady().then(() => {
   });
 
   /* ---- Ctrl+K: Capture Screen ---- */
-  globalShortcut.register('CommandOrControl+K', () => {
+  registerShortcut('CommandOrControl+K', () => {
     if (!win) return;
     console.log('Screen Capture Triggered');
     win.webContents.executeJavaScript(`
@@ -578,7 +682,7 @@ app.whenReady().then(() => {
     `);
   });
   /* ---- Ctrl+S: Capture Screen + Save Context ---- */
-  globalShortcut.register('CommandOrControl+S', () => {
+  registerShortcut('CommandOrControl+S', () => {
     if (!win) return;
     console.log('Screen Capture Triggered (with context)');
     win.webContents.executeJavaScript(`
@@ -764,10 +868,13 @@ app.whenReady().then(() => {
 
   /* ---- IPC: Convo Window Control ---- */
   ipcMain.on('toggle-convo-window', () => {
+    console.log(`[DEBUG_IPC] Received 'toggle-convo-window' event!`);
     if (!convoWin) return;
     if (convoWin.isVisible()) {
+      console.log(`[DEBUG_IPC] Convo window is visible... hiding it.`);
       convoWin.hide();
     } else {
+      console.log(`[DEBUG_IPC] Convo window is hidden... computing position then opening.`);
       // Position it generally near the main window, but on the side
       if (win && !win.isDestroyed()) {
         const [mwX, mwY] = win.getPosition();
@@ -777,8 +884,8 @@ app.whenReady().then(() => {
         clampWindowToScreen(convoWin);
       }
       convoWin.show();
-      convoWin.moveTop();
-      convoWin.focus();
+      console.log(`[DEBUG_IPC] Showing convo. Triggering native Focus inside IPC toggle handler!`);
+      stackWindows(convoWin, win);
     }
   });
 
@@ -786,29 +893,15 @@ app.whenReady().then(() => {
     if (convoWin) convoWin.hide();
   });
 
-  // Focus managers to ensure clicked windows go to the top of the alwaysOnTop stack
-  function stackWindows(frontWin, backWin) {
-    // Both windows must be alwaysOnTop: true.
-    // On Windows, the last window to receive the AlwaysOnTop flag gets the highest Z-order.
-    if (backWin && !backWin.isDestroyed() && backWin.isVisible()) {
-      backWin.setAlwaysOnTop(false);
-      backWin.setAlwaysOnTop(true, 'floating');
-    }
-    if (frontWin && !frontWin.isDestroyed() && frontWin.isVisible()) {
-      frontWin.setAlwaysOnTop(false);
-      frontWin.setAlwaysOnTop(true, 'floating');
-      frontWin.focus();
-    }
-  }
-
+  // Window Focus Handlers
   ipcMain.on('focus-main-window', () => {
-    if (win && !win.isDestroyed()) {
+    if (win && !win.isDestroyed() && win.isVisible()) {
       stackWindows(win, convoWin);
     }
   });
 
   ipcMain.on('focus-convo-window', () => {
-    if (convoWin && !convoWin.isDestroyed()) {
+    if (convoWin && !convoWin.isDestroyed() && convoWin.isVisible()) {
       stackWindows(convoWin, win);
     }
   });
@@ -852,7 +945,7 @@ app.whenReady().then(() => {
     try {
       if (!app.isPackaged) {
         console.log('[UPDATE] Skipping real update check in development mode');
-        if (win) {
+        if (win && !win.isDestroyed()) {
           setTimeout(() => {
             win.webContents.send('update-check-result', 'latest');
           }, 1500);
@@ -861,16 +954,19 @@ app.whenReady().then(() => {
       }
 
       if (!autoUpdater) initAutoUpdater();
+
       if (autoUpdater) {
         autoUpdater.checkForUpdates().catch(err => {
           console.error('[UPDATE ERROR] Manual check failed:', err);
-          if (win) win.webContents.send('update-check-result', 'error', err.message);
+          if (win && !win.isDestroyed()) win.webContents.send('update-check-result', 'error', err.message);
         });
       } else {
         console.error('[UPDATE ERROR] autoUpdater not available after init');
+        if (win && !win.isDestroyed()) win.webContents.send('update-check-result', 'error', 'autoUpdater initialization failed.');
       }
     } catch (err) {
       console.error('[UPDATE ERROR] Crash in manual-update-check handler:', err);
+      if (win && !win.isDestroyed()) win.webContents.send('update-check-result', 'error', 'Crash in check process.');
     }
   });
 
@@ -912,7 +1008,7 @@ function cleanupBackend() {
     // 3. Kill Port 5050 (Crucial for dev mode)
     try {
       console.log('[EXIT] Cleaning up port 5050...');
-      const output = execSync('netstat -ano | findstr :5050', { encoding: 'utf8' });
+      const output = execSync('netstat -ano | findstr :5050', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       if (output) {
         const lines = output.trim().split('\n');
         lines.forEach(line => {
@@ -920,12 +1016,17 @@ function cleanupBackend() {
           const pid = parts[parts.length - 1];
           if (pid && pid !== '0' && !isNaN(pid)) {
             console.log(`[EXIT] Killing process on port 5050 (PID: ${pid})...`);
-            execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+            try {
+              execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
+            } catch (kille) {
+              console.log(`[EXIT] Failed to kill PID ${pid} or it was already dead.`);
+            }
           }
         });
       }
     } catch (e) {
       // Netstat might fail if no matches found, which is fine
+      console.log('[EXIT] No process found port 5050 or netstat failed.');
     }
   }
 

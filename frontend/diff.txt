@@ -1,0 +1,165 @@
+diff --git a/frontend/main.js b/frontend/main.js
+index 6b24ffc..1941b6c 100644
+--- a/frontend/main.js
++++ b/frontend/main.js
+@@ -48,15 +48,15 @@ function initAutoUpdater() {
+     updateLogger = {
+       info: (msg) => {
+         console.log('[UPDATE] ' + msg);
+-        if (win) win.webContents.send('update-log', 'INFO: ' + msg);
++        if (win && !win.isDestroyed()) win.webContents.send('update-log', 'INFO: ' + msg);
+       },
+       warn: (msg) => {
+         console.warn('[UPDATE] ' + msg);
+-        if (win) win.webContents.send('update-log', 'WARN: ' + msg);
++        if (win && !win.isDestroyed()) win.webContents.send('update-log', 'WARN: ' + msg);
+       },
+       error: (msg) => {
+         console.error('[UPDATE] ' + msg);
+-        if (win) win.webContents.send('update-log', 'ERROR: ' + msg);
++        if (win && !win.isDestroyed()) win.webContents.send('update-log', 'ERROR: ' + msg);
+       }
+     };
+     // BYPASS NSIS CERTIFICATE CHECK IN WINDOWS
+@@ -67,6 +67,13 @@ function initAutoUpdater() {
+ 
+     autoUpdater.logger = updateLogger;
+ 
++    // Prevent attaching multiple listener instances
++    autoUpdater.removeAllListeners();
++    ipcMain.removeAllListeners('update-accept');
++    ipcMain.removeAllListeners('update-decline');
++    ipcMain.removeAllListeners('update-restart');
++    ipcMain.removeAllListeners('update-later');
++
+     // Re-wire events here...
+     setupAutoUpdaterEvents();
+   } catch (err) {
+@@ -235,13 +242,19 @@ function setupAutoUpdaterEvents() {
+     console.log('[UPDATE] Restarting for update. Cleaning up backend first...');
+     // Mark as quitting so cleanup doesn't abort
+     isQuitting = true;
+-    // Force kill the backend processes and free port 5050
+-    cleanupBackend();
+ 
+-    // Wait a brief moment for OS to release file locks, then install
++    try {
++      // Run cleanup
++      cleanupBackend();
++    } catch (err) {
++      console.error('[UPDATE ERROR] Backend cleanup failed during update-restart:', err);
++    }
++
++    // Wait slightly longer (3000ms) for OS to release file locks reliably, then install
+     setTimeout(() => {
++      console.log('[UPDATE] Attempting quitAndInstall...');
+       autoUpdater.quitAndInstall(true, true);
+-    }, 1500);
++    }, 3000);
+   });
+ 
+   ipcMain.on('update-later', () => {
+@@ -786,30 +799,26 @@ app.whenReady().then(() => {
+     if (convoWin) convoWin.hide();
+   });
+ 
+-  // Focus managers to ensure clicked windows go to the top of the alwaysOnTop stack
+-  function stackWindows(frontWin, backWin) {
+-    // Both windows must be alwaysOnTop: true.
+-    // On Windows, the last window to receive the AlwaysOnTop flag gets the highest Z-order.
+-    if (backWin && !backWin.isDestroyed() && backWin.isVisible()) {
+-      backWin.setAlwaysOnTop(false);
+-      backWin.setAlwaysOnTop(true, 'floating');
+-    }
+-    if (frontWin && !frontWin.isDestroyed() && frontWin.isVisible()) {
+-      frontWin.setAlwaysOnTop(false);
+-      frontWin.setAlwaysOnTop(true, 'floating');
+-      frontWin.focus();
+-    }
+-  }
+-
++  // Window Focus Handlers
+   ipcMain.on('focus-main-window', () => {
+-    if (win && !win.isDestroyed()) {
+-      stackWindows(win, convoWin);
++    if (win && !win.isDestroyed() && win.isVisible()) {
++      // Use Electron's native Z-order layering to force win above convo
++      win.setAlwaysOnTop(true, 'pop-up-menu');
++      if (convoWin && !convoWin.isDestroyed() && convoWin.isVisible()) {
++        convoWin.setAlwaysOnTop(true, 'floating');
++      }
++      win.focus();
+     }
+   });
+ 
+   ipcMain.on('focus-convo-window', () => {
+-    if (convoWin && !convoWin.isDestroyed()) {
+-      stackWindows(convoWin, win);
++    if (convoWin && !convoWin.isDestroyed() && convoWin.isVisible()) {
++      // Use Electron's native Z-order layering to force convo above win
++      convoWin.setAlwaysOnTop(true, 'pop-up-menu');
++      if (win && !win.isDestroyed() && win.isVisible()) {
++        win.setAlwaysOnTop(true, 'floating');
++      }
++      convoWin.focus();
+     }
+   });
+ 
+@@ -852,7 +861,7 @@ app.whenReady().then(() => {
+     try {
+       if (!app.isPackaged) {
+         console.log('[UPDATE] Skipping real update check in development mode');
+-        if (win) {
++        if (win && !win.isDestroyed()) {
+           setTimeout(() => {
+             win.webContents.send('update-check-result', 'latest');
+           }, 1500);
+@@ -861,16 +870,19 @@ app.whenReady().then(() => {
+       }
+ 
+       if (!autoUpdater) initAutoUpdater();
++
+       if (autoUpdater) {
+         autoUpdater.checkForUpdates().catch(err => {
+           console.error('[UPDATE ERROR] Manual check failed:', err);
+-          if (win) win.webContents.send('update-check-result', 'error', err.message);
++          if (win && !win.isDestroyed()) win.webContents.send('update-check-result', 'error', err.message);
+         });
+       } else {
+         console.error('[UPDATE ERROR] autoUpdater not available after init');
++        if (win && !win.isDestroyed()) win.webContents.send('update-check-result', 'error', 'autoUpdater initialization failed.');
+       }
+     } catch (err) {
+       console.error('[UPDATE ERROR] Crash in manual-update-check handler:', err);
++      if (win && !win.isDestroyed()) win.webContents.send('update-check-result', 'error', 'Crash in check process.');
+     }
+   });
+ 
+@@ -912,7 +924,7 @@ function cleanupBackend() {
+     // 3. Kill Port 5050 (Crucial for dev mode)
+     try {
+       console.log('[EXIT] Cleaning up port 5050...');
+-      const output = execSync('netstat -ano | findstr :5050', { encoding: 'utf8' });
++      const output = execSync('netstat -ano | findstr :5050', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+       if (output) {
+         const lines = output.trim().split('\n');
+         lines.forEach(line => {
+@@ -920,12 +932,17 @@ function cleanupBackend() {
+           const pid = parts[parts.length - 1];
+           if (pid && pid !== '0' && !isNaN(pid)) {
+             console.log(`[EXIT] Killing process on port 5050 (PID: ${pid})...`);
+-            execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
++            try {
++              execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
++            } catch (kille) {
++              console.log(`[EXIT] Failed to kill PID ${pid} or it was already dead.`);
++            }
+           }
+         });
+       }
+     } catch (e) {
+       // Netstat might fail if no matches found, which is fine
++      console.log('[EXIT] No process found port 5050 or netstat failed.');
+     }
+   }
+ 

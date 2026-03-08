@@ -215,13 +215,9 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="convo.js"></script>
+    <script src="convo.js?v=3.2"></script>
     <script>
-        document.addEventListener('mousedown', () => {
-            if (window.ipcRenderer) {
-                window.ipcRenderer.send('focus-convo-window');
-            }
-        }, true);
+        // Removed anti-pattern mousedown listener
     </script>
 </body>
 
