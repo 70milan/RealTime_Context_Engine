@@ -18,6 +18,18 @@ if "%GH_TOKEN%"=="" (
     set "GH_TOKEN=!TOKEN_INPUT!"
 )
 
+:: 1b. Check for Certificate Password
+if "%CSC_KEY_PASSWORD%"=="" (
+    echo [WARNING] CSC_KEY_PASSWORD environment variable is NOT detected.
+    set /p "CERT_PW_INPUT=Please enter your certificate password: "
+    if "!CERT_PW_INPUT!"=="" (
+        echo [ERROR] No certificate password provided. Code signing will fail.
+        pause
+        exit /b 1
+    )
+    set "CSC_KEY_PASSWORD=!CERT_PW_INPUT!"
+)
+
 :: 2. Find signtool.exe
 echo [INFO] Locating signtool.exe...
 set "SIGNTOOL_PATH="
@@ -61,7 +73,7 @@ pyinstaller interview-backend.spec || (echo [ERROR] PyInstaller failed & pause &
 if not "!SIGNTOOL_PATH!"=="" (
     if exist "..\windows-runtime-host.pfx" (
         echo [INFO] Signing backend binary...
-        signtool sign /f "..\windows-runtime-host.pfx" /p 1234 /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\WinHostSvc.exe"
+        signtool sign /f "..\windows-runtime-host.pfx" /p "!CSC_KEY_PASSWORD!" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\WinHostSvc.exe"
     )
 )
 cd ..
