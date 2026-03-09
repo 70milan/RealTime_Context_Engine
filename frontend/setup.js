@@ -598,6 +598,28 @@ function initSession() {
         };
     }
 
+    // Reset App button
+    const resetAppBtn = document.getElementById('btn-reset-app');
+    if (resetAppBtn) {
+        resetAppBtn.onclick = async () => {
+            const confirmed = await customConfirm('Reset the app?\n\nThis will clear all saved settings (API key, license, preferences) and reload. Your session files on disk are not deleted.');
+            if (confirmed) {
+                try {
+                    if (window.ipcRenderer) {
+                        await window.ipcRenderer.invoke('reset-app');
+                    } else {
+                        localStorage.clear();
+                        location.reload();
+                    }
+                } catch (e) {
+                    console.error('Reset failed:', e);
+                    localStorage.clear();
+                    location.reload();
+                }
+            }
+        };
+    }
+
     // Tooltip helper function
     const createHoverTooltip = (triggerId, contentHtml) => {
         const trigger = document.getElementById(triggerId);
@@ -665,32 +687,19 @@ function initSession() {
         };
     };
 
-    // API Key info hover
-    createHoverTooltip('apikey-info',
-        '<div style="color: rgba(100,255,150,0.9); font-weight: bold; margin-bottom: 8px;">API Key Information</div>' +
-        'You need your own OpenAI API key to use this app.<br><br>' +
-        '<strong style="color: #fff;">HOW TO GET ONE:</strong><br>' +
-        '1. Go to <a href="https://platform.openai.com" target="_blank" style="color: rgba(100, 255, 150, 0.9);">platform.openai.com</a><br>' +
-        '2. Sign up or log in<br>' +
-        '3. Go to API Keys section<br>' +
-        '4. Create a new secret key (starts with sk-)<br><br>' +
-        '<strong style="color: #fff;">EXAMPLE COST:</strong><br>' +
-        '- 50 AI responses = $0.15 - $0.30<br>' +
-        '- Full 2-hour interview = $0.50 - $1.00<br>' +
-        '- 10-100x cheaper than competitors!<br>' +
-        '<span style="color: rgba(255,255,255,0.5); font-size: 10px; margin-top: 5px; display: block;">Add $5-10 credit to start.</span>'
-    );
+    // API Key info toggle
+    const apikeyInfo = document.getElementById('apikey-info');
+    const apikeyPanel = document.getElementById('apikey-info-panel');
+    if (apikeyInfo && apikeyPanel) {
+        apikeyInfo.onclick = () => apikeyPanel.classList.toggle('open');
+    }
 
-    // License info hover
-    createHoverTooltip('license-info',
-        '<div style="color: rgba(100,255,150,0.9); font-weight: bold; margin-bottom: 8px;">License Information</div>' +
-        'Get a license key for full 2-hour sessions.<br><br>' +
-        'Email your Hardware ID to: <a href="mailto:mjulez70@gmail.com" style="color: rgba(100, 255, 150, 0.9);">mjulez70@gmail.com</a><br><br>' +
-        '<span style="color: rgba(255,255,255,0.6); font-size: 11px;">Your HWID is found below the license key input field.</span><br><br>' +
-        '<strong style="color: #fff;">One-time payment of $20 only:</strong><br>' +
-        'CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a><br>' +
-        'PayPal: <a href="https://paypal.me/passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">paypal.me/passdpawn</a>'
-    );
+    // License info toggle
+    const licenseInfo = document.getElementById('license-info');
+    const licensePanel = document.getElementById('license-info-panel');
+    if (licenseInfo && licensePanel) {
+        licenseInfo.onclick = () => licensePanel.classList.toggle('open');
+    }
 
     const hotkeysContent = '<div style="color: rgba(100,255,150,0.9); font-weight: bold; margin-bottom: 8px; text-transform: uppercase;">Keyboard Shortcuts</div>' +
         '<div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 11px;">' +
@@ -1337,7 +1346,15 @@ async function handleCreateSession() {
 
     } catch (e) {
         console.error('Session Creation Error:', e);
-        status.innerText = `Error: ${e.message}`;
+        if (typeof logError === 'function') logError('Session Creation Error: ' + e.message);
+        const msg = e.message || String(e);
+        if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ECONNREFUSED')) {
+            status.innerText = 'Cannot connect to backend. Restart the app and try again.';
+        } else if (msg.includes('Invalid API key') || msg.includes('401') || msg.includes('Unauthorized')) {
+            status.innerText = 'Invalid API key. Please check and re-enter your OpenAI API key.';
+        } else {
+            status.innerText = `Error: ${msg}`;
+        }
         status.style.color = "rgba(255, 107, 107, 0.5)";
         startBtn.disabled = false;
         startBtn.style.opacity = '1';
@@ -1663,24 +1680,25 @@ async function updateHWIDDisplay() {
         console.log('[DEBUG] Fetched HWID for display:', hwid);
 
         const setupDisplay = document.getElementById('hwid-setup-display');
+        const hwidCopyBtn = document.getElementById('hwid-copy-btn');
         if (setupDisplay) {
-            setupDisplay.style.display = 'block';
+            setupDisplay.style.display = 'flex';
             setupDisplay.querySelector('span').textContent = hwid;
 
             if (hwid === "Backend Offline") {
                 setupDisplay.querySelector('span').style.color = "rgba(255, 107, 107, 0.5)";
-                setupDisplay.style.cursor = 'default';
-                setupDisplay.onclick = null;
+                if (hwidCopyBtn) hwidCopyBtn.style.display = 'none';
             } else {
                 setupDisplay.querySelector('span').style.color = "rgba(100, 255, 150, 0.4)";
-                setupDisplay.title = 'Click to Copy';
-                setupDisplay.style.cursor = 'pointer';
-                setupDisplay.onclick = () => {
-                    navigator.clipboard.writeText(hwid);
-                    const span = setupDisplay.querySelector('span');
-                    span.textContent = 'COPIED';
-                    setTimeout(() => { span.textContent = hwid; }, 1000);
-                };
+                if (hwidCopyBtn) {
+                    hwidCopyBtn.style.display = 'inline-flex';
+                    hwidCopyBtn.onclick = () => {
+                        navigator.clipboard.writeText(hwid);
+                        const span = setupDisplay.querySelector('span');
+                        span.textContent = 'Copied!';
+                        setTimeout(() => { span.textContent = hwid; }, 1000);
+                    };
+                }
             }
             console.log('[DEBUG] HWID display updated on setup screen');
         } else {

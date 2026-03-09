@@ -519,6 +519,7 @@
             <button id="btn-past-sessions" type="button" class="setup-action-btn">Past Sessions</button>
             <button id="btn-guide" type="button" class="setup-action-btn">Guide</button>
             <button id="btn-hotkeys-setup" type="button" class="setup-action-btn">Hotkeys</button>
+            <button id="btn-reset-app" type="button" class="setup-action-btn" style="color: rgba(255, 107, 107, 0.5);" title="Clear all saved settings and reset the app">Reset App</button>
           </div>
         </div>
 
@@ -558,6 +559,13 @@
                 <label class="setup-check"><input type="checkbox" id="setup-short-responses" /><span>Short Responses</span></label>
               </div>
             </div>
+
+            <div class="setup-group setup-group-grow">
+              <div class="setup-group-title">Job Description</div>
+              <div class="setup-field setup-field-grow">
+                <textarea id="setup-jobdesc" class="setup-textarea" autocomplete="off" placeholder="Paste job description here..."></textarea>
+              </div>
+            </div>
           </div>
 
           <div class="setup-col">
@@ -568,20 +576,28 @@
                   OpenAI API Key <span id="apikey-info" class="setup-info-link" title="API Key Info">(?)</span>
                 </label>
                 <input type="password" id="setup-apikey" class="setup-input" placeholder="sk-..." autocomplete="new-password" />
+                <div id="apikey-info-panel" class="setup-info-panel">
+                  Get your key at <a href="https://platform.openai.com" target="_blank">platform.openai.com</a> &rarr; API Keys &rarr; Create new key.<br>
+                  Cost: ~$0.50&ndash;$1.00 per 2hr interview. Add $5&ndash;10 credit to start.
+                </div>
               </div>
               <div class="setup-field">
                 <label class="setup-label" for="setup-license">
                   License Key <span id="license-info" class="setup-info-link" title="Get a license">(?)</span>
                 </label>
                 <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)" autocomplete="off" />
-                <div id="hwid-setup-display" class="setup-hwid" style="display: none;">HWID: <span style="color: rgba(100, 255, 150, 0.4);">Fetching...</span></div>
+                <div id="license-info-panel" class="setup-info-panel">
+                  Email your HWID to <a href="mailto:mjulez70@gmail.com">mjulez70@gmail.com</a> &mdash; one-time $20.<br>
+                  Pay via <a href="https://cash.app/$passdpawn" target="_blank">CashApp</a> or <a href="https://paypal.me/passdpawn" target="_blank">PayPal</a>.
+                </div>
+                <div id="hwid-setup-display" class="setup-hwid" style="display: none;">HWID: <span style="color: rgba(100, 255, 150, 0.4);">Fetching...</span> <button id="hwid-copy-btn" class="hwid-copy-btn" title="Copy HWID" type="button"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
               </div>
             </div>
 
             <div class="setup-group setup-group-grow">
-              <div class="setup-group-title">Job Description</div>
+              <div class="setup-group-title">Backend Console</div>
               <div class="setup-field setup-field-grow">
-                <textarea id="setup-jobdesc" class="setup-textarea" autocomplete="off" placeholder="Paste job description here..."></textarea>
+                <div id="backend-terminal" class="backend-terminal"><span class="term-line term-dim">Waiting for backend...</span></div>
               </div>
             </div>
           </div>
@@ -977,8 +993,59 @@
       window.ipcRenderer.on('debug-log', (event, message) => {
         console.log(`[MAIN_DEBUG] ${message}`);
       });
+
+      // Backend console log feed
+      window.ipcRenderer.on('backend-log', (event, level, msg) => {
+        const term = document.getElementById('backend-terminal');
+        if (!term) return;
+        // Clear the placeholder on first real log
+        if (term.dataset.init !== '1') { term.innerHTML = ''; term.dataset.init = '1'; }
+        const cls = level === 'err' ? 'term-err' : level === 'ok' ? 'term-ok' : level === 'warn' ? 'term-warn' : 'term-info';
+        const line = document.createElement('span');
+        line.className = 'term-line ' + cls;
+        line.textContent = msg;
+        term.appendChild(line);
+        // Cap at 200 lines
+        while (term.children.length > 200) term.removeChild(term.firstChild);
+        term.scrollTop = term.scrollHeight;
+      });
     }
     const ipcRenderer = window.ipcRenderer;
+
+    // Log renderer errors to file via IPC
+    function logError(msg) {
+      try { if (ipcRenderer) ipcRenderer.send('log-error', msg); } catch(e) {}
+    }
+    window.addEventListener('error', (e) => {
+      logError(`Window error: ${e.message} at ${e.filename}:${e.lineno}`);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      logError(`Unhandled promise: ${e.reason}`);
+    });
+
+    // Friendly error message helper
+    function friendlyError(err) {
+      const msg = (err && err.message) ? err.message : String(err);
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ECONNREFUSED')) {
+        return 'Cannot connect to the backend server.\n\nMake sure the app backend is running. Try restarting the application.';
+      }
+      if (msg.includes('401') || msg.includes('Unauthorized')) {
+        return 'Your OpenAI API key is invalid or expired.\n\nGo to the setup screen and enter a valid API key.';
+      }
+      if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('rate limit')) {
+        return 'Rate limit reached.\n\nYou\'re sending requests too fast. Wait a moment and try again.';
+      }
+      if (msg.includes('403') || msg.includes('Forbidden')) {
+        return 'Access denied by OpenAI.\n\nYour API key may not have permission for this model. Check your OpenAI account.';
+      }
+      if (msg.includes('insufficient_quota') || msg.includes('billing')) {
+        return 'OpenAI billing issue.\n\nYour account may have run out of credits. Check your OpenAI billing page.';
+      }
+      if (msg.includes('500') || msg.includes('502') || msg.includes('503')) {
+        return 'The AI service is temporarily unavailable.\n\nThis is usually a temporary issue. Wait a moment and try again.';
+      }
+      return msg;
+    }
 
     // Set version from package.json automatically via IPC
     (async function () {
@@ -1185,8 +1252,10 @@
 
         socket.onerror = (err) => {
           console.error('WebSocket Error:', err);
-          statusText.innerText = 'WS Error';
+          logError('WebSocket Error: ' + (err.message || 'connection failed'));
+          statusText.innerText = 'Connection Error';
           statusDot.className = 'dot error';
+          responseArea.innerText = 'Cannot connect to the backend server.\n\nMake sure the app is fully loaded and try again. If this persists, restart the application.';
         };
 
         socket.onclose = () => {
@@ -1196,8 +1265,9 @@
 
       } catch (err) {
         console.error('Start Error:', err);
+        logError('Start Error: ' + err.message);
         statusText.innerText = 'Error';
-        responseArea.innerText = `Start Error:\n${err.message}`;
+        responseArea.innerText = friendlyError(err);
         stopCapture();
       }
     }
@@ -1503,13 +1573,15 @@
           if (btnGenEl) btnGenEl.classList.remove('active');
         } catch (e) {
           console.error('AI Generation Error:', e);
-          responseArea.innerText = `Error: ${e.message}\n\nCheck if backend is running on port 5050.`;
+          logError('AI Generation Error: ' + e.message);
+          responseArea.innerText = friendlyError(e);
           transcriptSection.classList.remove('minimized');
           responseSection.classList.remove('maximized');
         }
       } catch (e) {
         console.error('Screen Capture Error:', e);
-        responseArea.innerText = `Error: ${e.message}`;
+        logError('Screen Capture Error: ' + e.message);
+        responseArea.innerText = `Screen capture failed: ${e.message}`;
       }
     };
 

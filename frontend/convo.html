@@ -89,6 +89,29 @@
             color: #ff5555;
         }
 
+        .convo-bottom-bar {
+            padding: 6px 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
+            display: flex;
+            align-items: center;
+        }
+
+        #export-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            border-radius: 4px;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+        }
+
         #export-btn:hover {
             color: rgba(100, 255, 150, 0.7);
         }
@@ -217,19 +240,17 @@
             </div>
         </div>
 
-        <!-- Bottom bar with export -->
+        <!-- Bottom bar -->
         <div class="convo-bottom-bar">
             <button id="export-btn" title="Export Conversation">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="7 10 12 15 17 10"></polyline>
                     <line x1="12" y1="15" x2="12" y2="3"></line>
                 </svg>
-                Export
             </button>
-            <span style="color: rgba(255,255,255,0.15); font-size: 9px; letter-spacing: 0.5px;" class="app-version"></span>
         </div>
+
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>

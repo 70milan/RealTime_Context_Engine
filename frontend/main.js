@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, screen, ipcMain, desktopCapturer, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn, execSync, exec } = require('child_process');
 let autoUpdater = null;
 
@@ -11,6 +12,47 @@ let isMiniMode = false;
 let backendProcess = null;
 let lastMiniPosition = null; // Remember where the mini icon was dragged to
 let isQuitting = false; // Track explicit quit to prevent close aborting
+
+// ============ FILE LOGGER ============
+const LOG_FILE = path.join(app.getPath('userData'), 'app-log.txt');
+
+function rotateLogIfNeeded() {
+  try {
+    if (fs.existsSync(LOG_FILE)) {
+      const stats = fs.statSync(LOG_FILE);
+      // Rotate at 2MB
+      if (stats.size > 2 * 1024 * 1024) {
+        const oldLog = LOG_FILE + '.old';
+        if (fs.existsSync(oldLog)) fs.unlinkSync(oldLog);
+        fs.renameSync(LOG_FILE, oldLog);
+      }
+    }
+  } catch (e) { /* ignore rotation errors */ }
+}
+
+function logToFile(level, ...args) {
+  try {
+    const timestamp = new Date().toISOString();
+    const message = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a, null, 0))).join(' ');
+    const line = `[${timestamp}] [${level}] ${message}\n`;
+    fs.appendFileSync(LOG_FILE, line, 'utf-8');
+  } catch (e) { /* never crash from logging */ }
+}
+
+// Rotate on startup
+rotateLogIfNeeded();
+logToFile('INFO', 'App starting', `v${app.getVersion()}`, `pid=${process.pid}`);
+
+// Catch uncaught exceptions
+process.on('uncaughtException', (err) => {
+  logToFile('FATAL', 'Uncaught Exception:', err.message, err.stack);
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logToFile('ERROR', 'Unhandled Rejection:', String(reason));
+  console.error('Unhandled Rejection:', reason);
+});
 
 // ============ SINGLE INSTANCE LOCK ============
 const gotTheLock = app.requestSingleInstanceLock();
@@ -291,19 +333,29 @@ function startBackend() {
   });
 
   backendProcess.stdout.on('data', (data) => {
-    console.log(`[BACKEND] ${data.toString()}`);
+    const msg = data.toString().trim();
+    console.log(`[BACKEND] ${msg}`);
+    logToFile('BACKEND', msg);
+    if (win && !win.isDestroyed()) win.webContents.send('backend-log', 'info', msg);
   });
 
   backendProcess.stderr.on('data', (data) => {
-    console.error(`[BACKEND ERROR] ${data.toString()}`);
+    const msg = data.toString().trim();
+    console.error(`[BACKEND ERROR] ${msg}`);
+    logToFile('BACKEND_ERR', msg);
+    if (win && !win.isDestroyed()) win.webContents.send('backend-log', 'err', msg);
   });
 
   backendProcess.on('error', (err) => {
     console.error('Failed to start backend:', err);
+    logToFile('ERROR', 'Failed to start backend:', err.message);
+    if (win && !win.isDestroyed()) win.webContents.send('backend-log', 'err', 'Failed to start backend: ' + err.message);
   });
 
   backendProcess.on('exit', (code) => {
     console.log(`Backend exited with code ${code}`);
+    logToFile('INFO', `Backend exited with code ${code}`);
+    if (win && !win.isDestroyed()) win.webContents.send('backend-log', code === 0 ? 'ok' : 'err', `Backend exited with code ${code}`);
   });
 }
 
@@ -936,7 +988,48 @@ app.whenReady().then(() => {
 
   /* ---- IPC: Close App ---- */
   ipcMain.on('close-app', () => {
+    logToFile('INFO', 'App closed by user');
     app.quit();
+  });
+
+  /* ---- IPC: Renderer Error Logging ---- */
+  ipcMain.on('log-error', (event, msg) => {
+    logToFile('RENDERER', msg);
+  });
+
+  /* ---- IPC: Get Log Path ---- */
+  ipcMain.handle('get-log-path', () => {
+    return LOG_FILE;
+  });
+
+  /* ---- IPC: Reset App ---- */
+  ipcMain.handle('reset-app', async () => {
+    logToFile('INFO', 'App reset requested by user');
+    // Clear the session on the backend
+    try {
+      const http = require('http');
+      await new Promise((resolve) => {
+        const req = http.request('http://127.0.0.1:5050/conversation/clear', { method: 'POST' }, () => resolve());
+        req.on('error', () => resolve());
+        req.end();
+      });
+      await new Promise((resolve) => {
+        const req = http.request('http://127.0.0.1:5050/usage/reset', { method: 'POST' }, () => resolve());
+        req.on('error', () => resolve());
+        req.end();
+      });
+    } catch (e) { /* backend may be down, that's ok */ }
+
+    // Clear renderer localStorage and reload
+    if (win && !win.isDestroyed()) {
+      await win.webContents.executeJavaScript('localStorage.clear()');
+      win.webContents.reload();
+    }
+    if (convoWin && !convoWin.isDestroyed()) {
+      convoWin.webContents.send('clear-convo-history');
+      convoWin.hide();
+    }
+    return { success: true };
   });
 
   /* ---- IPC: Manual Update Check ---- */
@@ -1037,6 +1130,7 @@ function cleanupBackend() {
 }
 
 app.on('will-quit', () => {
+  logToFile('INFO', 'App quitting');
   globalShortcut.unregisterAll();
   cleanupBackend();
 });
