@@ -15,9 +15,8 @@
             padding: 0;
             background-color: transparent;
             color: rgba(255, 255, 255, 0.9);
-            font-family: 'Segoe UI', Arial, sans-serif;
+            font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
             overflow: hidden;
-            /* Main window scroll disabled */
             display: flex;
             flex-direction: column;
             height: 100vh;
@@ -25,9 +24,9 @@
 
         /* Outer Wrapper for floating rounded look */
         .convo-wrapper {
-            background: rgba(30, 30, 30, 0.98);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
+            background: linear-gradient(160deg, #0a0a0a 0%, #141428 100%);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
             display: flex;
             flex-direction: column;
             height: 100vh;
@@ -42,41 +41,56 @@
             justify-content: space-between;
             align-items: center;
             padding: 12px 16px;
-            background: rgba(20, 20, 20, 0.6);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
             flex-shrink: 0;
         }
 
         #convo-session-title {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 12px;
+            color: rgba(100, 255, 150, 0.5);
+            font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            font-weight: 500;
+            letter-spacing: 2px;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
         }
 
         .window-controls {
             -webkit-app-region: no-drag;
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+            margin-left: auto;
+            padding-left: 12px;
         }
 
         .close-btn {
             background: none;
             border: none;
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 18px;
+            color: rgba(255, 255, 255, 0.35);
             cursor: pointer;
-            padding: 0px 6px;
+            padding: 0;
             line-height: 1;
-            border-radius: 50%;
-            transition: all 0.2s ease;
+            border-radius: 4px;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            flex-shrink: 0;
         }
 
         .close-btn:hover {
-            color: rgba(255, 107, 107, 0.8);
-            background: rgba(255, 255, 255, 0.05);
-            transform: scale(1.1);
+            color: #ff5555;
+        }
+
+        #export-btn:hover {
+            color: rgba(100, 255, 150, 0.7);
         }
 
         /* Scrolling Chat Area */
@@ -121,22 +135,22 @@
         }
 
         .empty-state {
-            color: rgba(255, 255, 255, 0.3);
-            font-size: 12px;
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 11px;
             text-align: center;
             padding: 30px;
             margin-top: auto;
+            letter-spacing: 0.5px;
         }
 
         /* Bottom Stats Footer */
         #convo-avg-stats {
             padding: 8px 16px;
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-            color: rgba(255, 255, 255, 0.3);
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
+            color: rgba(255, 255, 255, 0.25);
             font-size: 10px;
             letter-spacing: 0.5px;
             display: none;
-            /* hidden until valid stats */
             gap: 18px;
             justify-content: flex-end;
             font-family: monospace;
@@ -144,16 +158,16 @@
         }
 
         .stats-val-green {
-            color: rgba(100, 220, 160, 0.8);
+            color: rgba(100, 255, 150, 0.7);
         }
 
         .stats-val-neutral {
-            color: rgba(200, 200, 200, 0.5);
+            color: rgba(255, 255, 255, 0.35);
         }
 
         #convo-footer {
             padding: 10px 16px;
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
             display: none;
             flex-shrink: 0;
         }
@@ -166,17 +180,7 @@
         <div class="title-bar">
             <span id="convo-session-title">Conversation Window</span>
             <div class="window-controls">
-                <button id="export-btn" class="close-btn"
-                    style="font-size: 14px; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px;"
-                    title="Export Conversation">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                </button>
-                <button id="close-btn" class="close-btn" title="Hide Conversation">&times;</button>
+                <button id="close-btn" class="close-btn" style="font-size: 20px;" title="Hide Conversation">&times;</button>
             </div>
         </div>
 
@@ -211,6 +215,20 @@
                 <span id="api-cost"
                     style="color: rgba(120, 200, 180, 0.85); font-weight: 600; font-size: 11px;">$0.00</span>
             </div>
+        </div>
+
+        <!-- Bottom bar with export -->
+        <div class="convo-bottom-bar">
+            <button id="export-btn" title="Export Conversation">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Export
+            </button>
+            <span style="color: rgba(255,255,255,0.15); font-size: 9px; letter-spacing: 0.5px;" class="app-version"></span>
         </div>
     </div>
 

@@ -1,6 +1,6 @@
 {
   "name": "windows-runtime-host",
-  "version": "2.0.54",
+  "version": "2.0.56",
   "description": "Interview Assistant - Secure Windows Runtime Host",
   "author": "mjulez70 <mjulez70@gmail.com>",
   "productName": "Interview Assistant",
@@ -48,6 +48,7 @@
       "**/*.node"
     ],
     "win": {
+      "executableName": "Realtime_ContextEngine",
       "target": [
         {
           "target": "nsis",

@@ -343,7 +343,7 @@ function createWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     transparent: true,
-    backgroundColor: '#1e1e1eAA',
+    backgroundColor: '#0a0a0aEE',
     opacity: 0.95,
     resizable: true,
     webPreferences: {
@@ -706,7 +706,7 @@ app.whenReady().then(() => {
       const miniPos = lastMiniPosition || { x: fx, y: fy };
       win.setOpacity(1.0);
       win.setBackgroundColor('#00000000');
-      win.setBounds({ x: miniPos.x, y: miniPos.y, width: 50, height: 50 });
+      win.setBounds({ x: miniPos.x, y: miniPos.y, width: 52, height: 52 });
       win.webContents.setZoomFactor(1.0); // Reset zoom for mini icon
       win.setResizable(false);
       win.webContents.executeJavaScript(`
@@ -728,7 +728,7 @@ app.whenReady().then(() => {
 
       // Expand back
       win.setOpacity(0.95);
-      win.setBackgroundColor('#1e1e1eAA');
+      win.setBackgroundColor('#0a0a0aEE');
       win.setResizable(true);
 
       // Restore the exact position it had before mini mode
@@ -857,7 +857,7 @@ app.whenReady().then(() => {
     const [mx, my] = win.getPosition();
     lastMiniPosition = { x: mx, y: my };
     win.setOpacity(0.95);
-    win.setBackgroundColor('#1e1e1eAA');
+    win.setBackgroundColor('#0a0a0aEE');
     win.setResizable(true);
     const bounds = centerTop(800, 600);
     win.setBounds(bounds);

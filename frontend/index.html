@@ -39,9 +39,9 @@
     }
 
     body {
-      background-color: rgba(30, 30, 30, 0.95);
+      background: linear-gradient(160deg, #0a0a0a 0%, #141428 100%);
       color: #ffffff;
-      font-family: "Segoe UI", Arial, sans-serif;
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
       padding: 0;
       margin: 0;
       height: 100vh;
@@ -94,53 +94,51 @@
     }
 
     body.mini #mini-icon {
-      animation: icon-pulse 3s ease-in-out infinite;
+      display: flex;
+      animation: mini-breathe 3.5s ease-in-out infinite;
     }
 
     body.mini #mini-icon:hover {
       animation: none;
+      background: radial-gradient(circle, rgba(100, 255, 150, 0.35) 0%, rgba(100, 255, 150, 0.08) 60%, transparent 75%);
+      box-shadow: 0 0 14px rgba(100, 255, 150, 0.2);
     }
 
-    body.mini #mini-icon {
-      display: flex;
+    body.mini #mini-icon:hover .mini-dot {
+      background: rgba(100, 255, 150, 0.95);
+      box-shadow: 0 0 8px rgba(100, 255, 150, 0.6);
+      transform: scale(1.15);
     }
 
     #mini-icon {
       display: none;
       width: 100%;
       height: 100%;
-      background: transparent;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.06) 0%, transparent 70%);
       border-radius: 50%;
       align-items: center;
       justify-content: center;
-      font-size: 30px;
-      line-height: 1;
-      padding-top: 2px;
-      /* Visual centering adjustment */
-      font-family: -apple-system, 'Segoe UI', sans-serif;
-      font-weight: 400;
-      color: rgba(255, 255, 255, 0.45);
-      border: none;
-      box-shadow: none;
       cursor: pointer;
-      transition: color 0.2s ease;
+      transition: background 0.3s, box-shadow 0.3s;
       -webkit-app-region: drag;
       user-select: none;
     }
 
-    #mini-icon:hover {
-      color: #39ff14;
+    .mini-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: rgba(100, 255, 150, 0.5);
+      box-shadow: 0 0 10px rgba(100, 255, 150, 0.15);
+      transition: background 0.25s, box-shadow 0.25s, transform 0.25s;
     }
 
-    @keyframes icon-pulse {
-
-      0%,
-      100% {
-        color: rgba(57, 255, 20, 0.4);
+    @keyframes mini-breathe {
+      0%, 100% {
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 70%);
       }
-
       50% {
-        color: #39ff14;
+        background: radial-gradient(circle, rgba(100, 255, 150, 0.1) 0%, transparent 70%);
       }
     }
 
@@ -162,7 +160,7 @@
       display: flex;
       flex: 1;
       flex-direction: column;
-      padding: 15px;
+      padding: 14px 16px;
       gap: 10px;
       min-height: 0;
     }
@@ -177,15 +175,15 @@
 
     .btn {
       flex: 1;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       padding: 6px;
-      border-radius: 4px;
+      border-radius: 6px;
       font-size: 9px;
       cursor: pointer;
       font-weight: 500;
       transition: all 0.15s;
       background-color: rgba(255, 255, 255, 0.03);
-      color: rgba(255, 255, 255, 0.5);
+      color: rgba(255, 255, 255, 0.45);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -196,22 +194,32 @@
 
     .btn:hover {
       background-color: rgba(255, 255, 255, 0.06);
-      border-color: rgba(255, 255, 255, 0.15);
-      color: rgba(255, 255, 255, 0.7);
+      border-color: rgba(100, 255, 150, 0.15);
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    .screen-btn-group:hover {
+      border-color: rgba(100, 255, 150, 0.15);
+      background-color: rgba(255, 255, 255, 0.02);
+    }
+
+    .screen-btn-group .btn:hover {
+      background-color: rgba(255, 255, 255, 0.08) !important;
+      color: rgba(255, 255, 255, 0.8) !important;
     }
 
     .btn.active {
-      background-color: rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.9);
-      border-color: rgba(255, 255, 255, 0.2);
+      background-color: rgba(100, 255, 150, 0.06);
+      color: rgba(100, 255, 150, 0.9);
+      border-color: rgba(100, 255, 150, 0.2);
     }
 
     .section {
       flex: 5;
       background-color: rgba(255, 255, 255, 0.02);
-      border-radius: 4px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 12px 14px;
       overflow-y: auto;
       overflow-x: hidden;
       display: flex;
@@ -237,12 +245,12 @@
     }
 
     .section-header {
-      font-size: 10px;
-      color: rgba(255, 255, 255, 0.4);
+      font-size: 9px;
+      color: rgba(100, 255, 150, 0.5);
       margin-bottom: 8px;
       text-transform: uppercase;
-      letter-spacing: 1.5px;
-      font-weight: 500;
+      letter-spacing: 1.8px;
+      font-weight: 600;
       display: flex;
       justify-content: space-between;
       flex-shrink: 0;
@@ -294,22 +302,22 @@
     }
 
     #response-area code {
-      background-color: rgba(255, 255, 255, 0.1);
-      padding: 2px 4px;
-      border-radius: 3px;
+      background-color: rgba(255, 255, 255, 0.07);
+      padding: 2px 5px;
+      border-radius: 4px;
       font-family: 'Consolas', 'Courier New', monospace;
       font-size: 13px;
-      color: #ffa07a;
+      color: rgba(100, 255, 150, 0.75);
       display: inline;
     }
 
     #response-area pre {
-      background-color: #1e1e1e;
-      padding: 10px;
-      border-radius: 4px;
+      background-color: rgba(10, 10, 18, 0.6);
+      padding: 12px;
+      border-radius: 8px;
       overflow-x: auto;
       margin: 8px 0;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       white-space: pre;
     }
 
@@ -329,10 +337,11 @@
       align-items: center;
       justify-content: space-between;
       font-size: 10px;
-      color: rgba(255, 255, 255, 0.4);
-      padding: 0 5px;
+      color: rgba(255, 255, 255, 0.3);
+      padding: 4px 8px;
       flex-shrink: 0;
       letter-spacing: 0.5px;
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
     }
 
     .status-indicator {
@@ -342,15 +351,15 @@
     }
 
     .dot {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background-color: #555;
+      background-color: rgba(255, 255, 255, 0.15);
     }
 
     .dot.connected {
-      background-color: rgba(100, 255, 100, 0.8);
-      box-shadow: 0 0 4px rgba(100, 255, 100, 0.4);
+      background-color: rgba(100, 255, 150, 0.7);
+      box-shadow: 0 0 6px rgba(100, 255, 150, 0.3);
     }
 
     .dot.error {
@@ -364,19 +373,19 @@
       flex-direction: column;
       gap: 2px;
       flex: 1;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 4px;
-      background-color: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      background-color: rgba(255, 255, 255, 0.02);
       padding: 3px;
     }
 
     .session-btn {
       padding: 2px 6px;
       font-size: 8px;
-      border-radius: 3px;
+      border-radius: 4px;
       border: none;
       background-color: transparent;
-      color: rgba(255, 255, 255, 0.5);
+      color: rgba(255, 255, 255, 0.45);
       cursor: pointer;
       transition: all 0.2s;
       display: flex;
@@ -388,8 +397,8 @@
     }
 
     .session-btn:hover {
-      background-color: rgba(255, 255, 255, 0.06);
-      color: #ddd;
+      background-color: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.8);
     }
 
     /* Start button */
@@ -475,32 +484,10 @@
 <body>
   <!-- Session Error Popup -->
   <div id="session-error-popup"
-    style="display: none; position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(30, 30, 30, 0.95); border: 1px solid rgba(255, 107, 107, 0.5); color: rgba(255, 107, 107, 0.9); padding: 8px 16px; border-radius: 4px; font-size: 11px; z-index: 20000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s ease; opacity: 0; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">
+    style="display: none; position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(10, 10, 18, 0.95); border: 1px solid rgba(255, 107, 107, 0.3); color: rgba(255, 107, 107, 0.85); padding: 8px 16px; border-radius: 8px; font-size: 11px; z-index: 20000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s ease; opacity: 0; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">
     Please start the session first
   </div>
   <style>
-    #close-btn {
-      position: absolute;
-      top: 8px;
-      right: 15px;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 10001;
-      color: rgba(255, 255, 255, 0.6);
-      transition: all 0.2s ease;
-    }
-
-    #close-btn:hover {
-      color: rgba(255, 107, 107, 0.8);
-      background: rgba(255, 255, 255, 0.05);
-      transform: scale(1.1);
-    }
-
     #btn-start-session:focus,
     #btn-start-session:active,
     #btn-start-session:focus-visible {
@@ -509,152 +496,129 @@
       -webkit-tap-highlight-color: transparent;
     }
   </style>
-  <div id="setup-overlay"
-    style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(30, 30, 30, 0.95); z-index: 9999; align-items: stretch; justify-content: stretch;">
-    <div id="close-btn" title="Close App">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer;">
-        <line x1="18" y1="6" x2="6" y2="18"></line>
-        <line x1="6" y1="6" x2="18" y2="18"></line>
-      </svg>
+  <div id="setup-overlay">
+    <div class="setup-top-bar">
+      <span id="license-status-badge"></span>
+      <div id="close-btn" title="Close App">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </div>
     </div>
-    <span id="license-status-badge"
-      style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; z-index: 10001;"></span>
 
-    <div
-      style="width: 80%; max-width: 800px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; padding: 32px 20px 12px 20px; box-sizing: border-box; overflow: hidden;">
-      <form autocomplete="off"
-        style="display: flex; flex-direction: column; gap: 5px; flex: 1; align-items: stretch; max-width: 100%; overflow-y: auto; padding-right: 4px;">
-        <div
-          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; justify-content: flex-start; margin-bottom: 2px; flex-shrink: 0;">
-          <div style="width: 100%; display: flex; gap: 8px;">
-            <button id="btn-past-sessions" type="button"
-              style="flex: 1; padding: 6px 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; outline: none;">Past
-              Sessions</button>
-            <button id="btn-guide" type="button"
-              style="flex: 1; padding: 6px 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; outline: none;">Guide</button>
-            <button id="btn-hotkeys-setup" type="button"
-              style="flex: 1; padding: 6px 0; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.5); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; outline: none;">Hotkeys</button>
+    <div class="setup-shell">
+      <form autocomplete="off" class="setup-form">
+        <div class="setup-header">
+          <div class="setup-header-left">
+            <h1 class="setup-title">Create Session</h1>
+            <p class="setup-subtitle">Configure your interview workspace</p>
+          </div>
+          <div class="setup-header-actions">
+            <button id="btn-past-sessions" type="button" class="setup-action-btn">Past Sessions</button>
+            <button id="btn-guide" type="button" class="setup-action-btn">Guide</button>
+            <button id="btn-hotkeys-setup" type="button" class="setup-action-btn">Hotkeys</button>
           </div>
         </div>
-        <div
-          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0;">
-          <label
-            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Session
-            Name</label>
-          <input type="text" id="setup-session-name" placeholder="e.g., Google_Manager_Dec2025" autocomplete="off"
-            style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
-        </div>
-        <div style="width: 100%; box-sizing: border-box; display: flex; flex-direction: row; gap: 8px; flex-shrink: 0;">
-          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
-              style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Target
-              Role <span style="color: #ff6b6b; font-size: 10px;">*</span></label>
-            <input type="text" id="setup-role" placeholder="e.g., Data Engineer" autocomplete="off"
-              style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
+
+        <div class="setup-columns">
+          <div class="setup-col">
+            <div class="setup-group">
+              <div class="setup-group-title">Session Details</div>
+              <div class="setup-field">
+                <label class="setup-label" for="setup-session-name">Session Name</label>
+                <input type="text" id="setup-session-name" class="setup-input" placeholder="e.g., Google_Manager_Dec2025" autocomplete="off" />
+              </div>
+              <div class="setup-row">
+                <div class="setup-field">
+                  <label class="setup-label" for="setup-role">Target Role <span class="setup-req">*</span></label>
+                  <input type="text" id="setup-role" class="setup-input" placeholder="e.g., Data Engineer" autocomplete="off" />
+                </div>
+                <div class="setup-field">
+                  <label class="setup-label" for="setup-language">Language <span class="setup-req">*</span></label>
+                  <input type="text" id="setup-language" class="setup-input" placeholder="e.g., Python" autocomplete="off" />
+                </div>
+              </div>
+            </div>
+
+            <div class="setup-group">
+              <div class="setup-group-title">Resume &amp; Preferences</div>
+              <div class="setup-field">
+                <label class="setup-label">Resume (.docx)</label>
+                <div class="setup-file-row">
+                  <input type="file" id="setup-resume" accept=".docx" style="display: none;" />
+                  <button type="button" id="resume-btn" class="setup-file-btn" onclick="document.getElementById('setup-resume').click()">Choose File</button>
+                  <span id="resume-filename" class="setup-file-name">No file selected</span>
+                  <button type="button" id="resume-detach-btn" class="setup-icon-btn" style="display: none;" title="Remove resume">&times;</button>
+                </div>
+              </div>
+              <div class="setup-checks">
+                <label class="setup-check"><input type="checkbox" id="setup-esl" /><span>ESL Mode</span></label>
+                <label class="setup-check"><input type="checkbox" id="setup-short-responses" /><span>Short Responses</span></label>
+              </div>
+            </div>
           </div>
-          <div style="flex: 1; display: flex; flex-direction: column; align-items: stretch;"><label
-              style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Output
-              Language <span style="color: #ff6b6b; font-size: 10px;">*</span></label>
-            <input type="text" id="setup-language" placeholder="e.g., Python" autocomplete="off"
-              style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
+
+          <div class="setup-col">
+            <div class="setup-group">
+              <div class="setup-group-title">Credentials</div>
+              <div class="setup-field">
+                <label class="setup-label" for="setup-apikey">
+                  OpenAI API Key <span id="apikey-info" class="setup-info-link" title="API Key Info">(?)</span>
+                </label>
+                <input type="password" id="setup-apikey" class="setup-input" placeholder="sk-..." autocomplete="new-password" />
+              </div>
+              <div class="setup-field">
+                <label class="setup-label" for="setup-license">
+                  License Key <span id="license-info" class="setup-info-link" title="Get a license">(?)</span>
+                </label>
+                <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)" autocomplete="off" />
+                <div id="hwid-setup-display" class="setup-hwid" style="display: none;">HWID: <span style="color: rgba(100, 255, 150, 0.4);">Fetching...</span></div>
+              </div>
+            </div>
+
+            <div class="setup-group setup-group-grow">
+              <div class="setup-group-title">Job Description</div>
+              <div class="setup-field setup-field-grow">
+                <textarea id="setup-jobdesc" class="setup-textarea" autocomplete="off" placeholder="Paste job description here..."></textarea>
+              </div>
+            </div>
           </div>
         </div>
-        <div
-          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0;">
-          <label
-            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Resume</label>
-          <div style="display: flex; align-items: center; gap: 5px; width: 100%; box-sizing: border-box;">
-            <input type="file" id="setup-resume" accept=".docx" style="display: none;" />
-            <button type="button" id="resume-btn" onclick="document.getElementById('setup-resume').click()"
-              style="padding: 5px 10px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6); font-size: 9px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; outline: none; flex-shrink: 0;">Choose</button>
-            <span id="resume-filename"
-              style="color: rgba(255, 255, 255, 0.4); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; flex: 1;">Empty</span>
-            <button type="button" id="resume-detach-btn"
-              style="display: none; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 12px; cursor: pointer; padding: 2px 5px; line-height: 1; border-radius: 50%; transition: all 0.2s ease; outline: none; flex-shrink: 0;"
-              title="Remove resume">&times;</button>
+
+        <div class="setup-footer">
+          <div id="setup-status" class="setup-status-line"></div>
+          <div class="setup-footer-row">
+            <label class="setup-disclaimer">
+              <input type="checkbox" id="setup-disclaimer-agree" disabled style="cursor: pointer; accent-color: rgba(100, 255, 150, 0.6);" />
+              <span>I agree to the <span id="btn-ethical-open" class="setup-info-link">Ethical Usage Policy</span></span>
+            </label>
+            <button id="btn-start-session" type="button" class="setup-cta">Create Session</button>
           </div>
-        </div>
-        <div
-          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0;">
-          <label
-            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500; display: flex; align-items: center; gap: 6px;">OpenAI
-            API Key
-            <span id="apikey-info"
-              style="cursor: pointer; color: rgba(100, 255, 150, 0.6); font-size: 9px; font-weight: normal;"
-              title="API Key Info">(?)</span>
-          </label>
-          <input type="password" id="setup-apikey" placeholder="sk-..." autocomplete="new-password"
-            style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
-        </div>
-        <div
-          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0;">
-          <label
-            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500; display: flex; align-items: center; gap: 6px;">License
-            Key
-            <span id="license-info"
-              style="cursor: pointer; color: rgba(100, 255, 150, 0.6); font-size: 9px; font-weight: normal;"
-              title="Get a license">(?)</span>
-          </label>
-          <input type="password" id="setup-license" placeholder="Demo (12m)" autocomplete="off"
-            style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; font-size: 11px; outline: none;" />
-          <div id="hwid-setup-display"
-            style="color: rgba(255, 255, 255, 0.2); font-size: 8px; margin-top: 2px; text-align: left; font-family: monospace; display: none;">
-            HWID: <span style="color: rgba(100, 255, 150, 0.4);">Fetching...</span>
-          </div>
-        </div>
-        <div
-          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; flex: 1; min-height: 48px; flex-shrink: 0;">
-          <label
-            style="color: rgba(255, 255, 255, 0.5); font-size: 9px; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1.5px; text-align: left; font-weight: 500;">Job
-            Description</label>
-          <textarea id="setup-jobdesc" autocomplete="off"
-            style="width: 100%; box-sizing: border-box; padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: #fff; font-family: 'Segoe UI', Arial; resize: none; flex: 1; min-height: 25px; font-size: 11px; outline: none;"
-            placeholder="Paste job description..."></textarea>
-        </div>
-        <div id="setup-status"
-          style="color: rgba(255, 255, 255, 0.4); font-size: 9px; min-height: 14px; width: 100%; box-sizing: border-box; text-align: left; margin: 0; flex-shrink: 0;">
-        </div>
-        <div
-          style="width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; margin-bottom: 2px; padding: 6px 10px; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px; flex-shrink: 0;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
-            <input type="checkbox" id="setup-disclaimer-agree" disabled
-              style="cursor: pointer; accent-color: rgba(100, 255, 150, 0.6);" />
-            <span style="color: rgba(255, 255, 255, 0.5); font-size: 9px; line-height: 1.2;">
-              By creating or loading a session, you agree to the
-              <span id="btn-ethical-open"
-                style="color: rgba(100, 255, 150, 0.8); cursor: pointer; text-decoration: underline;">Ethical Usage
-                Policy</span>.
-            </span>
-          </label>
-        </div>
-        <button id="btn-start-session" type="button"
-          style="width: 100%; box-sizing: border-box; padding: 8px 0; background: rgba(100, 200, 150, 0.15); border: 1px solid rgba(100, 200, 150, 0.3); border-radius: 4px; color: rgba(255, 255, 255, 0.9); font-weight: 600; cursor: pointer; font-size: 11px; transition: all 0.2s; letter-spacing: 1.5px; text-transform: uppercase; outline: none; flex-shrink: 0;"
-          onmouseover="this.style.background='rgba(100, 200, 150, 0.25)';"
-          onmouseout="this.style.background='rgba(100, 200, 150, 0.15)';">Create Session</button>
-        <div
-          style="text-align: center; color: rgba(255,255,255,0.25); font-size: 10px; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;">
-          <span class="app-version">v2.0.0</span>
-          <span style="color: rgba(255,255,255,0.15);">|</span>
-          <span id="check-update-btn" style="cursor: pointer; transition: color 0.2s; -webkit-app-region: no-drag;"
-            onmouseover="this.style.color='rgba(255,255,255,0.5)'"
-            onmouseout="this.style.color='rgba(255,255,255,0.25)'">Check for updates</span>
         </div>
       </form>
+    </div>
+
+    <div class="setup-bottom-meta">
+      <span class="app-version">v2.0.0</span>
+      <span class="setup-sep">|</span>
+      <span id="check-update-btn" class="setup-meta-link">Check for updates</span>
     </div>
   </div>
   <!-- Past Sessions Modal -->
   <div id="past-sessions-modal"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10001; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10001; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 500px; width: 90%; max-height: 70vh; display: flex; flex-direction: column;">
+      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 500px; width: 90%; max-height: 70vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <span
-          style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Past
+          style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Past
           Sessions</span>
         <button id="close-past-sessions" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.5); font-size: 18px; cursor: pointer; padding: 4px 6px; line-height: 1; border-radius: 50%; transition: all 0.2s ease;"
-          onmouseover="this.style.color='rgba(255, 107, 107, 0.8)'; this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1.1)';"
-          onmouseout="this.style.color='rgba(255,255,255,0.5)'; this.style.background='none'; this.style.transform='scale(1)';">&times;</button>
+          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
+          onmouseover="this.style.color='#ff5555'"
+          onmouseout="this.style.color='rgba(255,255,255,0.35)'">&times;</button>
       </div>
       <div id="past-sessions-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
         <div style="color: rgba(255,255,255,0.4); font-size: 12px; text-align: center; padding: 20px;">Loading...</div>
@@ -663,17 +627,17 @@
   </div>
   <!-- Session History Modal -->
   <div id="session-history-modal"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10002; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10002; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 16px; max-width: 580px; width: 72%; max-height: 64vh; display: flex; flex-direction: column;">
+      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 580px; width: 72%; max-height: 64vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <span id="session-history-title"
-          style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Session
+          style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Session
           History</span>
         <button id="close-session-history" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.5); font-size: 18px; cursor: pointer; padding: 4px 6px; line-height: 1; border-radius: 50%; transition: all 0.2s ease;"
-          onmouseover="this.style.color='rgba(255, 107, 107, 0.8)'; this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1.1)';"
-          onmouseout="this.style.color='rgba(255,255,255,0.5)'; this.style.background='none'; this.style.transform='scale(1)';">&times;</button>
+          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
+          onmouseover="this.style.color='#ff5555'"
+          onmouseout="this.style.color='rgba(255,255,255,0.35)'">&times;</button>
       </div>
       <div id="session-history-list"
         style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
@@ -731,16 +695,16 @@
 
   <!-- Guide Modal -->
   <div id="guide-modal"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10001; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10001; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 620px; width: 95%; max-height: 80vh; display: flex; flex-direction: column;">
+      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 620px; width: 95%; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <span
-          style="color: rgba(255,255,255,0.6); font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Guide</span>
+          style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Guide</span>
         <button id="close-guide" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.5); font-size: 20px; cursor: pointer; padding: 4px 6px; line-height: 1; border-radius: 50%; transition: all 0.2s ease;"
-          onmouseover="this.style.color='rgba(255, 107, 107, 0.8)'; this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1.1)';"
-          onmouseout="this.style.color='rgba(255,255,255,0.5)'; this.style.background='none'; this.style.transform='scale(1)';">&times;</button>
+          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
+          onmouseover="this.style.color='#ff5555'"
+          onmouseout="this.style.color='rgba(255,255,255,0.35)'">&times;</button>
       </div>
       <div
         style="flex: 1; overflow-y: auto; color: rgba(255,255,255,0.7); font-size: 12px; line-height: 1.6; padding-right: 8px;">
@@ -809,11 +773,20 @@
               style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+↑↓←→</span><span>Move
               App in Arrow Direction</span>
             <span
-              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+H</span><span>Toggle
-              Window Visibility</span>
+              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+F</span><span>Maximize
+              AI Response View</span>
             <span
               style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+C</span><span>Toggle
               Convo Window</span>
+            <span
+              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+Shift++</span><span>Increase
+              Convo Window Size</span>
+            <span
+              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+Shift+-</span><span>Decrease
+              Convo Window Size</span>
+            <span
+              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+Shift+O</span><span>Reset
+              Convo Window Size</span>
             <span
               style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+Shift+↑↓←→</span><span>Move
               Convo Window</span>
@@ -863,43 +836,47 @@
 
   <!-- Hotkeys Modal (Setup Screen Only) -->
   <div id="hotkeys-modal"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10001; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10001; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 25px 30px; max-width: 500px; width: 95%; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 720px; width: 92%; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
         <span
-          style="color: rgba(100,255,150,0.9); font-size: 13px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Keyboard
-          Shortcuts</span>
+          style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Keyboard Shortcuts</span>
         <button id="close-hotkeys" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.4); font-size: 24px; cursor: pointer; padding: 0 5px; line-height: 1; transition: all 0.2s;"
+          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
           onmouseover="this.style.color='#ff5555'"
-          onmouseout="this.style.color='rgba(255,255,255,0.4)'">&times;</button>
+          onmouseout="this.style.color='rgba(255,255,255,0.35)'">&times;</button>
       </div>
-      <div
-        style="display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; color: rgba(255,255,255,0.7); font-size: 12px; line-height: 1.6;">
-        <!-- Group 1 -->
-        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl +
-          R</span><span>Toggle System Audio</span>
-        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl +
-          M</span><span>Toggle Mic Audio</span>
-        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl + K</span><span>Quick
-          Solve (No context)</span>
-        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl + S</span><span>Solve
-          + Save Context</span>
-        <span style="color: rgba(100,255,150,0.8); font-family: monospace; font-weight: 600;">Ctrl +
-          Enter</span><span>Process with AI</span>
-
-        <div style="grid-column: 1 / -1; height: 1px; background: rgba(255,255,255,0.08); margin: 6px 0;"></div>
-
-        <!-- Group 2 -->
-        <span style="color: rgba(255,255,255,0.4); font-family: monospace;">Ctrl + Q</span><span>Toggle Stealth
-          Mode</span>
-        <span style="color: rgba(255,255,255,0.4); font-family: monospace;">Ctrl + Alt + C</span><span>Toggle Convo
-          Window</span>
-        <span style="color: rgba(255,255,255,0.4); font-family: monospace;">Ctrl + Shift + Arrows</span><span>Scroll AI
-          Response</span>
-        <span style="color: rgba(255,255,255,0.4); font-family: monospace;">Ctrl + Alt + Sht + +/-</span><span>Resize
-          Convo Tab</span>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px;">
+        <div>
+          <div style="color: rgba(255,255,255,0.35); font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px;">Core Controls</div>
+          <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; color: rgba(255,255,255,0.65); font-size: 11px; line-height: 1.5;">
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+R</span><span>Toggle System Audio</span>
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+M</span><span>Toggle Mic Audio</span>
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+K</span><span>Screenshot + Quick Solve</span>
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+S</span><span>Screenshot + Save Context</span>
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Enter</span><span>Process Transcript</span>
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Backspace</span><span>Clear Transcript</span>
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Q</span><span>Toggle Mini Mode</span>
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Shift+Q</span><span>Quit App</span>
+            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+F</span><span>Maximize AI Response</span>
+          </div>
+        </div>
+        <div>
+          <div style="color: rgba(255,255,255,0.35); font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px;">Window &amp; Layout</div>
+          <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; color: rgba(255,255,255,0.5); font-size: 11px; line-height: 1.5;">
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Up/Down</span><span>Scroll AI Response</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Plus</span><span>Increase App Size</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Minus</span><span>Decrease App Size</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+O</span><span>Reset App Size</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Arrows</span><span>Move App Window</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+C</span><span>Toggle Convo Window</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Plus</span><span>Increase Convo Size</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Minus</span><span>Decrease Convo Size</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+O</span><span>Reset Convo Size</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Arrows</span><span>Move Convo Window</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -920,22 +897,21 @@
     </div>
   </div>
 
-  <div id="mini-icon">⌘</div>
+  <div id="mini-icon"><div class="mini-dot"></div></div>
   <div id="main-container">
-    <div id="controls"><button id="btn-system" class="btn">System (Ctrl+R)</button><button id="btn-mic" class="btn">Mic
-        (Ctrl+M)</button>
-      <div
-        style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; gap: 0;">
+    <div id="controls"><button id="btn-system" class="btn" title="Toggle System Audio (Ctrl+R)">System</button><button id="btn-mic" class="btn" title="Toggle Mic Audio (Ctrl+M)">Mic</button>
+      <div class="screen-btn-group"
+        style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; overflow: hidden; gap: 0;">
         <button id="btn-screen-k" class="btn"
           style="flex: 1; border: none; border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 9px;"
-          title="Screenshot + AI Solution">Screen (K)</button>
+          title="Screenshot + AI Solution (Ctrl+K)">Screen</button>
         <button id="btn-screen-s" class="btn"
           style="flex: 1; border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 8px; opacity: 0.8;"
-          title="Screenshot + Save to AI Context">Save (S)</button>
-      </div><button id="btn-generate" class="btn">Process (Ctrl+Enter)</button>
-      <button id="btn-conversation" class="btn" title="View conversation history">Convo</button>
+          title="Screenshot + Save to AI Context (Ctrl+S)">Save</button>
+      </div><button id="btn-generate" class="btn" title="Process Transcript with AI (Ctrl+Enter)">Process</button>
+      <button id="btn-conversation" class="btn" title="View Conversation History (Ctrl+Alt+C)">Convo</button>
       <div id="session-timer"
-        style="padding: 4px 10px; background: rgba(255,255,255,0.03); border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); font-weight: 600; font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; gap: 6px; flex-shrink: 0; letter-spacing: 1.5px; transition: all 0.5s ease;">
+        style="padding: 4px 10px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.75); font-weight: 600; font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; gap: 6px; flex-shrink: 0; letter-spacing: 1.5px; transition: all 0.5s ease;">
         <span id="session-timer-text">2:00:00</span>
       </div>
       <div class="session-btn-group"><button id="btn-session-start" class="session-btn"
@@ -1384,7 +1360,8 @@
             const language = lang || 'plaintext';
             const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const placeholder = `___CODE_BLOCK_${codeBlocks.length}___`;
-            codeBlocks.push(`<pre><code class="language-${language}">${escapedCode}</code></pre>`);
+            const copyBtnHtml = `<span class="copy-code-btn" onclick="copyCodeBlock(this)" style="position: absolute; top: 8px; right: 12px; color: rgba(255,255,255,0.4); font-size: 11px; cursor: pointer; transition: all 0.2s; z-index: 10; font-family: monospace;" onmouseover="this.style.color='#fff';" onmouseout="this.style.color='rgba(255,255,255,0.4)';">[copy]</span>`;
+            codeBlocks.push(`<div style="position: relative; margin: 8px 0;">${copyBtnHtml}<pre style="margin: 0; padding-top: 36px;"><code class="language-${language}">${escapedCode}</code></pre></div>`);
             return placeholder;
           });
 

@@ -405,11 +405,12 @@ def _build_context_hash(role: str, language: str, resume_text: str, job_descript
     raw = f"{role}|{language}|{len(resume_text or '')}|{len(job_description or '')}"
     return hashlib.md5(raw.encode()).hexdigest()
 
-def get_system_context(role: str, language: str, resume_text: str, job_description: str, for_vision: bool = False) -> str:
-    """Return a cached system prompt. Only rebuilds when role/language/resume/JD changes."""
+def get_system_context(role: str, language: str, resume_text: str, job_description: str, for_vision: bool = False, is_esl: bool = False, short_responses: bool = False) -> str:
+    """Return a cached system prompt. Only rebuilds when role/language/resume/JD/modifiers changes."""
     global _cached_system_context, _cached_context_hash
 
-    new_hash = _build_context_hash(role, language, resume_text, job_description)
+    # Include modifiers in hash to rebuild cache if they change
+    new_hash = _build_context_hash(role, language, resume_text, job_description) + f"|{is_esl}|{short_responses}"
 
     if _cached_system_context is not None and _cached_context_hash == new_hash and not for_vision:
         print("[CONTEXT CACHE] Hit — reusing cached system context (0 extra resume tokens)")
@@ -422,6 +423,13 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
         context_block += f"\n\n--- CANDIDATE RESUME ---\n{resume_text}\n"
     if job_description and job_description.strip():
         context_block += f"\n\n--- JOB DESCRIPTION ---\n{job_description}\n"
+
+    # Add Modifiers - Make them extremely strict
+    modifier_block = ""
+    if is_esl:
+        modifier_block += "\n\nCRITICAL CONSTRAINT: The user speaks English as a second language. YOU MUST use A1/A2 level basic English vocabulary. NEVER use idioms, metaphors, acronyms, or complex sentence structures. Keep sentences under 10 words if possible."
+    if short_responses:
+        modifier_block += "\n\nCRITICAL CONSTRAINT: Provide concise, short responses. Cut conversational filler (e.g., 'Certainly!', 'Here is...'). Keep answers about 30% to 50% shorter than normal. Use bullet points for readability, but DO NOT over-explain or elaborate unnecessarily unless asked."
 
     if for_vision:
         # Vision requests need the context inline — do NOT cache these
@@ -436,6 +444,7 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
             "Draw from YOUR resume for all experience-related questions. "
             f"Prefer {language or 'Python'} for all coding and technical explanations. "
             "Remember what was discussed earlier."
+            f"{modifier_block}"
             f"{context_block}"
         )
 
@@ -450,12 +459,13 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
         "Remember what was discussed earlier in this conversation. "
         f"Prefer {language or 'Python'} for all coding and technical explanations. "
         "If you write ANY code, you MUST wrap it strictly inside standard Markdown content blocks specifying the exact language (e.g. ```python ... ```)."
+        f"{modifier_block}"
         f"{context_block}"
     )
 
     _cached_system_context = system_prompt
     _cached_context_hash = new_hash
-    print(f"[CONTEXT CACHE] Cached. System prompt is ~{count_tokens(system_prompt)} tokens")
+    print(f"[CONTEXT CACHE] Cached. System prompt represents updated session state.")
     return system_prompt
 
 def invalidate_context_cache():
@@ -933,6 +943,8 @@ async def save_session_data(data: Dict[str, Any]):
             'resume_text': data.get('resume_text', ''),
             'target_role': data.get('target_role', ''),
             'target_language': data.get('target_language', ''),
+            'is_esl': data.get('is_esl', False),
+            'short_responses': data.get('short_responses', False),
             'created_at': data.get('created_at', ''),
             'updated_at': str(Path('').resolve()),  # Will be updated on each save
             'text_model': data.get('text_model', DEFAULT_TEXT_MODEL),
@@ -953,6 +965,8 @@ async def save_session_data(data: Dict[str, Any]):
         profile_cache['openai_api_key'] = data.get('openai_api_key', '')
         profile_cache['job_description'] = data.get('job_description', '')
         profile_cache['resume_text'] = data.get('resume_text', '')
+        profile_cache['is_esl'] = data.get('is_esl', False)
+        profile_cache['short_responses'] = data.get('short_responses', False)
         
         # Also save to profile for persistence
         save_profile(profile_cache)
@@ -1293,13 +1307,19 @@ async def stream_ai_response(req: AIRequest):
             has_resume = bool(resume_text.strip())
             print(f"[STREAM] Has resume: {has_resume}, history len: {len(conversation_history)}")
 
-            # Use cached system context (resume + JD baked in) — avoids resending
-            # thousands of resume/JD tokens as separate messages every request.
-            # OpenAI caches identical system-prompt prefixes → ~50% input cost discount.
+            # Use cached system context (resume + JD baked in)
+            is_esl = False
+            short_responses = False
+            if profile_metadata:
+                is_esl = profile_metadata.get('is_esl', False)
+                short_responses = profile_metadata.get('short_responses', False)
+
             system_content = get_system_context(
                 req.role, req.target_language or 'Python',
                 resume_text, job_description,
-                for_vision=bool(req.screenshot)
+                for_vision=bool(req.screenshot),
+                is_esl=is_esl,
+                short_responses=short_responses
             )
             messages = [{"role": "system", "content": system_content}]
 
@@ -1321,7 +1341,7 @@ async def stream_ai_response(req: AIRequest):
                         {"type": "image_url", "image_url": {"url": req.screenshot}}
                     ]
                 })
-                model = "gpt-4o"
+                model = "gpt-4o-mini"
                 print(f"[STREAM] Using model: {model} (vision)")
             else:
                 messages.append({"role": "user", "content": req.transcript})
@@ -1398,7 +1418,8 @@ async def stream_ai_response(req: AIRequest):
 
             # Save to conversation history only if save_to_context is True
             # (skip for one-shot LeetCode problems, save for scenarios needing follow-up)
-            if req.save_to_context:
+            save_to_context = req.save_to_context is not False
+            if save_to_context:
                 if req.screenshot:
                     user_msg = f"[USER SHARED A SCREENSHOT] Question about the screenshot: {req.transcript}"
                 else:
@@ -1463,11 +1484,19 @@ async def generate_ai_response(req: AIRequest):
         has_resume = bool(resume_text.strip())
         print(f"[AI] Has resume: {has_resume}, history len: {len(conversation_history)}")
 
+        is_esl = False
+        short_responses = False
+        if current_profile and isinstance(current_profile, dict):
+            is_esl = current_profile.get('is_esl', False)
+            short_responses = current_profile.get('short_responses', False)
+
         # Use cached system context (resume + JD baked in) — same optimization as /ai/stream
         system_content = get_system_context(
             req.role, req.target_language or 'Python',
             resume_text, job_description,
-            for_vision=bool(req.screenshot)
+            for_vision=bool(req.screenshot),
+            is_esl=is_esl,
+            short_responses=short_responses
         )
         messages = [{"role": "system", "content": system_content}]
 
@@ -1486,7 +1515,7 @@ async def generate_ai_response(req: AIRequest):
                     {"type": "image_url", "image_url": {"url": req.screenshot}}
                 ]
             })
-            model = "gpt-4o"
+            model = "gpt-4o-mini"
         else:
             messages.append({"role": "user", "content": req.transcript})
             model = req.text_model if req.text_model and req.text_model in AVAILABLE_TEXT_MODELS else DEFAULT_TEXT_MODEL
@@ -1527,7 +1556,8 @@ async def generate_ai_response(req: AIRequest):
         
         # Save to conversation history only if save_to_context is True
         # (skip for one-shot LeetCode problems, save for scenarios needing follow-up)
-        if req.save_to_context:
+        save_to_context = req.save_to_context is not False
+        if save_to_context:
             if req.screenshot:
                 user_msg = f"[USER SHARED A SCREENSHOT] Question about the screenshot: {req.transcript}"
             else:
