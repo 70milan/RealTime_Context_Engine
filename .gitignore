@@ -44,6 +44,7 @@ backend/$null
 
 # API Keys and secrets
 *.pem
+*.pfx
 **/api_key*
 **/secrets*
 **/*secret*

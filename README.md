@@ -1,6 +1,6 @@
-# Interview Assistant
+# RealTime Context Engine
 
-Interview Assistant is a Windows-first desktop workspace for technical interview preparation, mock interviews, solution walkthroughs, and real-time engineering note support. It combines an Electron desktop shell with a FastAPI backend to provide low-latency audio transcription, streamed AI assistance, screenshot analysis, persistent session management, and a dedicated conversation timeline.
+RealTime Context Engine is a Windows-first desktop workspace for technical interview preparation, mock interviews, solution walkthroughs, and real-time engineering note support. It combines an Electron desktop shell with a FastAPI backend to provide low-latency audio transcription, streamed AI assistance, screenshot analysis, persistent session management, and a dedicated conversation timeline.
 
 The system is designed as an engineering productivity surface rather than a browser plugin or a web-only application. The desktop runtime owns window management, operating-system integration, audio and screen capture handoff, application lifecycle, logging, updates, and conversation export. The backend owns model access, streaming orchestration, session persistence, transcript-to-response workflows, token accounting, license validation, and cost tracking.
 
@@ -504,7 +504,7 @@ A solid engineering tool should be diagnosable. Logging, backend terminal output
 
 ## Summary
 
-Interview Assistant is a Windows desktop orchestration layer for real-time technical practice. Architecturally, it is a two-process system: Electron on the desktop boundary and FastAPI at the AI workflow boundary. The value of the project comes from combining live transcription, streamed responses, screenshot reasoning, session persistence, conversation replay, cost tracking, and packaging into one coherent engineering workspace.
+RealTime Context Engine is a Windows desktop orchestration layer for real-time technical practice. Architecturally, it is a two-process system: Electron on the desktop boundary and FastAPI at the AI workflow boundary. The value of the project comes from combining live transcription, streamed responses, screenshot reasoning, session persistence, conversation replay, cost tracking, and packaging into one coherent engineering workspace.
 
 If you are evaluating the codebase as a product, the most important qualities are:
 
