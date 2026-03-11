@@ -134,9 +134,12 @@
     }
 
     @keyframes mini-breathe {
-      0%, 100% {
+
+      0%,
+      100% {
         background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 70%);
       }
+
       50% {
         background: radial-gradient(circle, rgba(100, 255, 150, 0.1) 0%, transparent 70%);
       }
@@ -498,7 +501,6 @@
   </style>
   <div id="setup-overlay">
     <div class="setup-top-bar">
-      <span id="license-status-badge"></span>
       <div id="close-btn" title="Close App">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
           stroke-linecap="round" stroke-linejoin="round">
@@ -519,7 +521,8 @@
             <button id="btn-past-sessions" type="button" class="setup-action-btn">Past Sessions</button>
             <button id="btn-guide" type="button" class="setup-action-btn">Guide</button>
             <button id="btn-hotkeys-setup" type="button" class="setup-action-btn">Hotkeys</button>
-            <button id="btn-reset-app" type="button" class="setup-action-btn" style="color: rgba(255, 107, 107, 0.5);" title="Clear all saved settings and reset the app">Reset App</button>
+            <button id="btn-reset-app" type="button" class="setup-action-btn" style="color: rgba(255, 107, 107, 0.5);"
+              title="Clear all saved settings and reset the app">Reset App</button>
           </div>
         </div>
 
@@ -528,17 +531,73 @@
             <div class="setup-group">
               <div class="setup-group-title">Session Details</div>
               <div class="setup-field">
-                <label class="setup-label" for="setup-session-name">Session Name</label>
-                <input type="text" id="setup-session-name" class="setup-input" placeholder="e.g., Google_Manager_Dec2025" autocomplete="off" />
+                <label class="setup-label" for="setup-session-name">Session Name <span
+                    class="setup-req">*</span></label>
+                <input type="text" id="setup-session-name" class="setup-input"
+                  placeholder="e.g., Google_Manager_Dec2025" autocomplete="off" />
               </div>
               <div class="setup-row">
                 <div class="setup-field">
                   <label class="setup-label" for="setup-role">Target Role <span class="setup-req">*</span></label>
-                  <input type="text" id="setup-role" class="setup-input" placeholder="e.g., Data Engineer" autocomplete="off" />
+                  <input type="text" id="setup-role" class="setup-input" placeholder="e.g., Data Engineer"
+                    autocomplete="off" />
                 </div>
                 <div class="setup-field">
-                  <label class="setup-label" for="setup-language">Language <span class="setup-req">*</span></label>
-                  <input type="text" id="setup-language" class="setup-input" placeholder="e.g., Python" autocomplete="off" />
+                  <label class="setup-label" for="setup-language">Language</label>
+                  <input type="text" id="setup-language" class="setup-input" placeholder="e.g., Python (default)"
+                    autocomplete="off" />
+                  <datalist id="language-options">
+                    <option value="Python"></option>
+                    <option value="Java"></option>
+                    <option value="Kotlin"></option>
+                    <option value="Scala"></option>
+                    <option value="Groovy"></option>
+                    <option value="C"></option>
+                    <option value="C++"></option>
+                    <option value="C#"></option>
+                    <option value="Objective-C"></option>
+                    <option value="JavaScript"></option>
+                    <option value="TypeScript"></option>
+                    <option value="PHP"></option>
+                    <option value="Ruby"></option>
+                    <option value="Perl"></option>
+                    <option value="Lua"></option>
+                    <option value="Rust"></option>
+                    <option value="Go"></option>
+                    <option value="Swift"></option>
+                    <option value="Assembly"></option>
+                    <option value="Bash"></option>
+                    <option value="PowerShell"></option>
+                    <option value="SQL"></option>
+                    <option value="PostgreSQL"></option>
+                    <option value="MySQL"></option>
+                    <option value="SQLite"></option>
+                    <option value="TSQL"></option>
+                    <option value="PLSQL"></option>
+                    <option value="BigQuery"></option>
+                    <option value="Snowflake"></option>
+                    <option value="Redshift"></option>
+                    <option value="Spark SQL"></option>
+                    <option value="PySpark"></option>
+                    <option value="Hive"></option>
+                    <option value="Presto"></option>
+                    <option value="Trino"></option>
+                    <option value="Databricks"></option>
+                    <option value="dbt"></option>
+                    <option value="R"></option>
+                    <option value="MATLAB"></option>
+                    <option value="Julia"></option>
+                    <option value="SAS"></option>
+                    <option value="Haskell"></option>
+                    <option value="Elixir"></option>
+                    <option value="Erlang"></option>
+                    <option value="F#"></option>
+                    <option value="Dart"></option>
+                    <option value="VBA"></option>
+                    <option value="COBOL"></option>
+                    <option value="Fortran"></option>
+                    <option value="Apex"></option>
+                  </datalist>
                 </div>
               </div>
             </div>
@@ -546,24 +605,32 @@
             <div class="setup-group">
               <div class="setup-group-title">Resume &amp; Preferences</div>
               <div class="setup-field">
-                <label class="setup-label">Resume (.docx)</label>
+                <label class="setup-label">Resume (.docx) <span class="setup-req">*</span></label>
                 <div class="setup-file-row">
                   <input type="file" id="setup-resume" accept=".docx" style="display: none;" />
-                  <button type="button" id="resume-btn" class="setup-file-btn" onclick="document.getElementById('setup-resume').click()">Choose File</button>
+                  <button type="button" id="resume-btn" class="setup-file-btn"
+                    onclick="document.getElementById('setup-resume').click()">Choose File</button>
                   <span id="resume-filename" class="setup-file-name">No file selected</span>
-                  <button type="button" id="resume-detach-btn" class="setup-icon-btn" style="display: none;" title="Remove resume">&times;</button>
+                  <button type="button" id="resume-detach-btn" class="setup-icon-btn" style="display: none;"
+                    title="Remove resume">&times;</button>
                 </div>
               </div>
               <div class="setup-checks">
-                <label class="setup-check"><input type="checkbox" id="setup-esl" /><span>ESL Mode</span></label>
-                <label class="setup-check"><input type="checkbox" id="setup-short-responses" /><span>Short Responses</span></label>
+                <div class="setup-check-row">
+                  <label class="setup-check"><input type="checkbox" id="setup-esl" /><span>ESL Mode</span></label>
+                  <label class="setup-check"><input type="checkbox" id="setup-short-responses" /><span>Short
+                      Responses</span></label>
+                  <button type="button" id="checks-info-btn" class="setup-info-link"
+                    style="background:none;border:none;padding:0;font:inherit;cursor:pointer;color:rgba(100,255,150,0.65);font-size:10px;font-weight:500;">(?)</button>
+                </div>
               </div>
             </div>
 
             <div class="setup-group setup-group-grow">
-              <div class="setup-group-title">Job Description</div>
+              <div class="setup-group-title">Job Description <span class="setup-req">*</span></div>
               <div class="setup-field setup-field-grow">
-                <textarea id="setup-jobdesc" class="setup-textarea" autocomplete="off" placeholder="Paste job description here..."></textarea>
+                <textarea id="setup-jobdesc" class="setup-textarea" autocomplete="off"
+                  placeholder="Paste job description here..."></textarea>
               </div>
             </div>
           </div>
@@ -573,30 +640,35 @@
               <div class="setup-group-title">Credentials</div>
               <div class="setup-field">
                 <label class="setup-label" for="setup-apikey">
-                  OpenAI API Key <span id="apikey-info" class="setup-info-link" title="API Key Info">(?)</span>
+                  OpenAI API Key <span class="setup-req">*</span> <span id="apikey-info" class="setup-info-link"
+                    title="API Key Info">(?)</span>
                 </label>
-                <input type="password" id="setup-apikey" class="setup-input" placeholder="sk-..." autocomplete="new-password" />
-                <div id="apikey-info-panel" class="setup-info-panel">
-                  Get your key at <a href="https://platform.openai.com" target="_blank">platform.openai.com</a> &rarr; API Keys &rarr; Create new key.<br>
-                  Cost: ~$0.50&ndash;$1.00 per 2hr interview. Add $5&ndash;10 credit to start.
-                </div>
+                <input type="password" id="setup-apikey" class="setup-input" placeholder="sk-..."
+                  autocomplete="new-password" />
               </div>
               <div class="setup-field">
                 <label class="setup-label" for="setup-license">
                   License Key <span id="license-info" class="setup-info-link" title="Get a license">(?)</span>
                 </label>
-                <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)" autocomplete="off" />
-                <div id="license-info-panel" class="setup-info-panel">
-                  Contact <a href="mailto:mjulez70@gmail.com">mjulez70@gmail.com</a> with your HWID for license availability and details.
-                </div>
-                <div id="hwid-setup-display" class="setup-hwid" style="display: none;">HWID: <span style="color: rgba(100, 255, 150, 0.4);">Fetching...</span> <button id="hwid-copy-btn" class="hwid-copy-btn" title="Copy HWID" type="button"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+                <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)"
+                  autocomplete="off" />
+
+                <div id="hwid-setup-display" class="setup-hwid" style="display: none;">HWID: <span
+                    style="color: rgba(100, 255, 150, 0.4);">Fetching...</span> <button id="hwid-copy-btn"
+                    class="hwid-copy-btn" title="Copy HWID" type="button"><svg width="11" height="11"
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                      stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg></button></div>
               </div>
             </div>
 
             <div class="setup-group setup-group-grow">
               <div class="setup-group-title">Backend Console</div>
               <div class="setup-field setup-field-grow">
-                <div id="backend-terminal" class="backend-terminal"><span class="term-line term-dim">Waiting for backend...</span></div>
+                <div id="backend-terminal" class="backend-terminal"><span class="term-line term-dim">Waiting for
+                    backend...</span></div>
               </div>
             </div>
           </div>
@@ -606,8 +678,10 @@
           <div id="setup-status" class="setup-status-line"></div>
           <div class="setup-footer-row">
             <label class="setup-disclaimer">
-              <input type="checkbox" id="setup-disclaimer-agree" disabled style="cursor: pointer; accent-color: rgba(100, 255, 150, 0.6);" />
-              <span>I agree to the <span id="btn-ethical-open" class="setup-info-link">Ethical Usage Policy</span></span>
+              <input type="checkbox" id="setup-disclaimer-agree" disabled
+                style="cursor: pointer; accent-color: rgba(100, 255, 150, 0.6);" />
+              <span>I agree to the <span id="btn-ethical-open" class="setup-info-link">Ethical Usage Policy</span> <span
+                  class="setup-req">*</span></span>
             </label>
             <button id="btn-start-session" type="button" class="setup-cta">Create Session</button>
           </div>
@@ -616,6 +690,8 @@
     </div>
 
     <div class="setup-bottom-meta">
+      <span id="license-status-badge"></span>
+      <span class="setup-sep">|</span>
       <span class="app-version">v2.0.0</span>
       <span class="setup-sep">|</span>
       <span id="check-update-btn" class="setup-meta-link">Check for updates</span>
@@ -856,7 +932,8 @@
       style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 720px; width: 92%; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <span
-          style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Keyboard Shortcuts</span>
+          style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Keyboard
+          Shortcuts</span>
         <button id="close-hotkeys" type="button"
           style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
           onmouseover="this.style.color='#ff5555'"
@@ -864,32 +941,60 @@
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px;">
         <div>
-          <div style="color: rgba(255,255,255,0.35); font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px;">Core Controls</div>
-          <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; color: rgba(255,255,255,0.65); font-size: 11px; line-height: 1.5;">
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+R</span><span>Toggle System Audio</span>
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+M</span><span>Toggle Mic Audio</span>
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+K</span><span>Screenshot + Quick Solve</span>
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+S</span><span>Screenshot + Save Context</span>
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Enter</span><span>Process Transcript</span>
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Backspace</span><span>Clear Transcript</span>
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Q</span><span>Toggle Mini Mode</span>
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Shift+Q</span><span>Quit App</span>
-            <span style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+F</span><span>Maximize AI Response</span>
+          <div
+            style="color: rgba(255,255,255,0.35); font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px;">
+            Core Controls</div>
+          <div
+            style="display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; color: rgba(255,255,255,0.65); font-size: 11px; line-height: 1.5;">
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+R</span><span>Toggle
+              System Audio</span>
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+M</span><span>Toggle
+              Mic Audio</span>
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+K</span><span>Screenshot
+              + Quick Solve</span>
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+S</span><span>Screenshot
+              + Save Context</span>
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Enter</span><span>Process
+              Transcript</span>
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Backspace</span><span>Clear
+              Transcript</span>
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Q</span><span>Toggle
+              Mini Mode</span>
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Shift+Q</span><span>Quit
+              App</span>
+            <span
+              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+F</span><span>Maximize
+              AI Response</span>
           </div>
         </div>
         <div>
-          <div style="color: rgba(255,255,255,0.35); font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px;">Window &amp; Layout</div>
-          <div style="display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; color: rgba(255,255,255,0.5); font-size: 11px; line-height: 1.5;">
-            <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Up/Down</span><span>Scroll AI Response</span>
+          <div
+            style="color: rgba(255,255,255,0.35); font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px;">
+            Window &amp; Layout</div>
+          <div
+            style="display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; color: rgba(255,255,255,0.5); font-size: 11px; line-height: 1.5;">
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Up/Down</span><span>Scroll AI
+              Response</span>
             <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Plus</span><span>Increase App Size</span>
             <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Minus</span><span>Decrease App Size</span>
             <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+O</span><span>Reset App Size</span>
             <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Arrows</span><span>Move App Window</span>
             <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+C</span><span>Toggle Convo Window</span>
-            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Plus</span><span>Increase Convo Size</span>
-            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Minus</span><span>Decrease Convo Size</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Plus</span><span>Increase Convo
+              Size</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Minus</span><span>Decrease Convo
+              Size</span>
             <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+O</span><span>Reset Convo Size</span>
-            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Arrows</span><span>Move Convo Window</span>
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+Shift+Arrows</span><span>Move Convo
+              Window</span>
           </div>
         </div>
       </div>
@@ -912,9 +1017,12 @@
     </div>
   </div>
 
-  <div id="mini-icon"><div class="mini-dot"></div></div>
+  <div id="mini-icon">
+    <div class="mini-dot"></div>
+  </div>
   <div id="main-container">
-    <div id="controls"><button id="btn-system" class="btn" title="Toggle System Audio (Ctrl+R)">System</button><button id="btn-mic" class="btn" title="Toggle Mic Audio (Ctrl+M)">Mic</button>
+    <div id="controls"><button id="btn-system" class="btn" title="Toggle System Audio (Ctrl+R)">System</button><button
+        id="btn-mic" class="btn" title="Toggle Mic Audio (Ctrl+M)">Mic</button>
       <div class="screen-btn-group"
         style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; overflow: hidden; gap: 0;">
         <button id="btn-screen-k" class="btn"
@@ -1013,7 +1121,7 @@
 
     // Log renderer errors to file via IPC
     function logError(msg) {
-      try { if (ipcRenderer) ipcRenderer.send('log-error', msg); } catch(e) {}
+      try { if (ipcRenderer) ipcRenderer.send('log-error', msg); } catch (e) { }
     }
     window.addEventListener('error', (e) => {
       logError(`Window error: ${e.message} at ${e.filename}:${e.lineno}`);
@@ -1702,7 +1810,7 @@
     // Master mousedown listener removed
   </script>
 
-  <script src="setup.js?v=3.2"></script>
+  <script src="setup.js?v=3.3"></script>
   <script src="streaming-ai.js?v=3.2"></script>
 </body>
 

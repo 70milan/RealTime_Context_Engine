@@ -660,16 +660,20 @@ function initSession() {
             // Temporarily block to calculate true height
             tooltip.style.display = 'block';
 
-            tooltip.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 320) + 'px';
+            // Horizontal clamping (300px width + 10px margin)
+            tooltip.style.left = Math.max(10, Math.min(rect.left + window.scrollX, window.innerWidth - 310)) + 'px';
 
-            // Check if there is enough space BELOW the element
-            if (rect.bottom + 15 + tooltip.offsetHeight > window.innerHeight) {
-                // Not enough space below, force ABOVE
-                tooltip.style.top = (rect.top + window.scrollY - tooltip.offsetHeight - 15) + 'px';
-            } else {
-                // Enough space, place BELOW normally
-                tooltip.style.top = (rect.bottom + window.scrollY + 15) + 'px';
+            // Vertical positioning (default below)
+            let topPos = rect.bottom + window.scrollY + 10;
+
+            // If it clips the bottom, try placing it above
+            if (topPos + tooltip.offsetHeight > window.innerHeight + window.scrollY - 10) {
+                topPos = rect.top + window.scrollY - tooltip.offsetHeight - 10;
             }
+
+            // Final vertical clamping (prevent clipping top or bottom of viewport)
+            tooltip.style.top = Math.max(window.scrollY + 10, Math.min(topPos, window.innerHeight + window.scrollY - tooltip.offsetHeight - 10)) + 'px';
+
             console.log(`[DEBUG_TOOLTIP] Tooltip should now be VISIBLE for: ${triggerId}`);
         };
 
@@ -689,16 +693,160 @@ function initSession() {
 
     // API Key info toggle
     const apikeyInfo = document.getElementById('apikey-info');
-    const apikeyPanel = document.getElementById('apikey-info-panel');
-    if (apikeyInfo && apikeyPanel) {
-        apikeyInfo.onclick = () => apikeyPanel.classList.toggle('open');
+    if (apikeyInfo) {
+        const apiKeyContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
+            'Get your key at <a href="https://platform.openai.com" target="_blank" style="color: rgba(100, 255, 150, 0.75);">platform.openai.com</a> &rarr; ' +
+            'API Keys &rarr; Create new key.<br><br>' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Cost:</strong> ~$0.50&ndash;$1.00 per 2hr interview. Add $5&ndash;10 credit to start.</div>';
+        createHoverTooltip('apikey-info', apiKeyContent);
+    }
+
+    // Language custom autocomplete
+    (function () {
+        const LANG_OPTIONS = [
+            'Python', 'Java', 'Kotlin', 'Scala', 'Groovy', 'Clojure',
+            'C', 'C++', 'C#', 'Objective-C',
+            'JavaScript', 'TypeScript', 'CoffeeScript',
+            'PHP', 'Ruby', 'Perl', 'Lua',
+            'Rust', 'Go', 'Swift', 'Assembly',
+            'Bash', 'PowerShell', 'Batch',
+            'SQL', 'PostgreSQL', 'MySQL', 'SQLite', 'TSQL', 'PLSQL',
+            'BigQuery', 'Snowflake', 'Redshift', 'Spark SQL', 'PySpark',
+            'Hive', 'Presto', 'Trino', 'Databricks', 'dbt',
+            'R', 'MATLAB', 'Octave', 'Julia', 'SAS', 'Stata', 'SPSS',
+            'Haskell', 'Erlang', 'Elixir', 'F#', 'OCaml', 'Elm',
+            'Dart', 'VBA', 'COBOL', 'Fortran', 'Lisp', 'Prolog', 'Apex', 'ABAP',
+        ];
+
+        const input = document.getElementById('setup-language');
+        if (!input) return;
+
+        // Create dropdown appended to body so it's never clipped
+        const dropdown = document.createElement('div');
+        dropdown.className = 'lang-autocomplete';
+        document.body.appendChild(dropdown);
+
+        let activeIdx = -1;
+
+        function positionDropdown() {
+            const rect = input.getBoundingClientRect();
+            const dropH = Math.min(220, dropdown.scrollHeight || 220);
+            const spaceBelow = window.innerHeight - rect.bottom;
+            if (spaceBelow >= dropH || spaceBelow >= 80) {
+                // Open downward
+                dropdown.style.top = (rect.bottom + 2) + 'px';
+                dropdown.style.bottom = 'auto';
+            } else {
+                // Open upward
+                dropdown.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+                dropdown.style.top = 'auto';
+            }
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.width = rect.width + 'px';
+        }
+
+        function showDropdown(options) {
+            dropdown.innerHTML = '';
+            activeIdx = -1;
+            if (options.length === 0) { dropdown.classList.remove('open'); return; }
+            options.forEach((opt, i) => {
+                const item = document.createElement('div');
+                item.className = 'lang-autocomplete-item';
+                item.textContent = opt;
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // keep focus on input
+                    input.value = opt;
+                    localStorage.setItem('target_language', opt);
+                    dropdown.classList.remove('open');
+                });
+                dropdown.appendChild(item);
+            });
+            positionDropdown();
+            dropdown.classList.add('open');
+        }
+
+        function hideDropdown() {
+            dropdown.classList.remove('open');
+            activeIdx = -1;
+        }
+
+        function setActive(idx) {
+            const items = dropdown.querySelectorAll('.lang-autocomplete-item');
+            items.forEach(el => el.classList.remove('active'));
+            if (idx >= 0 && idx < items.length) {
+                items[idx].classList.add('active');
+                items[idx].scrollIntoView({ block: 'nearest' });
+                activeIdx = idx;
+            } else {
+                activeIdx = -1;
+            }
+        }
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim().toLowerCase();
+            const filtered = q
+                ? LANG_OPTIONS.filter(l => l.toLowerCase().includes(q))
+                : LANG_OPTIONS;
+            showDropdown(filtered);
+        });
+
+        input.addEventListener('focus', () => {
+            const q = input.value.trim().toLowerCase();
+            const filtered = q
+                ? LANG_OPTIONS.filter(l => l.toLowerCase().includes(q))
+                : LANG_OPTIONS;
+            showDropdown(filtered);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            const items = dropdown.querySelectorAll('.lang-autocomplete-item');
+            if (!dropdown.classList.contains('open')) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setActive(Math.min(activeIdx + 1, items.length - 1));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setActive(Math.max(activeIdx - 1, 0));
+            } else if (e.key === 'Enter' && activeIdx >= 0) {
+                e.preventDefault();
+                input.value = items[activeIdx].textContent;
+                localStorage.setItem('target_language', input.value);
+                hideDropdown();
+            } else if (e.key === 'Escape') {
+                hideDropdown();
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            // Delay so mousedown on item fires first
+            setTimeout(hideDropdown, 150);
+        });
+
+        window.addEventListener('resize', () => {
+            if (dropdown.classList.contains('open')) positionDropdown();
+        });
+        window.addEventListener('scroll', () => {
+            if (dropdown.classList.contains('open')) positionDropdown();
+        }, true);
+    })();
+
+    // ESL / Short Responses info toggle
+    const checksBtn = document.getElementById('checks-info-btn');
+    if (checksBtn) {
+        const eslHoverContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">ESL Mode</strong> &mdash; simplifies vocabulary and uses shorter sentences so answers are easier to follow.<br><br>' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Short Responses</strong> &mdash; keeps AI answers 30&ndash;50% shorter, cuts filler, and prefers bullet points.<br><br>' +
+            '<em style="opacity: 0.7;">Select both or none or either.</em></div>';
+        createHoverTooltip('checks-info-btn', eslHoverContent);
     }
 
     // License info toggle
     const licenseInfo = document.getElementById('license-info');
-    const licensePanel = document.getElementById('license-info-panel');
-    if (licenseInfo && licensePanel) {
-        licenseInfo.onclick = () => licensePanel.classList.toggle('open');
+    if (licenseInfo) {
+        const licenseContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
+            'Contact <a href="mailto:mjulez70@gmail.com" style="color: rgba(100, 255, 150, 0.75);">mjulez70@gmail.com</a> ' +
+            'with your HWID for license availability and details.</div>';
+        createHoverTooltip('license-info', licenseContent);
     }
 
     const hotkeysContent = '<div style="color: rgba(100,255,150,0.9); font-weight: bold; margin-bottom: 8px; text-transform: uppercase;">Keyboard Shortcuts</div>' +
@@ -1104,9 +1252,22 @@ async function handleCreateSession() {
 
     // Helper to show validation status
     function showStatus(msg, isError = true) {
-        if (status) {
-            status.innerText = msg;
-            status.style.color = isError ? "rgba(255, 107, 107, 0.5)" : "rgba(100, 255, 150, 0.4)";
+        const popup = document.getElementById('session-error-popup');
+        if (popup) {
+            popup.textContent = msg;
+            if (isError) {
+                popup.style.color = 'rgba(255, 107, 107, 0.85)';
+                popup.style.borderColor = 'rgba(255, 107, 107, 0.3)';
+            } else {
+                popup.style.color = 'rgba(100, 255, 150, 0.85)';
+                popup.style.borderColor = 'rgba(100, 255, 150, 0.3)';
+            }
+            popup.style.display = 'block';
+            popup.style.opacity = '1';
+            setTimeout(() => {
+                popup.style.opacity = '0';
+                setTimeout(() => { popup.style.display = 'none'; }, 200);
+            }, 3000);
         }
     }
 
@@ -1115,27 +1276,11 @@ async function handleCreateSession() {
         return;
     }
 
-    // Validate disclaimer agreement
-    const disclaimerCheck = document.getElementById('setup-disclaimer-agree');
-    if (disclaimerCheck && !disclaimerCheck.checked) {
-        showStatus('You must agree to the Terms & Ethical Usage Policy first');
-        return;
-    }
-
-    // Persist agreement
-    localStorage.setItem('disclaimer_agreed', 'true');
-
     // Sanitize session name (remove invalid folder characters)
     const sanitizedSessionName = sessionName.replace(/[<>:"/\\|?*]/g, '_');
 
     if (!fileInput.files || fileInput.files.length === 0) {
         showStatus('Resume is required');
-        return;
-    }
-
-    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
-    if (!apiKey) {
-        showStatus('API key is required');
         return;
     }
 
@@ -1148,15 +1293,50 @@ async function handleCreateSession() {
 
     const langInput = document.getElementById('setup-language');
     let targetLang = langInput ? langInput.value.trim() : '';
-    if (!targetLang) {
-        showStatus('Output Language is required');
-        return;
-    }
 
-    // Default invalid output languages to Python
-    const validLangs = ['python', 'java', 'c++', 'cpp', 'c#', 'csharp', 'javascript', 'js', 'typescript', 'ts', 'go', 'golang', 'ruby', 'php', 'swift', 'kotlin', 'rust', 'sql', 'bash', 'shell'];
-    if (!validLangs.includes(targetLang.toLowerCase())) {
-        console.log(`[DEBUG] Unknown target language "${targetLang}". Defaulting to Python.`);
+    // Default missing or invalid output languages to Python
+    const validLangs = [
+        // Python
+        'python',
+        // Java / JVM
+        'java', 'kotlin', 'scala', 'groovy', 'clojure',
+        // C family
+        'c', 'c++', 'cpp', 'c#', 'csharp', 'objective-c', 'objc',
+        // JavaScript / TypeScript ecosystem
+        'javascript', 'js', 'typescript', 'ts', 'coffeescript',
+        // Web / scripting
+        'php', 'ruby', 'perl', 'lua',
+        // Systems / low-level
+        'rust', 'go', 'golang', 'swift', 'assembly', 'asm',
+        // Shell / scripting
+        'bash', 'shell', 'sh', 'powershell', 'ps1', 'batch', 'bat',
+        // SQL — generic
+        'sql',
+        // SQL — dialects
+        'postgresql', 'postgres', 'psql',
+        'mysql',
+        'sqlite',
+        'tsql', 't-sql', 'mssql', 'sqlserver',
+        'plsql', 'pl/sql', 'oracle',
+        'bigquery', 'bq',
+        'snowflake',
+        'redshift',
+        'spark sql', 'sparksql', 'pyspark',
+        'hive', 'hiveql',
+        'presto', 'trino',
+        'databricks',
+        'dbt',
+        // Data / scientific
+        'r', 'matlab', 'octave', 'julia', 'sas', 'stata', 'spss',
+        // Functional
+        'haskell', 'erlang', 'elixir', 'fsharp', 'f#', 'ocaml', 'elm',
+        // Mobile
+        'dart', 'flutter',
+        // Other
+        'vba', 'cobol', 'fortran', 'lisp', 'scheme', 'prolog', 'apex', 'abap',
+    ];
+    if (!targetLang || !validLangs.includes(targetLang.toLowerCase())) {
+        if (targetLang) console.log(`[DEBUG] Unknown target language "${targetLang}". Defaulting to Python.`);
         targetLang = 'Python';
         if (langInput) langInput.value = 'Python';
     }
@@ -1171,6 +1351,22 @@ async function handleCreateSession() {
         showStatus('Job Description is required');
         return;
     }
+
+    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+    if (!apiKey) {
+        showStatus('API key is required');
+        return;
+    }
+
+    // Validate disclaimer agreement (must be last field check)
+    const disclaimerCheck = document.getElementById('setup-disclaimer-agree');
+    if (disclaimerCheck && !disclaimerCheck.checked) {
+        showStatus('You must agree to the Terms & Ethical Usage Policy first');
+        return;
+    }
+
+    // Persist agreement
+    localStorage.setItem('disclaimer_agreed', 'true');
 
     // Validate license
     const licenseInput = document.getElementById('setup-license');
@@ -1521,6 +1717,20 @@ function resetSessionUI() {
 
     // Reset other inputs (keep API key from localStorage)
     if (sessionNameInput) sessionNameInput.value = '';
+    const roleInput = document.getElementById('setup-role');
+    if (roleInput) {
+        roleInput.value = '';
+        localStorage.removeItem('target_role');
+    }
+    const langInput2 = document.getElementById('setup-language');
+    if (langInput2) {
+        langInput2.value = '';
+        localStorage.removeItem('target_language');
+    }
+    const eslCheck = document.getElementById('setup-esl');
+    if (eslCheck) eslCheck.checked = false;
+    const shortRespCheck = document.getElementById('setup-short-responses');
+    if (shortRespCheck) shortRespCheck.checked = false;
     if (apiKeyInput) {
         const savedKey = localStorage.getItem('openai_api_key');
         apiKeyInput.value = savedKey || '';

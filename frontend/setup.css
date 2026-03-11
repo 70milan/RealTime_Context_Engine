@@ -12,7 +12,9 @@
   font-family: "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
-#setup-overlay.hidden { display: none; }
+#setup-overlay.hidden {
+  display: none;
+}
 
 /* Shell — the centered card */
 .setup-shell {
@@ -319,7 +321,14 @@
 /* Checkboxes */
 .setup-checks {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setup-check-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .setup-check {
@@ -327,15 +336,56 @@
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
-.setup-check input {
+.setup-check input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
   margin: 0;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  border: 1px solid rgba(100, 255, 150, 0.28);
+  border-radius: 3px;
+  background: rgba(10, 10, 18, 0.55);
   cursor: pointer;
-  accent-color: rgba(100, 255, 150, 0.6);
+  position: relative;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
+
+.setup-check input[type="checkbox"]:hover {
+  border-color: rgba(100, 255, 150, 0.55);
+  box-shadow: 0 0 0 2px rgba(100, 255, 150, 0.08);
+}
+
+.setup-check input[type="checkbox"]:checked {
+  background: rgba(100, 255, 150, 0.12);
+  border-color: rgba(100, 255, 150, 0.7);
+  box-shadow: 0 0 0 2px rgba(100, 255, 150, 0.1);
+}
+
+.setup-check input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 4px;
+  height: 7px;
+  border: 1.5px solid rgba(100, 255, 150, 0.9);
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+.setup-check:has(input:checked) {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Checkbox tooltips — handled by JS fixed-position tooltip in setup.js */
 
 /* Info links */
 .setup-info-link {
@@ -349,31 +399,37 @@
   color: rgba(100, 255, 150, 0.9);
 }
 
-/* Inline info panels */
-.setup-info-panel {
+
+
+/* Language autocomplete dropdown */
+.lang-autocomplete {
+  position: fixed;
+  z-index: 99999;
+  background: #1a1f2e;
+  border: 1px solid rgba(100, 255, 150, 0.25);
+  border-radius: 4px;
+  overflow-y: auto;
+  max-height: 220px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
   display: none;
-  margin-top: 4px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border-left: 2px solid rgba(100, 255, 150, 0.25);
-  border-radius: 0 4px 4px 0;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 10px;
-  line-height: 1.6;
 }
 
-.setup-info-panel.open {
+.lang-autocomplete.open {
   display: block;
 }
 
-.setup-info-panel a {
-  color: rgba(100, 255, 150, 0.7);
-  text-decoration: none;
+.lang-autocomplete-item {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.setup-info-panel a:hover {
-  color: rgba(100, 255, 150, 1);
-  text-decoration: underline;
+.lang-autocomplete-item:hover,
+.lang-autocomplete-item.active {
+  background: rgba(100, 255, 150, 0.12);
+  color: rgba(100, 255, 150, 0.95);
 }
 
 /* HWID display */
@@ -421,24 +477,52 @@
   word-break: break-all;
 }
 
-.backend-terminal::-webkit-scrollbar { width: 3px; }
-.backend-terminal::-webkit-scrollbar-track { background: transparent; }
-.backend-terminal::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+.backend-terminal::-webkit-scrollbar {
+  width: 3px;
+}
+
+.backend-terminal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.backend-terminal::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
 
 .term-line {
   display: block;
   white-space: pre-wrap;
 }
 
-.term-dim { color: rgba(255, 255, 255, 0.2); }
-.term-info { color: rgba(255, 255, 255, 0.45); }
-.term-ok { color: rgba(100, 255, 150, 0.6); }
-.term-err { color: rgba(255, 107, 107, 0.65); }
-.term-warn { color: rgba(255, 200, 80, 0.6); }
+.term-dim {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.term-info {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.term-ok {
+  color: rgba(100, 255, 150, 0.6);
+}
+
+.term-err {
+  color: rgba(255, 107, 107, 0.65);
+}
+
+.term-warn {
+  color: rgba(255, 200, 80, 0.6);
+}
 
 /* Hidden file input styling */
-#setup-resume { color: rgba(255, 107, 107, 0.5) !important; }
-#setup-resume.selected { color: #26ed79 !important; }
+#setup-resume {
+  color: rgba(255, 107, 107, 0.5) !important;
+}
+
+#setup-resume.selected {
+  color: #26ed79 !important;
+}
 
 /* ── Footer area ────────────────────────────────────────── */
 .setup-footer {
@@ -519,13 +603,7 @@
   filter: none;
 }
 
-#btn-start-session {
-  /* merged into .setup-cta above — keep ID selectors working */
-}
 
-.setup-meta {
-  display: none; /* moved to .setup-bottom-meta outside shell */
-}
 
 .setup-sep {
   color: rgba(255, 255, 255, 0.1);
@@ -543,19 +621,58 @@
 
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 760px) {
-  .setup-shell { width: 100%; padding: 0 14px; }
-  .setup-columns { grid-template-columns: 1fr; overflow-y: auto; }
-  .setup-row { grid-template-columns: 1fr; }
-  .setup-header { flex-direction: column; align-items: flex-start; }
-  .setup-checks { flex-direction: column; gap: 8px; }
-  .setup-footer-row { flex-direction: column; }
+  .setup-shell {
+    width: 100%;
+    padding: 0 14px;
+  }
+
+  .setup-columns {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .setup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .setup-checks {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .setup-footer-row {
+    flex-direction: column;
+  }
 }
 
 @media (max-height: 800px) {
-  .setup-shell { padding: 0 20px; }
-  .setup-top-bar { height: 30px; }
-  .setup-bottom-meta { height: 24px; }
-  .setup-columns { gap: 10px; }
-  .setup-group { padding: 10px 12px; gap: 6px; }
-  .setup-title { font-size: 18px; }
+  .setup-shell {
+    padding: 0 20px;
+  }
+
+  .setup-top-bar {
+    height: 30px;
+  }
+
+  .setup-bottom-meta {
+    height: 24px;
+  }
+
+  .setup-columns {
+    gap: 10px;
+  }
+
+  .setup-group {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .setup-title {
+    font-size: 18px;
+  }
 }
