@@ -2,6 +2,10 @@
 node_modules/
 
 
+simulate_interview.py
+run_edge_case_tests.py
+
+
 # Python
 __pycache__/
 *.py[cod]
@@ -121,3 +125,5 @@ commit_and_push.bat
 generate_keys_force.py
 key_gen.py
 backend/generate_license.py
+
+
