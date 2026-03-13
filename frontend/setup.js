@@ -660,8 +660,9 @@ function initSession() {
             // Temporarily block to calculate true height
             tooltip.style.display = 'block';
 
-            // Horizontal clamping (300px width + 10px margin)
-            tooltip.style.left = Math.max(10, Math.min(rect.left + window.scrollX, window.innerWidth - 310)) + 'px';
+            // Shift the tooltip left by 30% of its width, then clamp strictly within viewport bounds
+            let leftPos = rect.left + window.scrollX - (tooltip.offsetWidth * 0.3);
+            tooltip.style.left = Math.max(10, Math.min(leftPos, window.innerWidth - tooltip.offsetWidth - 20)) + 'px';
 
             // Vertical positioning (default below)
             let topPos = rect.bottom + window.scrollY + 10;

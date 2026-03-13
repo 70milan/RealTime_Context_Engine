@@ -1,6 +1,6 @@
 {
   "name": "windows-runtime-host",
-  "version": "2.0.64",
+  "version": "2.0.65",
   "description": "Interview Assistant - Secure Windows Runtime Host",
   "author": "mjulez70 <mjulez70@gmail.com>",
   "productName": "Interview Assistant",
