@@ -67,7 +67,8 @@ AVAILABLE_TEXT_MODELS = {
     "gpt-5-mini": {"name": "ChatGPT 5 Mini", "speed": "Blistering", "cost": "Cheap", "accuracy": "Solid", "desc": "Day-to-day tasks"}
 }
 
-DEFAULT_TEXT_MODEL = "gpt-4o"
+DEFAULT_TEXT_MODEL = "gpt-4o-mini"
+DEFAULT_SCREENSHOT_MODEL = "gpt-4o-mini"
 
 def count_tokens(text: str) -> int:
     """Count tokens in text"""
@@ -188,37 +189,50 @@ def get_api_key():
     global profile_cache
     # 1. Check in-memory cache first (fastest)
     if isinstance(profile_cache, dict) and profile_cache.get('openai_api_key'):
-        return profile_cache['openai_api_key']
-    # 2. Fall back to disk if not in memory (backend restart, session load missing key, etc.)
+        key = profile_cache['openai_api_key'].strip()
+        if key.startswith("sk-") and not key.endswith("KiwA"):
+            return key
+            
+    # 2. Fall back to disk if not in memory
     disk_profile = load_profile()
     if isinstance(disk_profile, dict) and disk_profile.get('openai_api_key'):
-        print("[get_api_key] Key found on disk, restoring to profile_cache")
-        if not isinstance(profile_cache, dict):
-            profile_cache = {}
-        profile_cache['openai_api_key'] = disk_profile['openai_api_key']
-        return profile_cache['openai_api_key']
+        key = disk_profile['openai_api_key'].strip()
+        if key.startswith("sk-") and not key.endswith("KiwA"):
+            print(f"[get_api_key] Restored valid key from disk: {key[:8]}...{key[-4:]}")
+            if not isinstance(profile_cache, dict):
+                profile_cache = {}
+            profile_cache['openai_api_key'] = key
+            return key
+            
+    # 3. Fall back to environment variable as last resort
+    env_key = os.getenv("OPENAI_API_KEY")
+    if env_key:
+        print(f"[get_api_key] Falling back to environment variable: {env_key[:8]}...")
+        return env_key.strip()
+        
     return None
 
 @app.websocket("/realtime")
 async def realtime(ws: WebSocket):
     await ws.accept()
     
-    if not check_access_allowed():
+    access_allowed = check_access_allowed()
+    if not access_allowed:
+        print("[WS] Access denied (demo expired or unlicensed)")
         await ws.send_json({"type": "error", "message": "Demo expired. Please purchase a license to continue."})
-        await ws.close(code=1008)
+        await ws.close()
         return
-
     
     api_key = get_api_key()
-    url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
+    
+    url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "OpenAI-Beta": "realtime=v1",
     }
     
-    print(f"Incoming WebSocket connection. API Key present: {bool(api_key)}")
     if not api_key:
-        print("ERROR: API key not found in profile!")
+        print("[WS] ERROR: API key not found in profile or environment!")
         await ws.close(code=1008, reason="Missing API Key")
         return
 
@@ -231,8 +245,16 @@ async def realtime(ws: WebSocket):
                 "type": "session.update",
                 "session": {
                     "modalities": ["text"],
+                    "input_audio_format": "pcm16",
                     "input_audio_transcription": {
                         "model": "whisper-1"
+                    },
+                    "turn_detection": {
+                        "type": "server_vad",
+                        "threshold": 0.5,
+                        "prefix_padding_ms": 300,
+                        "silence_duration_ms": 600,
+                        "create_response": False
                     }
                 }
             }
@@ -258,24 +280,38 @@ async def realtime(ws: WebSocket):
                 try:
                     async for message in openai_ws:
                         event = json.loads(message)
-                        
-                        # Real-time transcription events
-                        if event["type"] == "conversation.item.input_audio_transcription.delta":
-                            print(f"TRANSCRIPT DELTA: {event['delta']}")
+                        etype = event.get("type", "")
+
+                        if etype == "conversation.item.input_audio_transcription.completed":
+                            transcript = event.get("transcript", "").strip()
+                            if transcript:
+                                print(f"[TRANSCRIPT] {transcript}")
+                                await ws.send_json({
+                                    "type": "transcript",
+                                    "text": f"{transcript}\n"
+                                })
+
+                        elif etype == "input_audio_buffer.speech_started":
+                            print("[VAD] Speech detected")
+
+                        elif etype == "input_audio_buffer.speech_stopped":
+                            print("[VAD] Speech ended — committing buffer")
+
+                        elif etype in ["response.text.delta", "response.audio_transcript.delta"]:
+                            delta = event.get("delta", "")
+                            if delta:
+                                await ws.send_json({"type": "transcript", "text": delta})
+
+                        elif etype == "error":
+                            err = event.get("error", {})
+                            print(f"[OPENAI ERROR] {err.get('code')} — {err.get('message')}")
                             await ws.send_json({
-                                "type": "transcript",
-                                "text": event["delta"]
+                                "type": "error",
+                                "message": err.get("message", "Unknown OpenAI error")
                             })
-                        elif event["type"] == "conversation.item.input_audio_transcription.completed":
-                            print(f"TRANSCRIPT DONE: {event['transcript']}")
-                            await ws.send_json({
-                                "type": "transcript",
-                                "text": "\n"
-                            })
-                        elif event["type"] == "error":
-                            print(f"OpenAI Error: {event}")
+
                 except Exception as e:
-                    print(f"OpenAI receive error: {e}")
+                    print(f"[receive_from_openai] Exception: {e}")
 
             await asyncio.gather(receive_from_client(), receive_from_openai())
 
@@ -427,9 +463,9 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
     # Add Modifiers - Make them extremely strict
     modifier_block = ""
     if is_esl:
-        modifier_block += "\n\nCRITICAL CONSTRAINT: The user speaks English as a second language. YOU MUST use A1/A2 level basic English vocabulary. NEVER use idioms, metaphors, acronyms, or complex sentence structures. Keep sentences under 10 words if possible."
+    modifier_block += "\n\nCRITICAL CONSTRAINT: The user speaks English as a second language. Use short simple sentences. One idea per sentence. Avoid idioms and figures of speech (e.g. 'hit the ground running', 'boiling the ocean'). Keep technical terms but explain them briefly when first used. Never use compound or multi-clause sentences."
     if short_responses:
-        modifier_block += "\n\nCRITICAL CONSTRAINT: Provide concise, short responses. Cut conversational filler (e.g., 'Certainly!', 'Here is...'). Keep answers about 30% to 50% shorter than normal. Use bullet points for readability, but DO NOT over-explain or elaborate unnecessarily unless asked."
+    modifier_block += "\n\nCRITICAL CONSTRAINT: Maximum 3 sentences or 5 bullet points total. No filler openers. Stop after answering the question. Do not elaborate."
 
     if for_vision:
         # Vision requests need the context inline — do NOT cache these
@@ -439,8 +475,8 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
             "The resume below is YOUR real work history. When asked about past jobs, refer to YOUR resume. "
             "Speak in FIRST PERSON as yourself - a real human professional. "
             "When you see a coding problem, SOLVE IT with working code and clear explanation. "
-            "Use SIMPLE, clear words. Avoid complex vocabulary. Speak naturally like in a real conversation. "
-            "Explain your approach in 8-12 sentences. Write clean code with comments, then explain simply. "
+            "Use simple words. Short sentences. One idea per sentence. "
+"Explain your approach in 6-8 sentences maximum. Write clean code with comments, then explain simply. "
             "Draw from YOUR resume for all experience-related questions. "
             f"Prefer {language or 'Python'} for all coding and technical explanations. "
             "Remember what was discussed earlier."
@@ -455,7 +491,7 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
         "When asked about previous jobs, projects, or experience - use details from YOUR resume. "
         "Speak in FIRST PERSON as yourself - a real human professional. "
         "Use SIMPLE, clear words. Speak naturally like in a real conversation. "
-        "Be confident but humble. Keep answers to 4-6 sentences. Give specific examples from YOUR resume. "
+"Be confident but humble. Keep answers to 4-5 sentences. Give specific examples from YOUR resume. "
         "Remember what was discussed earlier in this conversation. "
         f"Prefer {language or 'Python'} for all coding and technical explanations. "
         "If you write ANY code, you MUST wrap it strictly inside standard Markdown content blocks specifying the exact language (e.g. ```python ... ```)."
@@ -959,17 +995,21 @@ async def save_session_data(data: Dict[str, Any]):
         if not conv_file.exists():
             conv_file.write_text('[]', encoding='utf-8')
         
-        # Update profile cache for AI
-        if profile_cache is None:
-            profile_cache = {}
-        profile_cache['openai_api_key'] = data.get('openai_api_key', '')
-        profile_cache['job_description'] = data.get('job_description', '')
-        profile_cache['resume_text'] = data.get('resume_text', '')
-        profile_cache['is_esl'] = data.get('is_esl', False)
-        profile_cache['short_responses'] = data.get('short_responses', False)
-        
-        # Also save to profile for persistence
-        save_profile(profile_cache)
+        # Update profile cache for AI ONLY if the key provided is valid
+        new_key = data.get('openai_api_key', '').strip()
+        if new_key.startswith("sk-") and not new_key.endswith("KiwA"):
+            if profile_cache is None:
+                profile_cache = {}
+            profile_cache['openai_api_key'] = new_key
+            profile_cache['job_description'] = data.get('job_description', '')
+            profile_cache['resume_text'] = data.get('resume_text', '')
+            profile_cache['is_esl'] = data.get('is_esl', False)
+            profile_cache['short_responses'] = data.get('short_responses', False)
+            
+            # Also save to profile for persistence
+            save_profile(profile_cache)
+        else:
+            print(f"[SESSION] Skipping global API key update (provided key is empty or placeholder)")
         
         current_session_name = session_name
         
@@ -1139,8 +1179,8 @@ async def load_session(session_name: str):
         }
 
         # Restore profile cache for AI context
-        # Preserve existing API key BEFORE overwriting profile_cache with session data
-        existing_api_key = (profile_cache or {}).get('openai_api_key') or load_profile().get('openai_api_key', '')
+        # 1. Start with the currently validated global key
+        current_valid_key = (profile_cache or {}).get('openai_api_key') or load_profile().get('openai_api_key', '')
         
         if profile_cache is None:
             profile_cache = {}
@@ -1149,11 +1189,14 @@ async def load_session(session_name: str):
         profile_cache['target_role'] = data.get('target_role', '')
         profile_cache['target_language'] = data.get('target_language', '')
         
-        # Restore API key: prefer session.json value, fall back to previously stored key
-        api_key_to_use = data.get('openai_api_key') or existing_api_key
-        if api_key_to_use:
-            profile_cache['openai_api_key'] = api_key_to_use
-            print(f"[SESSION] API key restored for session '{session_name}'")
+        # 2. Restore API key: Only use session.json value if it's valid and looks real
+        session_key = data.get('openai_api_key', '').strip()
+        if session_key.startswith("sk-") and not session_key.endswith("KiwA"):
+            profile_cache['openai_api_key'] = session_key
+            print(f"[SESSION] API key restored from session '{session_name}'")
+        elif current_valid_key:
+            profile_cache['openai_api_key'] = current_valid_key
+            print(f"[SESSION] Using current global API key (Session key was placeholder/empty)")
         else:
             print(f"[SESSION] WARNING: No API key available - user must re-enter key")
         
@@ -1341,7 +1384,7 @@ async def stream_ai_response(req: AIRequest):
                         {"type": "image_url", "image_url": {"url": req.screenshot}}
                     ]
                 })
-                model = "gpt-4o-mini"
+                model = DEFAULT_SCREENSHOT_MODEL
                 print(f"[STREAM] Using model: {model} (vision)")
             else:
                 messages.append({"role": "user", "content": req.transcript})
@@ -1515,7 +1558,7 @@ async def generate_ai_response(req: AIRequest):
                     {"type": "image_url", "image_url": {"url": req.screenshot}}
                 ]
             })
-            model = "gpt-4o-mini"
+            model = DEFAULT_SCREENSHOT_MODEL
         else:
             messages.append({"role": "user", "content": req.transcript})
             model = req.text_model if req.text_model and req.text_model in AVAILABLE_TEXT_MODELS else DEFAULT_TEXT_MODEL

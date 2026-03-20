@@ -1264,6 +1264,11 @@
         return;
       }
 
+      // Clear the live transcript window for a clean slate
+      if (mode === 'system') {
+        transcriptArea.innerText = '';
+      }
+
       if (activeMode === mode) {
         stopCapture();
         return;
