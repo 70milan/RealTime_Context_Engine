@@ -10,7 +10,7 @@ sys.executable = r"C:\Data Engineering\release_package\backend\interview-backend
 if getattr(sys, 'frozen', False):
     app_data = os.getenv('APPDATA')
     if app_data:
-        BASE_DIR = Path(app_data) / "JobAndit" / "backend"
+        BASE_DIR = Path(app_data) / "jobandit" / "backend"
     else:
         BASE_DIR = Path(sys.executable).parent
 else:
