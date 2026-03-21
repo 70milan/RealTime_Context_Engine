@@ -162,6 +162,10 @@ async function showLicensePrompt() {
 function showSessionError() {
     const popup = document.getElementById('session-error-popup');
     if (popup) {
+        popup.textContent = 'Please start the session first';
+        popup.style.color = 'rgba(255, 107, 107, 0.85)';
+        popup.style.borderColor = 'rgba(255, 107, 107, 0.3)';
+        popup.style.background = 'rgba(10, 10, 18, 0.95)';
         popup.style.display = 'block';
         popup.style.opacity = '1';
         setTimeout(() => {
@@ -1420,9 +1424,6 @@ async function handleCreateSession() {
         }
     }
 
-    // Small delay so user sees the license status
-    await new Promise(resolve => setTimeout(resolve, 500));
-
     try {
         startBtn.disabled = true;
         if (status) status.style.color = "#aaa";
@@ -1442,34 +1443,26 @@ async function handleCreateSession() {
 
         currentSessionName = sanitizedSessionName;
 
-        // 1. Validate API Key
-        status.innerText = "Validating API key...";
-        status.style.color = "#aaa"; // Neutral during validation
-        const validateRes = await fetch('http://127.0.0.1:5050/validate-api-key', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_key: apiKey })
-        });
-        const validateJson = await validateRes.json();
-
-        if (!validateJson.valid) {
-            throw new Error(validateJson.error || "Invalid API key");
-        }
-        status.style.color = "rgba(100, 255, 150, 0.4)"; // Green only after success
-
-        // 2. Upload Resume (to session folder)
-        status.innerText = "Uploading resume...";
+        // Validate API key + upload resume in parallel
+        status.innerText = "Validating & uploading...";
         const fd = new FormData();
         fd.append('file', fileInput.files[0]);
         fd.append('session_name', sanitizedSessionName);
 
-        const upRes = await fetch('http://127.0.0.1:5050/session/resume', { method: 'POST', body: fd });
-        const upJson = await upRes.json();
+        const [validateJson, upJson] = await Promise.all([
+            fetch('http://127.0.0.1:5050/validate-api-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: apiKey })
+            }).then(r => r.json()),
+            fetch('http://127.0.0.1:5050/session/resume', {
+                method: 'POST',
+                body: fd
+            }).then(r => r.json())
+        ]);
 
-        if (upJson.status !== 'ok') {
-            throw new Error("Resume upload failed: " + (upJson.error || 'Unknown error'));
-        }
-
+        if (!validateJson.valid) throw new Error(validateJson.error || "Invalid API key");
+        if (upJson.status !== 'ok') throw new Error("Resume upload failed: " + (upJson.error || 'Unknown error'));
         // 3. Save session data (job description, api key, etc.)
         status.innerText = "Saving session data...";
 
@@ -1539,7 +1532,7 @@ async function handleCreateSession() {
             // Reset response time display
             const responseTimeEl = document.getElementById('response-time');
             if (responseTimeEl) responseTimeEl.innerText = '0.0s';
-        }, 1200);
+        }, 300);
 
     } catch (e) {
         console.error('Session Creation Error:', e);

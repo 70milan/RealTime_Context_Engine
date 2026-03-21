@@ -10,8 +10,9 @@ let convoWin = null;
 let isRecording = false;
 let isMiniMode = false;
 let backendProcess = null;
-let lastMiniPosition = null; // Remember where the mini icon was dragged to
-let isQuitting = false; // Track explicit quit to prevent close aborting
+let lastMiniPosition = null;
+let isQuitting = false;
+let backendLogBuffer = []; // Buffer logs that fire before window is ready
 
 // ============ FILE LOGGER ============
 const LOG_FILE = path.join(app.getPath('userData'), 'app-log.txt');
@@ -20,14 +21,13 @@ function rotateLogIfNeeded() {
   try {
     if (fs.existsSync(LOG_FILE)) {
       const stats = fs.statSync(LOG_FILE);
-      // Rotate at 2MB
       if (stats.size > 2 * 1024 * 1024) {
         const oldLog = LOG_FILE + '.old';
         if (fs.existsSync(oldLog)) fs.unlinkSync(oldLog);
         fs.renameSync(LOG_FILE, oldLog);
       }
     }
-  } catch (e) { /* ignore rotation errors */ }
+  } catch (e) { }
 }
 
 function logToFile(level, ...args) {
@@ -36,14 +36,12 @@ function logToFile(level, ...args) {
     const message = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a, null, 0))).join(' ');
     const line = `[${timestamp}] [${level}] ${message}\n`;
     fs.appendFileSync(LOG_FILE, line, 'utf-8');
-  } catch (e) { /* never crash from logging */ }
+  } catch (e) { }
 }
 
-// Rotate on startup
 rotateLogIfNeeded();
 logToFile('INFO', 'App starting', `v${app.getVersion()}`, `pid=${process.pid}`);
 
-// Catch uncaught exceptions
 process.on('uncaughtException', (err) => {
   logToFile('FATAL', 'Uncaught Exception:', err.message, err.stack);
   console.error('Uncaught Exception:', err);
@@ -61,22 +59,16 @@ if (!gotTheLock) {
   console.log('[STEALTH] Another instance is already running. Quitting this instance.');
   app.quit();
 } else {
-  // Find existing instance and show/focus it instead
   app.on('second-instance', (event, commandLine, workingDirectory) => {
     if (win) {
       if (!win.isVisible()) win.show();
       if (win.isMinimized()) win.restore();
-
-      // If we're in mini mode, don't expand automatically, just show the icon
-      // But if we're not in mini mode, ensure it's front and center
       win.focus();
-
       console.log('[STEALTH] Brought existing application window to front.');
     }
   });
 }
 
-// This will be initialized in app.whenReady
 let updateLogger = null;
 
 function initAutoUpdater() {
@@ -86,7 +78,6 @@ function initAutoUpdater() {
     autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.allowPrerelease = true;
 
-    // Custom logger to send all update logs to the renderer
     updateLogger = {
       info: (msg) => {
         console.log('[UPDATE] ' + msg);
@@ -101,22 +92,20 @@ function initAutoUpdater() {
         if (win && !win.isDestroyed()) win.webContents.send('update-log', 'ERROR: ' + msg);
       }
     };
-    // BYPASS NSIS CERTIFICATE CHECK IN WINDOWS
+
     autoUpdater.verifyUpdateCodeSignature = async (publisherName, installPath) => {
       console.log('[UPDATE] Bypassing code signature verification for', publisherName);
-      return null; // Return null to indicate the signature is valid
+      return null;
     };
 
     autoUpdater.logger = updateLogger;
 
-    // Prevent attaching multiple listener instances
     autoUpdater.removeAllListeners();
     ipcMain.removeAllListeners('update-accept');
     ipcMain.removeAllListeners('update-decline');
     ipcMain.removeAllListeners('update-restart');
     ipcMain.removeAllListeners('update-later');
 
-    // Re-wire events here...
     setupAutoUpdaterEvents();
   } catch (err) {
     console.error('Failed to initialize auto-updater:', err);
@@ -171,7 +160,6 @@ function setupAutoUpdaterEvents() {
     updateVersion = info.version;
     if (win) win.webContents.send('update-check-result', 'available');
 
-    // Custom in-app prompt matching app design
     const content = `\`
     <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:30px 36px;text-align:center;max-width:340px;width:90%;">
       <div style="color:rgba(255,255,255,0.5);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Update Available</div>
@@ -190,7 +178,6 @@ function setupAutoUpdaterEvents() {
 
     showUpdateOverlay(content);
 
-    // Wire up buttons via IPC
     win.webContents.executeJavaScript(`{
     const yesBtn = document.getElementById('update-yes-btn');
     const noBtn = document.getElementById('update-no-btn');
@@ -204,7 +191,6 @@ function setupAutoUpdaterEvents() {
   });
 
   ipcMain.on('update-accept', async () => {
-    // Show downloading UI
     const content = `\`
     <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:30px 36px;text-align:center;max-width:340px;width:90%;">
       <div style="color:rgba(255,255,255,0.5);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Downloading Update</div>
@@ -234,9 +220,7 @@ function setupAutoUpdaterEvents() {
 
   autoUpdater.on('update-not-available', () => {
     console.log('No updates available');
-    if (win) {
-      win.webContents.send('update-check-result', 'latest');
-    }
+    if (win) win.webContents.send('update-check-result', 'latest');
   });
 
   autoUpdater.on('download-progress', (progress) => {
@@ -248,7 +232,6 @@ function setupAutoUpdaterEvents() {
   autoUpdater.on('update-downloaded', (info) => {
     console.log('Update downloaded:', info.version);
 
-    // Show restart prompt in-app
     const content = `\`
     <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:30px 36px;text-align:center;max-width:340px;width:90%;">
       <div style="color:rgba(255,255,255,0.5);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Update Ready</div>
@@ -267,7 +250,6 @@ function setupAutoUpdaterEvents() {
 
     showUpdateOverlay(content);
 
-    // Wire up buttons via IPC
     win.webContents.executeJavaScript(`{
     const restartBtn = document.getElementById('update-restart-btn');
     const laterBtn = document.getElementById('update-later-btn');
@@ -282,17 +264,12 @@ function setupAutoUpdaterEvents() {
 
   ipcMain.on('update-restart', () => {
     console.log('[UPDATE] Restarting for update. Cleaning up backend first...');
-    // Mark as quitting so cleanup doesn't abort
     isQuitting = true;
-
     try {
-      // Run cleanup
       cleanupBackend();
     } catch (err) {
       console.error('[UPDATE ERROR] Backend cleanup failed during update-restart:', err);
     }
-
-    // Wait slightly longer (3000ms) for OS to release file locks reliably, then install
     setTimeout(() => {
       console.log('[UPDATE] Attempting quitAndInstall...');
       autoUpdater.quitAndInstall(true, true);
@@ -306,14 +283,29 @@ function setupAutoUpdaterEvents() {
 
   autoUpdater.on('error', (err) => {
     console.error('Auto-updater error:', err);
-    if (win) {
-      win.webContents.send('update-check-result', 'error', err.message);
-    }
+    if (win) win.webContents.send('update-check-result', 'error', err.message);
     hideUpdateUI();
   });
 }
 
 // ============ END AUTO-UPDATER ============
+
+// ============ BACKEND LOG HELPER ============
+// Buffers logs that fire before the window is ready, then flushes them on dom-ready.
+function sendBackendLog(level, msg) {
+  if (win && !win.isDestroyed()) {
+    // Flush any buffered logs first so order is preserved
+    if (backendLogBuffer.length > 0) {
+      backendLogBuffer.forEach(([l, m]) => win.webContents.send('backend-log', l, m));
+      backendLogBuffer = [];
+    }
+    win.webContents.send('backend-log', level, msg);
+  } else {
+    // Window not ready yet — buffer it
+    backendLogBuffer.push([level, msg]);
+    if (backendLogBuffer.length > 100) backendLogBuffer.shift(); // cap at 100 lines
+  }
+}
 
 function startBackend() {
   const isDev = !app.isPackaged;
@@ -329,33 +321,61 @@ function startBackend() {
   backendProcess = spawn(backendPath, [], {
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,
-    windowsHide: true // STEALTH: Hide the backend console window
+    windowsHide: true
   });
 
   backendProcess.stdout.on('data', (data) => {
-    const msg = data.toString().trim();
-    console.log(`[BACKEND] ${msg}`);
-    logToFile('BACKEND', msg);
-    if (win && !win.isDestroyed()) win.webContents.send('backend-log', 'info', msg);
+    const lines = data.toString().split('\n').filter(l => l.trim());
+    lines.forEach(msg => {
+      let level = 'info';
+      if (msg.includes('[STARTUP]') || msg.includes('SUCCESS') || msg.includes('Connected')) level = 'ok';
+      else if (msg.includes('ERROR') || msg.includes('Error') || msg.includes('FAILED')) level = 'err';
+      else if (msg.includes('WARNING') || msg.includes('WARN')) level = 'warn';
+
+      console.log(`[BACKEND] ${msg}`);
+      logToFile('BACKEND', msg);
+      sendBackendLog(level, msg);
+    });
   });
 
   backendProcess.stderr.on('data', (data) => {
     const msg = data.toString().trim();
-    console.error(`[BACKEND ERROR] ${msg}`);
+    if (!msg) return;
+
+    // Uvicorn writes normal startup info to stderr — classify properly instead of marking red
+    const isNormalInfo = (
+      msg.includes('INFO:') ||
+      msg.includes('Uvicorn running') ||
+      msg.includes('Application startup') ||
+      msg.includes('Started server process') ||
+      msg.includes('Waiting for application') ||
+      msg.includes('ASGI') ||
+      msg.includes('started reloader')
+    );
+
+    const isWarning = (
+      msg.includes('WARNING:') ||
+      msg.includes('DeprecationWarning') ||
+      msg.includes('UserWarning')
+    );
+
+    const level = isNormalInfo ? 'info' : isWarning ? 'warn' : 'err';
+
+    console.error(`[BACKEND STDERR] ${msg}`);
     logToFile('BACKEND_ERR', msg);
-    if (win && !win.isDestroyed()) win.webContents.send('backend-log', 'err', msg);
+    sendBackendLog(level, msg);
   });
 
   backendProcess.on('error', (err) => {
     console.error('Failed to start backend:', err);
     logToFile('ERROR', 'Failed to start backend:', err.message);
-    if (win && !win.isDestroyed()) win.webContents.send('backend-log', 'err', 'Failed to start backend: ' + err.message);
+    sendBackendLog('err', 'Failed to start backend: ' + err.message);
   });
 
   backendProcess.on('exit', (code) => {
     console.log(`Backend exited with code ${code}`);
     logToFile('INFO', `Backend exited with code ${code}`);
-    if (win && !win.isDestroyed()) win.webContents.send('backend-log', code === 0 ? 'ok' : 'err', `Backend exited with code ${code}`);
+    sendBackendLog(code === 0 ? 'ok' : 'err', `Backend exited with code ${code}`);
   });
 }
 
@@ -401,29 +421,31 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      backgroundThrottling: false, // Keep running in background
+      backgroundThrottling: false,
     },
   });
 
-  // STEALTH MODE: Hide from screen capture
   win.setContentProtection(true);
-
   win.loadFile(path.join(__dirname, 'index.html'));
 
-  // Removed auto-open DevTools
-
-  // Force default zoom factor to ignore Electron's persistent zoom cache
   win.webContents.once('dom-ready', () => {
-    try {
-      win.webContents.setZoomFactor(1.0);
-    } catch (e) { }
+    // Reset zoom
+    try { win.webContents.setZoomFactor(1.0); } catch (e) { }
+
+    // Flush buffered backend logs — small delay ensures IPC listener in renderer is attached
+    if (backendLogBuffer.length > 0) {
+      setTimeout(() => {
+        if (win && !win.isDestroyed()) {
+          backendLogBuffer.forEach(([level, msg]) => win.webContents.send('backend-log', level, msg));
+          backendLogBuffer = [];
+        }
+      }, 500);
+    }
   });
 
-  // Ensure content scales proportionally to the window width, maintaining a 800px base
   win.on('resize', () => {
     if (isMiniMode || !win) return;
     const [width] = win.getSize();
-    // Don't scale if width is less than 400 (which happens during mini mode transition)
     if (width < 380) return;
     try {
       win.webContents.setZoomFactor(width / 800);
@@ -432,7 +454,6 @@ function createWindow() {
     }
   });
 
-  // Clamp on move
   win.on('will-move', (e, newBounds) => {
     if (!win) return;
     const display = screen.getDisplayMatching(win.getBounds());
@@ -446,13 +467,9 @@ function createWindow() {
 
     if (clampedY < workArea.y) clampedY = workArea.y;
     else if (clampedY + newBounds.height > workArea.y + workArea.height) clampedY = workArea.y + workArea.height - newBounds.height;
-
-    if (clampedX !== newBounds.x || clampedY !== newBounds.y) {
-    }
   });
 
   win.on('focus', () => {
-    // When the user clicks the main window, bring it to the front
     console.log('[DEBUG_FOCUS] Main window clicked/focused by OS');
     if (convoWin && !convoWin.isDestroyed() && convoWin.isVisible()) {
       stackWindows(win, convoWin);
@@ -487,7 +504,6 @@ function createConvoWindow() {
   convoWin.loadFile(path.join(__dirname, 'convo.html'));
 
   convoWin.on('focus', () => {
-    // When the user clicks the convo window, bring it to the front
     console.log('[DEBUG_FOCUS] Convo window clicked/focused by OS');
     if (win && !win.isDestroyed() && win.isVisible()) {
       stackWindows(convoWin, win);
@@ -496,7 +512,6 @@ function createConvoWindow() {
 
   convoWin.on('close', (e) => {
     if (!isQuitting) {
-      // Prevent actual closing, just hide it so state remains
       e.preventDefault();
       convoWin.hide();
     }
@@ -507,19 +522,16 @@ function createConvoWindow() {
   });
 }
 
-// Focus managers to ensure clicked windows go to the top of the alwaysOnTop stack
 function stackWindows(frontWin, backWin) {
   if (!frontWin || frontWin.isDestroyed()) return;
 
-  console.log(`[DEBUG_FOCUS] Attempting to stack windows natively. Restoring frontWin visibility.`);
+  console.log(`[DEBUG_FOCUS] Attempting to stack windows natively.`);
 
-  // Push the background window down to the standard floating layer
   if (backWin && !backWin.isDestroyed() && backWin.isVisible()) {
     backWin.setAlwaysOnTop(true, 'floating');
     console.log(`[DEBUG_FOCUS] Background window pushed to 'floating' layer.`);
   }
 
-  // Pull the active window specifically to the highest possible layer to skip OS focus glitches
   frontWin.setAlwaysOnTop(true, 'screen-saver');
   const logMsg = `[DEBUG_FOCUS] Stacking ${frontWin === win ? 'Main' : 'Convo'} in FRONT (screen-saver layer).`;
   console.log(logMsg);
@@ -530,25 +542,19 @@ function stackWindows(frontWin, backWin) {
     frontWin.show();
   }
 
-  // Prevent infinite loops if stackWindows is called inside a 'focus' event
   if (!frontWin.isFocused()) {
     console.log(`[DEBUG_FOCUS] Triggering native element focus!`);
     frontWin.focus();
   }
 }
 
-
-
 app.whenReady().then(() => {
-  // Start backend first
   startBackend();
 
-  // Wait for backend to initialize
   setTimeout(() => {
     createWindow();
     createConvoWindow();
 
-    // Check for updates after window is created (only in production)
     if (app.isPackaged) {
       setTimeout(() => {
         if (!autoUpdater) initAutoUpdater();
@@ -559,17 +565,11 @@ app.whenReady().then(() => {
     }
   }, 2000);
 
-  // IPC Handler for Screen Sources (Workaround for renderer restriction)
   ipcMain.handle('GET_SOURCES', async (event, types) => {
     const sources = await desktopCapturer.getSources({ types });
-    // Return only necessary data to avoid serialization issues with NativeImage
-    return sources.map(s => ({
-      id: s.id,
-      name: s.name
-    }));
+    return sources.map(s => ({ id: s.id, name: s.name }));
   });
 
-  // Helper to log shortcut registration
   const registerShortcut = (keys, callback) => {
     const success = globalShortcut.register(keys, callback);
     if (success) {
@@ -583,17 +583,13 @@ app.whenReady().then(() => {
     return success;
   };
 
-  /* ---- Ctrl+F: Maximize AI Response Window ---- */
+  /* ---- Ctrl+F: Maximize AI Response ---- */
   registerShortcut('CommandOrControl+F', () => {
-
     if (!win || win.isDestroyed()) return;
-    console.log('🔍 Maximize Response Triggered');
-    win.webContents.executeJavaScript(`
-      if (window.maximizeResponse) { window.maximizeResponse(); }
-    `);
+    win.webContents.executeJavaScript(`if (window.maximizeResponse) { window.maximizeResponse(); }`);
   });
 
-  /* ---- move left / right ---- */
+  /* ---- Move main window ---- */
   registerShortcut('CommandOrControl+Alt+Left', () => {
     if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
@@ -608,7 +604,6 @@ app.whenReady().then(() => {
     clampWindowToScreen(win);
   });
 
-  /* ---- move up / down ---- */
   registerShortcut('CommandOrControl+Alt+Up', () => {
     if (!win || win.isDestroyed()) return;
     const [x, y] = win.getPosition();
@@ -623,7 +618,7 @@ app.whenReady().then(() => {
     clampWindowToScreen(win);
   });
 
-  /* ---- move convo left / right ---- */
+  /* ---- Move convo window ---- */
   registerShortcut('CommandOrControl+Alt+Shift+Left', () => {
     if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
     const [x, y] = convoWin.getPosition();
@@ -638,7 +633,6 @@ app.whenReady().then(() => {
     clampWindowToScreen(convoWin);
   });
 
-  /* ---- move convo up / down ---- */
   registerShortcut('CommandOrControl+Alt+Shift+Up', () => {
     if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
     const [x, y] = convoWin.getPosition();
@@ -653,24 +647,20 @@ app.whenReady().then(() => {
     clampWindowToScreen(convoWin);
   });
 
-  /* ---- resize convo ---- */
+  /* ---- Resize convo window ---- */
   registerShortcut('CommandOrControl+Alt+Shift+=', () => {
     if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
     const [w, h] = convoWin.getSize();
     const display = screen.getDisplayMatching(convoWin.getBounds());
     const workArea = display.workArea;
-    const newW = Math.min(w + 50, workArea.width);
-    const newH = Math.min(h + 50, workArea.height);
-    convoWin.setSize(newW, newH);
+    convoWin.setSize(Math.min(w + 50, workArea.width), Math.min(h + 50, workArea.height));
     clampWindowToScreen(convoWin);
   });
 
   registerShortcut('CommandOrControl+Alt+Shift+-', () => {
     if (!convoWin || convoWin.isDestroyed() || !convoWin.isVisible()) return;
     const [w, h] = convoWin.getSize();
-    const newW = Math.max(w - 50, 300);
-    const newH = Math.max(h - 50, 400);
-    convoWin.setSize(newW, newH);
+    convoWin.setSize(Math.max(w - 50, 300), Math.max(h - 50, 400));
     clampWindowToScreen(convoWin);
   });
 
@@ -680,7 +670,6 @@ app.whenReady().then(() => {
     clampWindowToScreen(convoWin);
   });
 
-
   /* ---- Ctrl+Alt+C: Toggle Convo Window ---- */
   registerShortcut('CommandOrControl+Alt+C', () => {
     if (!convoWin || convoWin.isDestroyed()) return;
@@ -689,7 +678,7 @@ app.whenReady().then(() => {
     } else {
       if (win && !win.isDestroyed()) {
         const [mwX, mwY] = win.getPosition();
-        const [mwW, mwH] = win.getSize();
+        const [mwW] = win.getSize();
         convoWin.setPosition(mwX + mwW + 20, mwY);
         clampWindowToScreen(convoWin);
       }
@@ -698,48 +687,34 @@ app.whenReady().then(() => {
     }
   });
 
-
+  /* ---- Ctrl+R: System Audio ---- */
   registerShortcut('CommandOrControl+R', () => {
     if (!win || win.isDestroyed()) return;
-    console.log('System Audio Capture Triggered');
-    win.webContents.executeJavaScript(`
-      if (window.toggleSystemCapture) { window.toggleSystemCapture(); }
-    `);
+    win.webContents.executeJavaScript(`if (window.toggleSystemCapture) { window.toggleSystemCapture(); }`);
   });
 
   /* ---- Ctrl+Enter: Generate AI ---- */
   registerShortcut('CommandOrControl+Return', () => {
     if (!win) return;
-    console.log('Generate AI Triggered');
-    win.webContents.executeJavaScript(`
-      if (window.generateAIOnly) { window.generateAIOnly(); }
-    `);
+    win.webContents.executeJavaScript(`if (window.generateAIOnly) { window.generateAIOnly(); }`);
   });
 
-  /* ---- Ctrl+M: Toggle Mic Capture ---- */
+  /* ---- Ctrl+M: Toggle Mic ---- */
   registerShortcut('CommandOrControl+M', () => {
     if (!win) return;
-    console.log('🎤 Mic Capture Triggered');
-    win.webContents.executeJavaScript(`
-      if (window.toggleMicCapture) { window.toggleMicCapture(); }
-    `);
+    win.webContents.executeJavaScript(`if (window.toggleMicCapture) { window.toggleMicCapture(); }`);
   });
 
-  /* ---- Ctrl+K: Capture Screen ---- */
+  /* ---- Ctrl+K: Screenshot (no context) ---- */
   registerShortcut('CommandOrControl+K', () => {
     if (!win) return;
-    console.log('Screen Capture Triggered');
-    win.webContents.executeJavaScript(`
-      if (window.captureScreen) { window.captureScreen(false); }
-    `);
+    win.webContents.executeJavaScript(`if (window.captureScreen) { window.captureScreen(false); }`);
   });
-  /* ---- Ctrl+S: Capture Screen + Save Context ---- */
+
+  /* ---- Ctrl+S: Screenshot + save context ---- */
   registerShortcut('CommandOrControl+S', () => {
     if (!win) return;
-    console.log('Screen Capture Triggered (with context)');
-    win.webContents.executeJavaScript(`
-      if (window.captureScreen) { window.captureScreen(true); }
-    `);
+    win.webContents.executeJavaScript(`if (window.captureScreen) { window.captureScreen(true); }`);
   });
 
   /* ---- Ctrl+Q: Toggle Mini Mode ---- */
@@ -747,10 +722,7 @@ app.whenReady().then(() => {
     if (!win) return;
 
     if (!isMiniMode) {
-      // Switch to Mini Mode - small floating icon
-      isMiniMode = true; // Set flag FIRST so resize listener ignores it
-
-      // Save full window position BEFORE minimizing
+      isMiniMode = true;
       const [fx, fy] = win.getPosition();
       const [fw, fh] = win.getSize();
       win.lastNormalBounds = { x: fx, y: fy, width: fw, height: fh };
@@ -759,31 +731,24 @@ app.whenReady().then(() => {
       win.setOpacity(1.0);
       win.setBackgroundColor('#00000000');
       win.setBounds({ x: miniPos.x, y: miniPos.y, width: 52, height: 52 });
-      win.webContents.setZoomFactor(1.0); // Reset zoom for mini icon
+      win.webContents.setZoomFactor(1.0);
       win.setResizable(false);
-      win.webContents.executeJavaScript(`
-        document.body.classList.add('mini');
-      `);
+      win.webContents.executeJavaScript(`document.body.classList.add('mini');`);
 
-      // Hide convo window as well
       if (convoWin && convoWin.isVisible()) {
         convoWin.userVisibleBeforeMini = true;
         convoWin.hide();
       } else if (convoWin) {
         convoWin.userVisibleBeforeMini = false;
       }
-
     } else {
-      // Save mini position before expanding
       const [mx, my] = win.getPosition();
       lastMiniPosition = { x: mx, y: my };
 
-      // Expand back
       win.setOpacity(0.95);
       win.setBackgroundColor('#0a0a0aEE');
       win.setResizable(true);
 
-      // Restore the exact position it had before mini mode
       if (win.lastNormalBounds) {
         win.setBounds(win.lastNormalBounds);
         win.webContents.setZoomFactor(win.lastNormalBounds.width / 800);
@@ -796,7 +761,6 @@ app.whenReady().then(() => {
       win.webContents.executeJavaScript(`document.body.classList.remove('mini');`);
       isMiniMode = false;
 
-      // Restore convo window if it was open
       if (convoWin && convoWin.userVisibleBeforeMini) {
         convoWin.show();
         convoWin.userVisibleBeforeMini = false;
@@ -804,7 +768,7 @@ app.whenReady().then(() => {
     }
   });
 
-  /* ---- Ctrl+Shift+Q: Quit App ---- */
+  /* ---- Ctrl+Shift+Q: Quit ---- */
   globalShortcut.register('CommandOrControl+Shift+Q', () => {
     app.quit();
   });
@@ -812,62 +776,51 @@ app.whenReady().then(() => {
   /* ---- Ctrl+Backspace: Clear Transcript ---- */
   globalShortcut.register('CommandOrControl+Backspace', () => {
     if (!win) return;
-    console.log('🧹 Clear Transcript Triggered');
-    win.webContents.executeJavaScript(`
-      if (window.clearTranscript) { window.clearTranscript(); }
-    `);
+    win.webContents.executeJavaScript(`if (window.clearTranscript) { window.clearTranscript(); }`);
   });
 
-  /* ---- Ctrl+Shift++: Incrementally Expand Window ---- */
+  /* ---- Ctrl+Shift++: Expand Window ---- */
   globalShortcut.register('CommandOrControl+Shift+Plus', () => {
     if (!win || isMiniMode) return;
     const [x, y] = win.getPosition();
     const [width, height] = win.getSize();
     const newWidth = Math.min(width + 80, 1600);
     const newHeight = Math.round(newWidth * (600 / 800));
-    // Center the resize operation vertically and horizontally
-    win.setBounds({ x: x - 40, y: y - Math.round(((newHeight - height) / 2)), width: newWidth, height: newHeight });
+    win.setBounds({ x: x - 40, y: y - Math.round((newHeight - height) / 2), width: newWidth, height: newHeight });
     win.webContents.setZoomFactor(newWidth / 800);
     clampWindowToScreen(win);
   });
 
-  /* ---- Ctrl+Shift+-: Incrementally Contract Window ---- */
+  /* ---- Ctrl+Shift+-: Contract Window ---- */
   globalShortcut.register('CommandOrControl+Shift+-', () => {
     if (!win || isMiniMode) return;
     const [x, y] = win.getPosition();
     const [width, height] = win.getSize();
     const newWidth = Math.max(width - 80, 400);
     const newHeight = Math.round(newWidth * (600 / 800));
-    // Center the resize operation vertically and horizontally
-    win.setBounds({ x: x + 40, y: y + Math.round(((height - newHeight) / 2)), width: newWidth, height: newHeight });
+    win.setBounds({ x: x + 40, y: y + Math.round((height - newHeight) / 2), width: newWidth, height: newHeight });
     win.webContents.setZoomFactor(newWidth / 800);
     clampWindowToScreen(win);
   });
 
-  /* ---- Ctrl+Shift+O: Reset to Default Size ---- */
+  /* ---- Ctrl+Shift+O: Reset Window Size ---- */
   globalShortcut.register('CommandOrControl+Shift+O', () => {
     if (!win || isMiniMode) return;
     const bounds = centerTop(800, 600);
     win.setBounds(bounds);
     win.webContents.setZoomFactor(1.0);
-    console.log('🔄 Window reset to default size');
     clampWindowToScreen(win);
   });
 
-  /* ---- Ctrl+Shift+Up: Scroll AI Up ---- */
+  /* ---- Ctrl+Shift+Up/Down: Scroll AI ---- */
   globalShortcut.register('CommandOrControl+Shift+Up', () => {
     if (!win) return;
-    win.webContents.executeJavaScript(`
-      if (window.scrollAIOutput) { window.scrollAIOutput(-1); }
-    `);
+    win.webContents.executeJavaScript(`if (window.scrollAIOutput) { window.scrollAIOutput(-1); }`);
   });
 
-  /* ---- Ctrl+Shift+Down: Scroll AI Down ---- */
   globalShortcut.register('CommandOrControl+Shift+Down', () => {
     if (!win) return;
-    win.webContents.executeJavaScript(`
-      if (window.scrollAIOutput) { window.scrollAIOutput(1); }
-    `);
+    win.webContents.executeJavaScript(`if (window.scrollAIOutput) { window.scrollAIOutput(1); }`);
   });
 
   /* ---- Tray ---- */
@@ -893,7 +846,6 @@ app.whenReady().then(() => {
         { name: 'All Files', extensions: ['*'] }
       ]
     });
-
     if (filePath) {
       require('fs').writeFileSync(filePath, content, 'utf-8');
       return { success: true, filePath };
@@ -901,11 +853,9 @@ app.whenReady().then(() => {
     return { success: false };
   });
 
-
   /* ---- IPC: Expand from Mini Mode ---- */
   ipcMain.on('expand-from-mini', () => {
     if (!win || !isMiniMode) return;
-    // Save mini position before expanding
     const [mx, my] = win.getPosition();
     lastMiniPosition = { x: mx, y: my };
     win.setOpacity(0.95);
@@ -920,23 +870,17 @@ app.whenReady().then(() => {
 
   /* ---- IPC: Convo Window Control ---- */
   ipcMain.on('toggle-convo-window', () => {
-    console.log(`[DEBUG_IPC] Received 'toggle-convo-window' event!`);
     if (!convoWin) return;
     if (convoWin.isVisible()) {
-      console.log(`[DEBUG_IPC] Convo window is visible... hiding it.`);
       convoWin.hide();
     } else {
-      console.log(`[DEBUG_IPC] Convo window is hidden... computing position then opening.`);
-      // Position it generally near the main window, but on the side
       if (win && !win.isDestroyed()) {
         const [mwX, mwY] = win.getPosition();
-        const [mwW, mwH] = win.getSize();
-        // Attempt to put it to the right of the main window
+        const [mwW] = win.getSize();
         convoWin.setPosition(mwX + mwW + 20, mwY);
         clampWindowToScreen(convoWin);
       }
       convoWin.show();
-      console.log(`[DEBUG_IPC] Showing convo. Triggering native Focus inside IPC toggle handler!`);
       stackWindows(convoWin, win);
     }
   });
@@ -945,59 +889,39 @@ app.whenReady().then(() => {
     if (convoWin) convoWin.hide();
   });
 
-  // Window Focus Handlers
   ipcMain.on('focus-main-window', () => {
-    if (win && !win.isDestroyed() && win.isVisible()) {
-      stackWindows(win, convoWin);
-    }
+    if (win && !win.isDestroyed() && win.isVisible()) stackWindows(win, convoWin);
   });
 
   ipcMain.on('focus-convo-window', () => {
-    if (convoWin && !convoWin.isDestroyed() && convoWin.isVisible()) {
-      stackWindows(convoWin, win);
-    }
+    if (convoWin && !convoWin.isDestroyed() && convoWin.isVisible()) stackWindows(convoWin, win);
   });
 
-  // Relay historical dump to floating window
   ipcMain.on('load-convo-history', (event, payload) => {
-    if (convoWin) {
-      convoWin.webContents.send('load-convo-history', payload);
-    }
+    if (convoWin) convoWin.webContents.send('load-convo-history', payload);
   });
 
-  // Relay live response update to floating window
   ipcMain.on('convo-update', (event, payload) => {
-    if (convoWin) {
-      convoWin.webContents.send('render-convo-update', payload);
-    }
+    if (convoWin) convoWin.webContents.send('render-convo-update', payload);
   });
 
-  // Relay title sets
   ipcMain.on('set-convo-title', (event, payload) => {
-    if (convoWin) {
-      convoWin.webContents.send('set-convo-title', payload);
-    }
+    if (convoWin) convoWin.webContents.send('set-convo-title', payload);
   });
 
-  // Relay clear commands
   ipcMain.on('clear-convo-history', () => {
-    if (convoWin) {
-      convoWin.webContents.send('clear-convo-history');
-    }
+    if (convoWin) convoWin.webContents.send('clear-convo-history');
   });
 
-  /* ---- IPC: Close App ---- */
   ipcMain.on('close-app', () => {
     logToFile('INFO', 'App closed by user');
     app.quit();
   });
 
-  /* ---- IPC: Renderer Error Logging ---- */
   ipcMain.on('log-error', (event, msg) => {
     logToFile('RENDERER', msg);
   });
 
-  /* ---- IPC: Get Log Path ---- */
   ipcMain.handle('get-log-path', () => {
     return LOG_FILE;
   });
@@ -1005,7 +929,6 @@ app.whenReady().then(() => {
   /* ---- IPC: Reset App ---- */
   ipcMain.handle('reset-app', async () => {
     logToFile('INFO', 'App reset requested by user');
-    // Clear the session on the backend
     try {
       const http = require('http');
       await new Promise((resolve) => {
@@ -1018,9 +941,8 @@ app.whenReady().then(() => {
         req.on('error', () => resolve());
         req.end();
       });
-    } catch (e) { /* backend may be down, that's ok */ }
+    } catch (e) { }
 
-    // Clear renderer localStorage and reload
     if (win && !win.isDestroyed()) {
       await win.webContents.executeJavaScript('localStorage.clear()');
       win.webContents.reload();
@@ -1037,11 +959,8 @@ app.whenReady().then(() => {
     console.log('[UPDATE] Manual check requested from UI');
     try {
       if (!app.isPackaged) {
-        console.log('[UPDATE] Skipping real update check in development mode');
         if (win && !win.isDestroyed()) {
-          setTimeout(() => {
-            win.webContents.send('update-check-result', 'latest');
-          }, 1500);
+          setTimeout(() => win.webContents.send('update-check-result', 'latest'), 1500);
         }
         return;
       }
@@ -1054,7 +973,6 @@ app.whenReady().then(() => {
           if (win && !win.isDestroyed()) win.webContents.send('update-check-result', 'error', err.message);
         });
       } else {
-        console.error('[UPDATE ERROR] autoUpdater not available after init');
         if (win && !win.isDestroyed()) win.webContents.send('update-check-result', 'error', 'autoUpdater initialization failed.');
       }
     } catch (err) {
@@ -1063,7 +981,6 @@ app.whenReady().then(() => {
     }
   });
 
-  /* ---- IPC: Get App Version ---- */
   ipcMain.handle('get-app-version', () => {
     return app.getVersion();
   });
@@ -1071,13 +988,10 @@ app.whenReady().then(() => {
   if (app.dock) app.dock.hide();
 });
 
-
-// Robust backend cleanup function
+// ============ CLEANUP ============
 function cleanupBackend() {
   console.log('[EXIT] Starting synchronous cleanup...');
-  const { execSync } = require('child_process');
 
-  // 1. Kill the tracked backend process if still alive
   if (backendProcess && !backendProcess.killed) {
     try {
       console.log(`[EXIT] Killing tracked PID: ${backendProcess.pid}`);
@@ -1091,36 +1005,23 @@ function cleanupBackend() {
     }
   }
 
-  // 2. Kill by Name (Safety net for Windows)
   if (process.platform === 'win32') {
     try {
-      console.log('[EXIT] Force killing WinHostSvc.exe by name...');
       execSync('taskkill /IM WinHostSvc.exe /F', { stdio: 'ignore' });
     } catch (e) { }
 
-    // 3. Kill Port 5050 (Crucial for dev mode)
     try {
-      console.log('[EXIT] Cleaning up port 5050...');
       const output = execSync('netstat -ano | findstr :5050', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       if (output) {
-        const lines = output.trim().split('\n');
-        lines.forEach(line => {
+        output.trim().split('\n').forEach(line => {
           const parts = line.trim().split(/\s+/);
           const pid = parts[parts.length - 1];
           if (pid && pid !== '0' && !isNaN(pid)) {
-            console.log(`[EXIT] Killing process on port 5050 (PID: ${pid})...`);
-            try {
-              execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
-            } catch (kille) {
-              console.log(`[EXIT] Failed to kill PID ${pid} or it was already dead.`);
-            }
+            try { execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' }); } catch (e) { }
           }
         });
       }
-    } catch (e) {
-      // Netstat might fail if no matches found, which is fine
-      console.log('[EXIT] No process found port 5050 or netstat failed.');
-    }
+    } catch (e) { }
   }
 
   if (tray && !tray.isDestroyed()) {
@@ -1141,8 +1042,6 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  cleanupBackend(); // Ensure cleanup happens even if quit isn't immediate
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  cleanupBackend();
+  if (process.platform !== 'darwin') app.quit();
 });

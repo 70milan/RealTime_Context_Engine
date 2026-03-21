@@ -251,9 +251,9 @@ async def realtime(ws: WebSocket):
                     },
                     "turn_detection": {
                         "type": "server_vad",
-                        "threshold": 0.5,
-                        "prefix_padding_ms": 300,
-                        "silence_duration_ms": 600,
+                        "threshold": 0.45,
+                        "prefix_padding_ms": 200,
+                        "silence_duration_ms": 350,
                         "create_response": False
                     }
                 }
@@ -263,18 +263,23 @@ async def realtime(ws: WebSocket):
             async def receive_from_client():
                 try:
                     while True:
-                        data = await ws.receive_text()
-                        # Expecting base64 audio from client
-                        # Send to OpenAI
+                        message = await ws.receive()
+
+                        if "bytes" in message:
+                            import base64
+                            audio_b64 = base64.b64encode(message["bytes"]).decode()
+                        else:
+                            audio_b64 = message.get("text", "")
+
                         event = {
                             "type": "input_audio_buffer.append",
-                            "audio": data
+                            "audio": audio_b64
                         }
                         await openai_ws.send(json.dumps(event))
                 except WebSocketDisconnect:
                     pass
                 except Exception as e:
-                    print(f"Client receive error: {e}")
+                    print(f"[receive_from_client] Error: {e}")
 
             async def receive_from_openai():
                 try:
@@ -463,9 +468,9 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
     # Add Modifiers - Make them extremely strict
     modifier_block = ""
     if is_esl:
-    modifier_block += "\n\nCRITICAL CONSTRAINT: The user speaks English as a second language. Use short simple sentences. One idea per sentence. Avoid idioms and figures of speech (e.g. 'hit the ground running', 'boiling the ocean'). Keep technical terms but explain them briefly when first used. Never use compound or multi-clause sentences."
+        modifier_block += "\n\nCRITICAL CONSTRAINT: The user speaks English as a second language. Use short simple sentences. One idea per sentence. Avoid idioms and figures of speech (e.g. 'hit the ground running', 'boiling the ocean'). Keep technical terms but explain them briefly when first used. Never use compound or multi-clause sentences."
     if short_responses:
-    modifier_block += "\n\nCRITICAL CONSTRAINT: Maximum 3 sentences or 5 bullet points total. No filler openers. Stop after answering the question. Do not elaborate."
+        modifier_block += "\n\nCRITICAL CONSTRAINT: Maximum 3 sentences or 5 bullet points total. No filler openers. Stop after answering the question. Do not elaborate."
 
     if for_vision:
         # Vision requests need the context inline — do NOT cache these
@@ -476,7 +481,7 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
             "Speak in FIRST PERSON as yourself - a real human professional. "
             "When you see a coding problem, SOLVE IT with working code and clear explanation. "
             "Use simple words. Short sentences. One idea per sentence. "
-"Explain your approach in 6-8 sentences maximum. Write clean code with comments, then explain simply. "
+            "Explain your approach in 6-8 sentences maximum. Write clean code with comments, then explain simply. "
             "Draw from YOUR resume for all experience-related questions. "
             f"Prefer {language or 'Python'} for all coding and technical explanations. "
             "Remember what was discussed earlier."
@@ -490,8 +495,8 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
         "The resume below is YOUR real work history. You ARE this person with this background. "
         "When asked about previous jobs, projects, or experience - use details from YOUR resume. "
         "Speak in FIRST PERSON as yourself - a real human professional. "
-        "Use SIMPLE, clear words. Speak naturally like in a real conversation. "
-"Be confident but humble. Keep answers to 4-5 sentences. Give specific examples from YOUR resume. "
+        "Use simple words. Short sentences. One idea per sentence. "
+        "Be confident but humble. Keep answers to 4-5 sentences. Give specific examples from YOUR resume. "
         "Remember what was discussed earlier in this conversation. "
         f"Prefer {language or 'Python'} for all coding and technical explanations. "
         "If you write ANY code, you MUST wrap it strictly inside standard Markdown content blocks specifying the exact language (e.g. ```python ... ```)."
