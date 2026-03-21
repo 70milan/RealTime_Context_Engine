@@ -48,7 +48,6 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      /* Make the whole window draggable */
       -webkit-app-region: drag;
       user-select: none;
     }
@@ -63,9 +62,11 @@
     .session-btn,
     .vol-slider-wrapper,
     #status-bar-hotkeys,
+    #btn-toggle-log,
     #response-area,
     #transcript-area,
     #conversation-area,
+    #log-drawer,
     pre,
     code,
     pre code,
@@ -259,6 +260,12 @@
       flex-shrink: 0;
     }
 
+    .section-header span {
+      -webkit-app-region: no-drag;
+      user-select: none;
+      cursor: pointer;
+    }
+
     #transcript-area {
       color: #e6e6e6;
       font-size: 14px;
@@ -334,6 +341,42 @@
       display: block;
     }
 
+    /* ── Log Drawer ─────────────────────────────────────────── */
+    #log-drawer {
+      display: none;
+      position: fixed;
+      bottom: 32px;
+      left: 8px;
+      width: 480px;
+      max-height: 260px;
+      overflow-y: auto;
+      background: rgba(10, 10, 18, 0.97);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 10px;
+      line-height: 1.6;
+      z-index: 9000;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      -webkit-app-region: no-drag;
+      user-select: text;
+    }
+
+    #log-drawer.open {
+      display: block;
+    }
+
+    #log-drawer::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    #log-drawer::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 3px;
+    }
+
+    /* ── Status Bar ─────────────────────────────────────────── */
     #status-bar {
       margin-top: auto;
       display: flex;
@@ -404,7 +447,6 @@
       color: rgba(255, 255, 255, 0.8);
     }
 
-    /* Start button */
     #btn-session-start:hover {
       color: #00e6c8;
       border-color: rgba(0, 230, 200, 0.4);
@@ -419,7 +461,6 @@
       box-shadow: 0 0 6px rgba(120, 200, 180, 0.2);
     }
 
-    /* Pause button */
     #btn-session-stop:hover {
       color: #f0c040;
       border-color: rgba(240, 192, 64, 0.4);
@@ -434,7 +475,6 @@
       box-shadow: 0 0 8px rgba(240, 192, 64, 0.3);
     }
 
-    /* End button */
     #btn-session-end:hover {
       color: rgba(255, 107, 107, 0.7);
       border-color: rgba(255, 107, 107, 0.4);
@@ -479,18 +519,8 @@
       99% {
         opacity: 0.3;
       }
-
     }
-  </style>
-</head>
 
-<body>
-  <!-- Session Error Popup -->
-  <div id="session-error-popup"
-    style="display: none; position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(10, 10, 18, 0.95); border: 1px solid rgba(255, 107, 107, 0.3); color: rgba(255, 107, 107, 0.85); padding: 8px 16px; border-radius: 8px; font-size: 11px; z-index: 20000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s ease; opacity: 0; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">
-    Please start the session first
-  </div>
-  <style>
     #btn-start-session:focus,
     #btn-start-session:active,
     #btn-start-session:focus-visible {
@@ -499,6 +529,16 @@
       -webkit-tap-highlight-color: transparent;
     }
   </style>
+
+</head>
+
+<body>
+  <!-- Session Error Popup -->
+  <div id="session-error-popup"
+    style="display: none; position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(10, 10, 18, 0.95); border: 1px solid rgba(255, 107, 107, 0.3); color: rgba(255, 107, 107, 0.85); padding: 8px 16px; border-radius: 8px; font-size: 11px; z-index: 20000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s ease; opacity: 0; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">
+    Please start the session first
+  </div>
+
   <div id="setup-overlay">
     <div class="setup-top-bar">
       <div id="close-btn" title="Close App">
@@ -652,7 +692,6 @@
                 </label>
                 <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)"
                   autocomplete="off" />
-
                 <div id="hwid-setup-display" class="setup-hwid" style="display: none;">HWID: <span
                     style="color: rgba(100, 255, 150, 0.4);">Fetching...</span> <button id="hwid-copy-btn"
                     class="hwid-copy-btn" title="Copy HWID" type="button"><svg width="11" height="11"
@@ -697,6 +736,7 @@
       <span id="check-update-btn" class="setup-meta-link">Check for updates</span>
     </div>
   </div>
+
   <!-- Past Sessions Modal -->
   <div id="past-sessions-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10001; align-items: center; justify-content: center;">
@@ -716,6 +756,7 @@
       </div>
     </div>
   </div>
+
   <!-- Session History Modal -->
   <div id="session-history-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10002; align-items: center; justify-content: center;">
@@ -748,6 +789,7 @@
       </div>
     </div>
   </div>
+
   <!-- Ethical Usage Modal -->
   <div id="ethical-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.95); z-index: 20002; align-items: center; justify-content: center;">
@@ -782,7 +824,6 @@
         & Close</button>
     </div>
   </div>
-
 
   <!-- Guide Modal -->
   <div id="guide-modal"
@@ -925,7 +966,7 @@
     </div>
   </div>
 
-  <!-- Hotkeys Modal (Setup Screen Only) -->
+  <!-- Hotkeys Modal -->
   <div id="hotkeys-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10001; align-items: center; justify-content: center;">
     <div
@@ -1020,9 +1061,11 @@
   <div id="mini-icon">
     <div class="mini-dot"></div>
   </div>
+
   <div id="main-container">
-    <div id="controls"><button id="btn-system" class="btn" title="Toggle System Audio (Ctrl+R)">System</button><button
-        id="btn-mic" class="btn" title="Toggle Mic Audio (Ctrl+M)">Mic</button>
+    <div id="controls">
+      <button id="btn-system" class="btn" title="Toggle System Audio (Ctrl+R)">System</button>
+      <button id="btn-mic" class="btn" title="Toggle Mic Audio (Ctrl+M)">Mic</button>
       <div class="screen-btn-group"
         style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; overflow: hidden; gap: 0;">
         <button id="btn-screen-k" class="btn"
@@ -1031,19 +1074,24 @@
         <button id="btn-screen-s" class="btn"
           style="flex: 1; border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 8px; opacity: 0.8;"
           title="Screenshot + Save to AI Context (Ctrl+S)">Save</button>
-      </div><button id="btn-generate" class="btn" title="Process Transcript with AI (Ctrl+Enter)">Process</button>
+      </div>
+      <button id="btn-generate" class="btn" title="Process Transcript with AI (Ctrl+Enter)">Process</button>
       <button id="btn-conversation" class="btn" title="View Conversation History (Ctrl+Alt+C)">Convo</button>
       <div id="session-timer"
         style="padding: 4px 10px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.75); font-weight: 600; font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; gap: 6px; flex-shrink: 0; letter-spacing: 1.5px; transition: all 0.5s ease;">
         <span id="session-timer-text">2:00:00</span>
       </div>
-      <div class="session-btn-group"><button id="btn-session-start" class="session-btn"
-          title="Start session timer">Start</button><button id="btn-session-stop" class="session-btn"
-          title="Pause session timer">Pause</button><button id="btn-session-end" class="session-btn"
-          title="End session and reset">End</button></div>
+      <div class="session-btn-group">
+        <button id="btn-session-start" class="session-btn" title="Start session timer">Start</button>
+        <button id="btn-session-stop" class="session-btn" title="Pause session timer">Pause</button>
+        <button id="btn-session-end" class="session-btn" title="End session and reset">End</button>
+      </div>
     </div>
+
     <div class="section" id="transcript-section">
-      <div class="section-header"><span>Live Transcript</span><span
+      <div class="section-header">
+        <span>Live Transcript</span>
+        <span
           style="font-size: 11px; cursor: pointer; color: rgba(255,255,255,0.4); font-family: monospace; transition: all 0.2s;"
           onmouseover="this.style.color='#fff'; if(this.textContent==='[clear]') this.textContent='[ctrl+backspace]';"
           onmouseout="this.style.color='rgba(255,255,255,0.4)'; if(this.textContent==='[ctrl+backspace]') this.textContent='[clear]';"
@@ -1051,21 +1099,35 @@
       </div>
       <div id="transcript-area" contenteditable="true"></div>
     </div>
+
     <!-- Hidden data container for conversation tracking -->
     <div id="conversation-area" style="display: none;"></div>
+
     <div class="section" id="response-section">
-      <div class="section-header"><span>AI Assistant</span><span
+      <div class="section-header">
+        <span>AI Assistant</span>
+        <span
           style="font-size: 11px; cursor: pointer; color: rgba(255,255,255,0.4); font-family: monospace; transition: all 0.2s;"
           onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.4)'"
           onclick="navigator.clipboard.writeText(document.getElementById('response-area').innerText); this.textContent = '[copied!]'; this.style.color = '#4CAF50'; setTimeout(() => { this.textContent = '[copy]'; this.style.color = 'rgba(255,255,255,0.4)'; }, 2000);">[copy]</span>
       </div>
       <div id="response-area"></div>
     </div>
+
+    <!-- ── Log Drawer — sits just above the status bar, hidden by default ── -->
+
     <div id="status-bar" style="justify-content: space-between; gap: 10px; padding-right: 8px;">
       <div class="status-indicator" style="flex-shrink: 0;">
-        <div id="status-dot" class="dot"></div><span id="status-text">Ready</span>
+        <div id="status-dot" class="dot"></div>
+        <span id="status-text">Ready</span>
         <span id="status-bar-hotkeys"
           style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default;">Hotkeys</span>
+        <!-- ── Log toggle button ── -->
+        <span id="btn-toggle-log"
+          style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: pointer; transition: all 0.15s;"
+          onmouseover="this.style.color='rgba(255,255,255,0.6)'; this.style.borderColor='rgba(255,255,255,0.2)'"
+          onmouseout="if(!document.getElementById('log-drawer').classList.contains('open')){this.style.color='rgba(255,255,255,0.25)'; this.style.borderColor='rgba(255,255,255,0.1)'}"
+          onclick="window.toggleLogDrawer()">log</span>
       </div>
       <!-- Middle container injected by setup.js will go here -->
       <div style="display: flex; gap: 10px; align-items: center; font-size: 11px; flex-shrink: 0; white-space: nowrap;">
@@ -1081,11 +1143,11 @@
               style="height: 100%; background: #00d4ff; border-radius: 2px; width: 0%; transition: width 0.1s;"></div>
           </div>
         </div>
-
         <div style="color: #888; font-size: 10px;"><span class="app-version"></span></div>
       </div>
     </div>
   </div>
+
   <script>
     // Robust global IPC access
     if (typeof window.ipcRenderer === 'undefined') {
@@ -1101,22 +1163,43 @@
         console.log(`[MAIN_DEBUG] ${message}`);
       });
 
-      // Backend console log feed
+      // ── Backend log handler — feeds both setup terminal AND live log drawer ──
       window.ipcRenderer.on('backend-log', (event, level, msg) => {
+        // Setup screen terminal (visible during session creation)
         const term = document.getElementById('backend-terminal');
-        if (!term) return;
-        // Clear the placeholder on first real log
-        if (term.dataset.init !== '1') { term.innerHTML = ''; term.dataset.init = '1'; }
-        const cls = level === 'err' ? 'term-err' : level === 'ok' ? 'term-ok' : level === 'warn' ? 'term-warn' : 'term-info';
-        const line = document.createElement('span');
-        line.className = 'term-line ' + cls;
-        line.textContent = msg;
-        term.appendChild(line);
-        // Cap at 200 lines
-        while (term.children.length > 200) term.removeChild(term.firstChild);
-        term.scrollTop = term.scrollHeight;
+        if (term) {
+          if (term.dataset.init !== '1') { term.innerHTML = ''; term.dataset.init = '1'; }
+          const cls = level === 'err' ? 'term-err' : level === 'ok' ? 'term-ok' : level === 'warn' ? 'term-warn' : 'term-info';
+          const line = document.createElement('span');
+          line.className = 'term-line ' + cls;
+          line.textContent = msg;
+          term.appendChild(line);
+          while (term.children.length > 200) term.removeChild(term.firstChild);
+          term.scrollTop = term.scrollHeight;
+        }
+
+        // Live log drawer (visible during session — outside setup overlay)
+        const drawer = document.getElementById('log-drawer');
+        if (drawer) {
+          const colors = {
+            err: 'rgba(255, 107, 107, 0.75)',
+            ok: 'rgba(100, 255, 150, 0.65)',
+            warn: 'rgba(255, 200, 80, 0.65)',
+            info: 'rgba(255, 255, 255, 0.35)'
+          };
+          const time = new Date().toLocaleTimeString('en-US', {
+            hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+          });
+          const line = document.createElement('div');
+          line.style.cssText = `color:${colors[level] || colors.info}; white-space:pre-wrap; line-height:1.6; padding:1px 0;`;
+          line.textContent = `${time}  ${msg}`;
+          drawer.appendChild(line);
+          while (drawer.children.length > 150) drawer.removeChild(drawer.firstChild);
+          drawer.scrollTop = drawer.scrollHeight;
+        }
       });
     }
+
     const ipcRenderer = window.ipcRenderer;
 
     // Log renderer errors to file via IPC
@@ -1130,27 +1213,63 @@
       logError(`Unhandled promise: ${e.reason}`);
     });
 
+    // ── Toggle log drawer ────────────────────────────────────────────────────
+    window.toggleLogDrawer = () => {
+      const drawer = document.getElementById('log-drawer');
+      const btn = document.getElementById('btn-toggle-log');
+      if (!drawer) return;
+
+      const isOpen = drawer.classList.contains('open');
+
+      if (!isOpen) {
+        // Position above the button
+        const btnRect = btn.getBoundingClientRect();
+        drawer.style.bottom = (window.innerHeight - btnRect.top + 6) + 'px';
+        drawer.style.left = '8px';
+        drawer.classList.add('open');
+        drawer.scrollTop = drawer.scrollHeight;
+        btn.style.color = 'rgba(100,255,150,0.7)';
+        btn.style.borderColor = 'rgba(100,255,150,0.3)';
+        btn.style.background = 'rgba(100,255,150,0.06)';
+      } else {
+        drawer.classList.remove('open');
+        btn.style.color = 'rgba(255,255,255,0.25)';
+        btn.style.borderColor = 'rgba(255,255,255,0.1)';
+        btn.style.background = 'none';
+      }
+    };
+
+    // Close log drawer when clicking outside
+    document.addEventListener('click', (e) => {
+      const drawer = document.getElementById('log-drawer');
+      const btn = document.getElementById('btn-toggle-log');
+      if (drawer && drawer.classList.contains('open')) {
+        if (!drawer.contains(e.target) && e.target !== btn) {
+          drawer.classList.remove('open');
+          if (btn) {
+            btn.style.color = 'rgba(255,255,255,0.25)';
+            btn.style.borderColor = 'rgba(255,255,255,0.1)';
+            btn.style.background = 'none';
+          }
+        }
+      }
+    });
+
     // Friendly error message helper
     function friendlyError(err) {
       const msg = (err && err.message) ? err.message : String(err);
-      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ECONNREFUSED')) {
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ECONNREFUSED'))
         return 'Cannot connect to the backend server.\n\nMake sure the app backend is running. Try restarting the application.';
-      }
-      if (msg.includes('401') || msg.includes('Unauthorized')) {
+      if (msg.includes('401') || msg.includes('Unauthorized'))
         return 'Your OpenAI API key is invalid or expired.\n\nGo to the setup screen and enter a valid API key.';
-      }
-      if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('rate limit')) {
+      if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('rate limit'))
         return 'Rate limit reached.\n\nYou\'re sending requests too fast. Wait a moment and try again.';
-      }
-      if (msg.includes('403') || msg.includes('Forbidden')) {
+      if (msg.includes('403') || msg.includes('Forbidden'))
         return 'Access denied by OpenAI.\n\nYour API key may not have permission for this model. Check your OpenAI account.';
-      }
-      if (msg.includes('insufficient_quota') || msg.includes('billing')) {
+      if (msg.includes('insufficient_quota') || msg.includes('billing'))
         return 'OpenAI billing issue.\n\nYour account may have run out of credits. Check your OpenAI billing page.';
-      }
-      if (msg.includes('500') || msg.includes('502') || msg.includes('503')) {
+      if (msg.includes('500') || msg.includes('502') || msg.includes('503'))
         return 'The AI service is temporarily unavailable.\n\nThis is usually a temporary issue. Wait a moment and try again.';
-      }
       return msg;
     }
 
@@ -1188,26 +1307,12 @@
     function floatTo16BitPCM(float32Array) {
       const buffer = new ArrayBuffer(float32Array.length * 2);
       const view = new DataView(buffer);
-
       for (let i = 0; i < float32Array.length; i++) {
         let s = Math.max(-1, Math.min(1, float32Array[i]));
         s = s < 0 ? s * 0x8000 : s * 0x7FFF;
         view.setInt16(i * 2, s, true);
       }
-
       return buffer;
-    }
-
-    function base64EncodeAudio(float32Array) {
-      const pcmBuffer = floatTo16BitPCM(float32Array);
-      let binary = '';
-      const bytes = new Uint8Array(pcmBuffer);
-
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-
-      return window.btoa(binary);
     }
 
     async function getSystemAudioStream() {
@@ -1215,22 +1320,10 @@
         const sources = await ipcRenderer.invoke('GET_SOURCES', ['screen']);
         console.log('Sources:', sources);
         const source = sources.find(s => s.name === 'Entire Screen' || s.name === 'Screen 1') || sources[0];
-
-        if (!source) {
-          throw new Error('No screen source found. Available: ' + sources.map(s => s.name).join(', '));
-        }
-
+        if (!source) throw new Error('No screen source found. Available: ' + sources.map(s => s.name).join(', '));
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            mandatory: {
-              chromeMediaSource: 'desktop', chromeMediaSourceId: source.id
-            }
-          },
-          video: {
-            mandatory: {
-              chromeMediaSource: 'desktop', chromeMediaSourceId: source.id
-            }
-          }
+          audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: source.id } },
+          video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: source.id } }
         });
         return stream;
       } catch (e) {
@@ -1244,9 +1337,7 @@
     async function getMicAudioStream() {
       try {
         return await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1, sampleRate: SAMPLE_RATE, echoCancellation: true, noiseSuppression: true
-          }
+          audio: { channelCount: 1, sampleRate: SAMPLE_RATE, echoCancellation: true, noiseSuppression: true }
         });
       } catch (e) {
         console.error('Mic Error:', e);
@@ -1257,42 +1348,22 @@
     }
 
     async function startCapture(mode) {
-      // Guard: don't attempt WS connection if no session is active
       if (!window.isSessionActive) {
         statusText.innerText = 'Start a session first';
         statusDot.className = 'dot';
         return;
       }
 
-      // Clear the live transcript window for a clean slate
-      if (mode === 'system') {
-        transcriptArea.innerText = '';
-      }
+      if (mode === 'system') transcriptArea.innerText = '';
 
-      if (activeMode === mode) {
-        stopCapture();
-        return;
-      }
-
-      if (activeMode) {
-        stopCapture();
-        await new Promise(r => setTimeout(r, 100));
-      }
+      if (activeMode === mode) { stopCapture(); return; }
+      if (activeMode) { stopCapture(); await new Promise(r => setTimeout(r, 100)); }
 
       try {
         statusText.innerText = 'Connecting...';
-        let stream = null;
+        let stream = mode === 'system' ? await getSystemAudioStream() : await getMicAudioStream();
 
-        if (mode === 'system') {
-          stream = await getSystemAudioStream();
-        } else {
-          stream = await getMicAudioStream();
-        }
-
-        if (!stream) {
-          statusText.innerText = 'Stream Failed';
-          return;
-        }
+        if (!stream) { statusText.innerText = 'Stream Failed'; return; }
 
         currentStream = stream;
         socket = new WebSocket('ws://127.0.0.1:5050/realtime');
@@ -1304,46 +1375,33 @@
           activeMode = mode;
           updateButtons();
 
-          audioContext = new (window.AudioContext || window.webkitAudioContext)({
-            sampleRate: SAMPLE_RATE
-          });
+          audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
           source = audioContext.createMediaStreamSource(currentStream);
-          processor = audioContext.createScriptProcessor(1024, 1, 1);
+          processor = audioContext.createScriptProcessor(512, 1, 1);
 
           processor.onaudioprocess = (e) => {
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
             const inputData = e.inputBuffer.getChannelData(0);
 
             let sum = 0;
-            for (let i = 0; i < inputData.length; i++) {
-              sum += inputData[i] * inputData[i];
-            }
-
+            for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
             const rms = Math.sqrt(sum / inputData.length);
             const volume = Math.min(100, Math.round(rms * 1000));
 
-            // Update volume bar and input mode indicator
             const volumeBar = document.getElementById('volume-bar');
             const inputModeDot = document.getElementById('input-indicator-dot');
             const inputModeText = document.getElementById('input-mode-text');
 
-            if (volumeBar) {
-              volumeBar.style.width = (volume / 100) * 100 + '%';
-            }
-
+            if (volumeBar) volumeBar.style.width = (volume / 100) * 100 + '%';
             if (inputModeDot) {
-              if (activeMode === 'system') {
-                inputModeDot.className = 'dot connected';
-                inputModeText.innerText = 'System';
-                inputModeText.style.color = '#00d4ff';
-              } else if (activeMode === 'mic') {
-                inputModeDot.className = 'dot connected';
-                inputModeText.innerText = 'Mic';
+              inputModeDot.className = 'dot connected';
+              if (inputModeText) {
+                inputModeText.innerText = activeMode === 'system' ? 'System' : 'Mic';
                 inputModeText.style.color = '#00d4ff';
               }
             }
 
-            socket.send(base64EncodeAudio(inputData));
+            socket.send(floatTo16BitPCM(inputData));
           };
 
           source.connect(processor);
@@ -1385,42 +1443,21 @@
     }
 
     function stopCapture() {
-      if (processor) {
-        processor.disconnect();
-        processor = null;
-      }
-      if (source) {
-        source.disconnect();
-        source = null;
-      }
-      if (currentStream) {
-        currentStream.getTracks().forEach(t => t.stop());
-        currentStream = null;
-      }
-      if (audioContext) {
-        audioContext.close();
-        audioContext = null;
-      }
-      if (socket) {
-        socket.close();
-        socket = null;
-      }
+      if (processor) { processor.disconnect(); processor = null; }
+      if (source) { source.disconnect(); source = null; }
+      if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+      if (audioContext) { audioContext.close(); audioContext = null; }
+      if (socket) { socket.close(); socket = null; }
 
       activeMode = null;
       statusText.innerText = 'Ready';
       statusDot.className = 'dot';
 
-      // Reset input mode indicator
       const inputModeDot = document.getElementById('input-indicator-dot');
       const inputModeText = document.getElementById('input-mode-text');
       const volumeBar = document.getElementById('volume-bar');
       if (inputModeDot) inputModeDot.className = 'dot';
-
-      if (inputModeText) {
-        inputModeText.innerText = '--';
-        inputModeText.style.color = '#888';
-      }
-
+      if (inputModeText) { inputModeText.innerText = '--'; inputModeText.style.color = '#888'; }
       if (volumeBar) volumeBar.style.width = '0%';
 
       updateButtons();
@@ -1429,55 +1466,32 @@
     function updateButtons() {
       btnSystem.className = 'btn';
       btnMic.className = 'btn';
-
-      if (activeMode === 'system') {
-        btnSystem.classList.add('active');
-      } else if (activeMode === 'mic') {
-        btnMic.classList.add('active');
-      }
+      if (activeMode === 'system') btnSystem.classList.add('active');
+      else if (activeMode === 'mic') btnMic.classList.add('active');
     }
 
     btnSystem.onclick = () => {
-      if (!window.isSessionActive) {
-        window.showSessionError();
-        return;
-      }
+      if (!window.isSessionActive) { window.showSessionError(); return; }
       startCapture('system');
     };
 
     btnMic.onclick = () => {
-      if (!window.isSessionActive) {
-        window.showSessionError();
-        return;
-      }
+      if (!window.isSessionActive) { window.showSessionError(); return; }
       startCapture('mic');
     };
 
     const handleScreenCapture = async (saveToContext = false, activeBtn) => {
-      if (!window.isSessionActive) {
-        window.showSessionError();
-        return;
-      }
+      if (!window.isSessionActive) { window.showSessionError(); return; }
 
       try {
         statusText.innerText = 'Capturing screen...';
         const sources = await ipcRenderer.invoke('GET_SOURCES', ['screen']);
         const source = sources.find(s => s.name === 'Entire Screen' || s.name === 'Screen 1') || sources[0];
-
-        if (!source) {
-          throw new Error('No screen source found');
-        }
+        if (!source) throw new Error('No screen source found');
 
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: {
-            mandatory: {
-              chromeMediaSource: 'desktop',
-              chromeMediaSourceId: source.id,
-              maxWidth: 1920,
-              maxHeight: 1080
-            }
-          }
+          video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: source.id, maxWidth: 1920, maxHeight: 1080 } }
         });
 
         const video = document.createElement('video');
@@ -1485,27 +1499,17 @@
         video.play();
 
         await new Promise(resolve => {
-          video.onloadedmetadata = () => {
-            video.width = video.videoWidth;
-            video.height = video.videoHeight;
-            resolve();
-          };
+          video.onloadedmetadata = () => { video.width = video.videoWidth; video.height = video.videoHeight; resolve(); };
         });
 
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-
+        canvas.getContext('2d').drawImage(video, 0, 0);
         capturedScreenshot = canvas.toDataURL('image/jpeg', 0.70);
-
         stream.getTracks().forEach(track => track.stop());
 
-        if (activeBtn) {
-          activeBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-          activeBtn.style.color = 'rgba(255, 255, 255, 0.9)';
-        }
+        if (activeBtn) { activeBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'; activeBtn.style.color = 'rgba(255, 255, 255, 0.9)'; }
         responseArea.innerText = 'Generating...';
 
         try {
@@ -1515,22 +1519,15 @@
             target_language: window.sessionTargetLanguage || '',
             save_to_context: saveToContext
           };
-
-          if (capturedScreenshot) {
-            requestBody.screenshot = capturedScreenshot;
-          }
+          if (capturedScreenshot) requestBody.screenshot = capturedScreenshot;
 
           const res = await fetch('http://127.0.0.1:5050/ai', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
           });
 
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
 
           const data = await res.json();
           let formattedResponse = data.answer || 'No response from AI.';
@@ -1555,26 +1552,15 @@
           });
 
           formattedResponse = formattedResponse.replace(/\n/g, '<br>');
-
-          codeBlocks.forEach((block, i) => {
-            formattedResponse = formattedResponse.replace(`___CODE_BLOCK_${i}___`, block);
-          });
-
-          inlineCodeBlocks.forEach((code, i) => {
-            formattedResponse = formattedResponse.replace(`___INLINE_CODE_${i}___`, code);
-          });
+          codeBlocks.forEach((block, i) => { formattedResponse = formattedResponse.replace(`___CODE_BLOCK_${i}___`, block); });
+          inlineCodeBlocks.forEach((code, i) => { formattedResponse = formattedResponse.replace(`___INLINE_CODE_${i}___`, code); });
 
           responseArea.innerHTML = formattedResponse;
-
-          responseArea.querySelectorAll('pre code').forEach((block) => {
-            hljs.highlightElement(block);
-          });
-
+          responseArea.querySelectorAll('pre code').forEach(block => { hljs.highlightElement(block); });
           transcriptSection.classList.add('compact');
           responseSection.classList.add('expanded');
           responseArea.scrollTop = 0;
 
-          // Update status bar with usage and cost
           if (data.usage) {
             const apiInEl = document.getElementById('api-usage-input');
             const apiOutEl = document.getElementById('api-usage-output');
@@ -1590,7 +1576,6 @@
             }
           }
 
-          // Capture to Conversation Area (WhatsApp-style)
           const convoArea = document.getElementById('conversation-area');
           if (convoArea) {
             const entryTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -1603,7 +1588,6 @@
             pairDiv.dataset.totalTime = data.total_time || 0;
             pairDiv.dataset.timestamp = new Date().toISOString();
 
-            // USER BUBBLE (right-aligned) — screenshot only path
             const userRow = document.createElement('div');
             userRow.style.cssText = 'display: flex; justify-content: flex-end; margin-bottom: 6px;';
             const userBubble = document.createElement('div');
@@ -1612,7 +1596,6 @@
             userRow.appendChild(userBubble);
             pairDiv.appendChild(userRow);
 
-            // AI BUBBLE (left-aligned) with [copy] header + stats footer
             const aiRow = document.createElement('div');
             aiRow.style.cssText = 'display: flex; justify-content: flex-start; margin-bottom: 5px;';
             const aiBubble = document.createElement('div');
@@ -1655,7 +1638,6 @@
             convoArea.appendChild(pairDiv);
             convoArea.scrollTop = convoArea.scrollHeight;
 
-            // Send live update to the floating conversation window
             ipcRenderer.send('convo-update', {
               question: '\ud83d\udcf7 SCREEN CAPTURE',
               response: formattedConvo,
@@ -1671,18 +1653,13 @@
 
           if (capturedScreenshot) {
             capturedScreenshot = null;
-            if (btnScreenK) {
-              btnScreenK.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
-              btnScreenK.style.color = 'rgba(255, 255, 255, 0.5)';
-            }
-            if (btnScreenS) {
-              btnScreenS.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
-              btnScreenS.style.color = 'rgba(255, 255, 255, 0.5)';
-            }
+            if (btnScreenK) { btnScreenK.style.backgroundColor = 'rgba(255, 255, 255, 0.03)'; btnScreenK.style.color = 'rgba(255, 255, 255, 0.5)'; }
+            if (btnScreenS) { btnScreenS.style.backgroundColor = 'rgba(255, 255, 255, 0.03)'; btnScreenS.style.color = 'rgba(255, 255, 255, 0.5)'; }
           }
 
           const btnGenEl = document.getElementById('btn-generate');
           if (btnGenEl) btnGenEl.classList.remove('active');
+
         } catch (e) {
           console.error('AI Generation Error:', e);
           logError('AI Generation Error: ' + e.message);
@@ -1700,36 +1677,20 @@
     if (btnScreenK) btnScreenK.onclick = () => handleScreenCapture(false, btnScreenK);
     if (btnScreenS) btnScreenS.onclick = () => handleScreenCapture(true, btnScreenS);
 
-    window.toggleSystemCapture = () => {
-      if (!window.isSessionActive) { window.showSessionError(); return; }
-      startCapture('system');
-    };
-    window.toggleMicCapture = () => {
-      if (!window.isSessionActive) { window.showSessionError(); return; }
-      startCapture('mic');
-    };
+    window.toggleSystemCapture = () => { if (!window.isSessionActive) { window.showSessionError(); return; } startCapture('system'); };
+    window.toggleMicCapture = () => { if (!window.isSessionActive) { window.showSessionError(); return; } startCapture('mic'); };
     window.captureScreen = (saveToContext = false) => {
       if (!window.isSessionActive) { window.showSessionError(); return; }
-      const activeBtn = saveToContext ? btnScreenS : btnScreenK;
-      handleScreenCapture(saveToContext, activeBtn);
+      handleScreenCapture(saveToContext, saveToContext ? btnScreenS : btnScreenK);
     };
-    window.generateAIOnly = () => {
-      if (!window.isSessionActive) { window.showSessionError(); return; }
-      btnGenerate.click();
-    };
+    window.generateAIOnly = () => { if (!window.isSessionActive) { window.showSessionError(); return; } btnGenerate.click(); };
 
     window.clearTranscript = () => {
       if (!window.isSessionActive) { window.showSessionError(); return; }
       transcriptArea.innerText = '';
       responseArea.innerText = '';
-
-      // Note: Do NOT clear convo window here - conversation history persists across transcript clears
-      // The floating window only resets when a full session ends (resetSessionUI).
-
-      transcriptSection.classList.remove('compact');
-      responseSection.classList.remove('expanded');
-      transcriptSection.classList.remove('minimized');
-      responseSection.classList.remove('maximized');
+      transcriptSection.classList.remove('compact', 'minimized');
+      responseSection.classList.remove('expanded', 'maximized');
     };
 
     window.maximizeResponse = () => {
@@ -1737,10 +1698,7 @@
       if (responseSection.classList.contains('maximized')) {
         transcriptSection.classList.remove('minimized');
         responseSection.classList.remove('maximized');
-
-        if (responseSection.classList.contains('expanded')) {
-          transcriptSection.classList.add('compact');
-        }
+        if (responseSection.classList.contains('expanded')) transcriptSection.classList.add('compact');
       } else {
         transcriptSection.classList.remove('compact');
         transcriptSection.classList.add('minimized');
@@ -1748,20 +1706,13 @@
       }
     };
 
-    /* ---- Close Button Logic ---- */
     const closeBtn = document.getElementById('close-btn');
     if (closeBtn) {
-      console.log('Close button found, attaching listener...');
       closeBtn.addEventListener('click', () => {
-        console.log('Close button clicked - sending close-app');
         try {
-          if (window.ipcRenderer) {
-            window.ipcRenderer.send('close-app');
-          } else {
-            window.close();
-          }
+          if (window.ipcRenderer) window.ipcRenderer.send('close-app');
+          else window.close();
         } catch (err) {
-          console.error('Error in close handler:', err);
           window.close();
         }
       });
@@ -1785,7 +1736,7 @@
           updateBtn.textContent = 'Check for updates';
           updateBtn.style.color = '';
           updateBtn.style.pointerEvents = 'auto';
-        }, 5000); // Wait slightly longer for error reading
+        }, 5000);
       });
 
       window.ipcRenderer.on('update-log', (event, msg) => {
@@ -1793,17 +1744,13 @@
       });
     }
 
-
     window.onload = () => {
-      console.log('Auto-starting System Audio...');
-      setTimeout(() => startCapture('system'), 1000);
+      console.log('[APP] Ready');
     };
 
-    // Handle conditional transcript clearing on next user input
     if (transcriptArea) {
       transcriptArea.addEventListener('keydown', (e) => {
         if (window.shouldClearTranscriptOnNextInput) {
-          // Clear only on printable characters or backspace/delete
           if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
             transcriptArea.innerText = '';
             window.shouldClearTranscriptOnNextInput = false;
@@ -1812,11 +1759,11 @@
       });
     }
 
-    // Master mousedown listener removed
   </script>
 
   <script src="setup.js?v=3.3"></script>
   <script src="streaming-ai.js?v=3.2"></script>
+  <div id="log-drawer"></div>
 </body>
 
 </html>
