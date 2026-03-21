@@ -142,10 +142,10 @@ app = FastAPI()
 # Determine base directory for data storage (persists across updates)
 if getattr(sys, 'frozen', False):
     # Running as compiled executable - store data in AppData to survive updates
-    # e.g., C:\Users\<user>\AppData\Roaming\JobAndit\backend
+    # e.g., C:\Users\<user>\AppData\Roaming\jobandit\backend
     app_data = os.getenv('APPDATA')
     if app_data:
-        BASE_DIR = Path(app_data) / "JobAndit" / "backend"
+        BASE_DIR = Path(app_data) / "jobandit" / "backend"
         BASE_DIR.mkdir(parents=True, exist_ok=True)
     else:
         # Fallback if APPDATA not found (rare)
