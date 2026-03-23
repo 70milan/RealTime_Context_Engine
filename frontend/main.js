@@ -929,6 +929,8 @@ app.whenReady().then(() => {
   /* ---- IPC: Reset App ---- */
   ipcMain.handle('reset-app', async () => {
     logToFile('INFO', 'App reset requested by user');
+
+    // Clear backend state
     try {
       const http = require('http');
       await new Promise((resolve) => {
@@ -943,6 +945,24 @@ app.whenReady().then(() => {
       });
     } catch (e) { }
 
+    // Delete user_profile.json so stale API keys and license data don't persist.
+    // Sessions folder is NOT touched — past sessions survive the reset.
+    try {
+      const profilePath = path.join(
+        process.env.APPDATA || app.getPath('userData'),
+        'jobandit', 'backend', 'user_profile.json'
+      );
+      if (fs.existsSync(profilePath)) {
+        fs.unlinkSync(profilePath);
+        logToFile('INFO', '[RESET] Deleted user_profile.json — stale API key cleared');
+        console.log('[RESET] Deleted user_profile.json');
+      }
+    } catch (e) {
+      logToFile('ERROR', '[RESET] Failed to delete user_profile.json:', e.message);
+      console.error('[RESET] Failed to delete profile:', e);
+    }
+
+    // Clear localStorage and reload the UI
     if (win && !win.isDestroyed()) {
       await win.webContents.executeJavaScript('localStorage.clear()');
       win.webContents.reload();

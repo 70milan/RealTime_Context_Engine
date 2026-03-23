@@ -1,10 +1,9 @@
 // Session Setup & Timer Logic
 // Session Setup & Timer Logic
 
-const FULL_SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
-const DEMO_SESSION_DURATION_MS = 12 * 60 * 1000; // 12 minutes
-
-const DEMO_COOLDOWN_MS = 47 * 60 * 1000; // 47 minutes
+const FULL_SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours (licensed)
+const DEMO_SESSION_DURATION_MS = 60 * 1000; // 12 minutes (demo)
+const DEMO_COOLDOWN_MS = 47 * 60 * 1000; // 47 minutes cooldown between demo sessions
 let SESSION_DURATION_MS = DEMO_SESSION_DURATION_MS; // Default to demo
 let sessionEndTime = null;
 let timerInterval = null;
@@ -63,6 +62,63 @@ async function validateLicense(key) {
 
 // Session lock - prevents actions until Start is clicked
 window.isSessionActive = false;
+
+// ── License field lock ────────────────────────────────────────────────────────
+// Call this whenever a valid license is confirmed. It permanently locks the
+// license input for this install (until Reset App) and shows the lock icon.
+function applyLicensedFieldState() {
+    const licenseInput = document.getElementById('setup-license');
+    const licenseInfo  = document.getElementById('license-info');
+    const licenseLock  = document.getElementById('license-lock-icon');
+    const licenseBadge = document.getElementById('license-status-badge');
+    const demoInfoText = document.getElementById('demo-info-text');
+
+    if (licenseInput) {
+        licenseInput.value    = 'License Active';
+        licenseInput.disabled = true;
+        licenseInput.style.opacity    = '0.5';
+        licenseInput.style.cursor     = 'not-allowed';
+        licenseInput.style.userSelect = 'none';
+        licenseInput.style.pointerEvents = 'none';
+    }
+
+    // Hide the (?) info link — replace with lock icon
+    if (licenseInfo)  licenseInfo.style.display  = 'none';
+    if (licenseLock) {
+        licenseLock.style.display = 'inline-flex';
+        licenseLock.style.alignItems = 'center';
+        // SVG: red circle with a horizontal bar (no-entry / locked symbol)
+        licenseLock.innerHTML = `<svg id="license-lock-svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+            xmlns="http://www.w3.org/2000/svg" style="transition: all 0.2s;">
+            <circle cx="12" cy="12" r="10" stroke="rgba(100,255,150,0.55)" stroke-width="2"/>
+            <path d="M8 12h8" stroke="rgba(100,255,150,0.55)" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>`;
+        // Hover: turn red (no-entry) to signal it cannot be changed
+        licenseLock.onmouseenter = () => {
+            const svg = licenseLock.querySelector('svg');
+            if (svg) {
+                svg.querySelectorAll('circle, path').forEach(el => {
+                    el.setAttribute('stroke', 'rgba(255,80,80,0.85)');
+                });
+            }
+        };
+        licenseLock.onmouseleave = () => {
+            const svg = licenseLock.querySelector('svg');
+            if (svg) {
+                svg.querySelectorAll('circle, path').forEach(el => {
+                    el.setAttribute('stroke', 'rgba(100,255,150,0.55)');
+                });
+            }
+        };
+    }
+
+    if (licenseBadge) {
+        licenseBadge.textContent  = 'Licensed';
+        licenseBadge.style.color  = 'rgba(100, 255, 150, 0.4)';
+    }
+    if (demoInfoText) demoInfoText.style.display = 'none';
+    isLicensed = true;
+}
 
 // Custom styled alert/confirm functions
 function showCustomModal(message, isConfirm = false) {
@@ -241,8 +297,8 @@ async function waitForBackend() {
         } catch (e) {
             // Backend not ready yet
         }
-        // Retry in 2 seconds
-        setTimeout(poll, 2000);
+        // Retry every 500ms instead of 2s — backend is usually up in <1s
+        setTimeout(poll, 500);
     };
 
     poll();
@@ -376,46 +432,41 @@ function initSession() {
     const demoInfoText = document.getElementById('demo-info-text');
 
     if (savedLicense) {
+        // Apply licensed state immediately — don't wait for async backend validation.
+        // A saved license key means it was already verified against this HWID on a
+        // previous run. The async check below is a background revocation check only.
+        applyLicensedFieldState();
+
         (async () => {
             const status = await validateLicense(savedLicense);
             if (status === 'valid') {
-                isLicensed = true;
-                if (demoInfoText) demoInfoText.style.display = 'none';
-                if (licenseInput) {
-                    licenseInput.value = 'License Active';
-                    licenseInput.disabled = true;
-                    licenseInput.style.opacity = '0.5';
-                    licenseInput.style.cursor = 'not-allowed';
-                }
-                if (licenseBadge) {
-                    licenseBadge.textContent = 'Licensed';
-                    licenseBadge.style.color = 'rgba(100, 255, 150, 0.4)';
-                }
+                // Already applied — nothing extra needed
                 console.log('[DEBUG] Valid license verified on startup');
             } else if (status === 'invalid') {
                 // Only clear if backend explicitly says invalid (not when unreachable)
                 console.log('[DEBUG] License explicitly invalid - clearing');
                 localStorage.removeItem('valid_license_key');
+                isLicensed = false;
                 if (licenseBadge) {
                     licenseBadge.textContent = 'Demo';
                     licenseBadge.style.color = 'rgba(255, 200, 100, 0.4)';
                 }
                 if (demoInfoText) demoInfoText.style.display = 'block';
-            } else {
-                // Backend unreachable ('empty') - preserve license, assume still valid
-                console.log('[DEBUG] Backend not ready yet - preserving saved license');
-                isLicensed = true;
-                if (demoInfoText) demoInfoText.style.display = 'none';
+                // Re-enable the license input so user can enter a new key
                 if (licenseInput) {
-                    licenseInput.value = 'License Active';
-                    licenseInput.disabled = true;
-                    licenseInput.style.opacity = '0.5';
-                    licenseInput.style.cursor = 'not-allowed';
+                    licenseInput.value = '';
+                    licenseInput.disabled = false;
+                    licenseInput.style.opacity = '1';
+                    licenseInput.style.cursor = '';
+                    licenseInput.style.pointerEvents = '';
                 }
-                if (licenseBadge) {
-                    licenseBadge.textContent = 'Licensed';
-                    licenseBadge.style.color = 'rgba(100, 255, 150, 0.4)';
-                }
+                const lockIcon = document.getElementById('license-lock-icon');
+                const infoLink = document.getElementById('license-info');
+                if (lockIcon) lockIcon.style.display = 'none';
+                if (infoLink) infoLink.style.display = '';
+            } else {
+                // Backend unreachable — already applied, keep as licensed
+                console.log('[DEBUG] Backend not ready yet - preserving saved license');
             }
         })();
     } else {
@@ -500,13 +551,13 @@ function initSession() {
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 12px; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center;" 
                              onmouseover="this.style.background='rgba(255,255,255,0.06)'" 
                              onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-                            <div style="flex: 1; cursor: pointer;" onclick="window.openPastSession('${session.name.replace(/'/g, "\\'")}')"> 
+                            <div style="flex: 1; cursor: pointer; min-width: 0; overflow: hidden;" onclick="window.openPastSession('${session.name.replace(/'/g, "\\'")}')"> 
                                 <div style="color: rgba(255,255,255,0.8); font-size: 13px; margin-bottom: 4px;">${session.name} ${session.target_role ? `<span style="font-size: 11px; color: rgba(255,255,255,0.4);">(${session.target_role})</span>` : ''}</div>
                                 <div style="color: rgba(255,255,255,0.4); font-size: 10px;">${formattedDate}</div>
                                 <div style="color: rgba(255,255,255,0.3); font-size: 10px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${session.job_description_preview || ''}</div>
                             </div>
                             <button onclick="event.stopPropagation(); window.deletePastSession('${session.name.replace(/'/g, "\\\\'")}')" 
-                                    style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;"
+                                    style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"                                    style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"
                                     onmouseover="this.style.color='#ff5555'; this.style.borderColor='rgba(255,68,68,0.3)'; this.style.background='rgba(255,68,68,0.08)';"
                                     onmouseout="this.style.color='rgba(255,255,255,0.3)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.background='none';"
                                     title="Delete session">TRASH</button>
@@ -927,12 +978,20 @@ window.openPastSession = async function (sessionName) {
         // Check license
         const savedLicense = localStorage.getItem('valid_license_key');
         if (savedLicense) {
-            isLicensed = true;
+            // Already validated and persisted — just apply state
+            applyLicensedFieldState();
         } else {
             const licenseInput = document.getElementById('setup-license');
-            const licenseKey = licenseInput ? licenseInput.value.trim() : '';
+            // Get the raw value — if field shows placeholder "License Active", treat as no key
+            const rawValue = licenseInput ? licenseInput.value.trim() : '';
+            const licenseKey = (rawValue === 'License Active' || rawValue === '') ? '' : rawValue;
             const licenseStatus = await validateLicense(licenseKey);
             isLicensed = (licenseStatus === 'valid');
+            if (isLicensed) {
+                // Persist so we never need to validate again
+                localStorage.setItem('valid_license_key', licenseKey);
+                applyLicensedFieldState();
+            }
         }
 
         const demoInfoText = document.getElementById('demo-info-text');
@@ -1162,8 +1221,16 @@ window.openPastSession = async function (sessionName) {
 
                 // Update timer
                 const timerText = document.getElementById('session-timer-text');
+                const timerBox = document.getElementById('session-timer');
                 if (timerText) {
                     timerText.innerText = isLicensed ? '2:00:00' : '0:12:00';
+                }
+                // Show timer in "waiting" state — not yet active
+                if (timerBox) {
+                    timerBox.style.color = 'rgba(255,255,255,0.35)';
+                    timerBox.style.borderColor = 'rgba(255,255,255,0.08)';
+                    timerBox.style.background = 'rgba(255,255,255,0.02)';
+                    timerBox.style.boxShadow = 'none';
                 }
 
                 const statusText = document.getElementById('status-text');
@@ -1379,8 +1446,8 @@ async function handleCreateSession() {
 
     // If license is already saved and validated, skip validation
     if (savedLicense) {
-        isLicensed = true;
         SESSION_DURATION_MS = FULL_SESSION_DURATION_MS;
+        applyLicensedFieldState();
         console.log('[DEBUG] Using saved license - Full 2-hour session');
         showStatus("License validated - Full session", false);
     } else {
@@ -1398,14 +1465,12 @@ async function handleCreateSession() {
 
         // Set session duration based on license
         if (licenseStatus === 'valid') {
-            isLicensed = true;
-            SESSION_DURATION_MS = FULL_SESSION_DURATION_MS;
-            console.log('[DEBUG] Licensed: Full 2-hour session');
             // Save valid license to localStorage - never ask again
             localStorage.setItem('valid_license_key', licenseKey);
+            SESSION_DURATION_MS = FULL_SESSION_DURATION_MS;
+            applyLicensedFieldState();
+            console.log('[DEBUG] Licensed: Full 2-hour session');
             showStatus("License validated - Full session", false);
-            const demoInfoText = document.getElementById('demo-info-text');
-            if (demoInfoText) demoInfoText.style.display = 'none';
         } else {
             // Demo mode - no license provided
             // Check for demo cooldown
@@ -1497,14 +1562,22 @@ async function handleCreateSession() {
         status.innerText = isLicensed ? "Session created!" : "Demo session created (12 min)";
         status.style.color = "rgba(100, 255, 150, 0.4)";
 
-        // Update timer display to show correct duration
+        // Update timer display to show correct duration (dimmed - not started yet)
         const timerText = document.getElementById('session-timer-text');
+        const timerBox = document.getElementById('session-timer');
         if (timerText) {
             if (isLicensed) {
                 timerText.innerText = '2:00:00';
             } else {
                 timerText.innerText = '0:12:00';
             }
+        }
+        // Show timer in "waiting" state — not yet active
+        if (timerBox) {
+            timerBox.style.color = 'rgba(255,255,255,0.35)';
+            timerBox.style.borderColor = 'rgba(255,255,255,0.08)';
+            timerBox.style.background = 'rgba(255,255,255,0.02)';
+            timerBox.style.boxShadow = 'none';
         }
 
         setTimeout(() => {
@@ -1516,6 +1589,10 @@ async function handleCreateSession() {
             // Reset end button state
             const endBtnEl = document.getElementById('btn-session-end');
             if (endBtnEl) endBtnEl.classList.remove('ended');
+
+            // Prompt user to click Start
+            const statusTextEl = document.getElementById('status-text');
+            if (statusTextEl) statusTextEl.innerText = 'Click Start to begin';
 
             // Set convo window title for new sessions
             ipcRenderer.send('set-convo-title', {
@@ -1581,7 +1658,9 @@ async function startSessionTimer() {
         return;
     }
 
-    sessionEndTime = Date.now() + SESSION_DURATION_MS;
+    // Anchor session end time to THIS exact moment (when Start is clicked)
+    const duration = isLicensed ? FULL_SESSION_DURATION_MS : DEMO_SESSION_DURATION_MS;
+    sessionEndTime = Date.now() + duration;
     sessionStartTimestamp = Date.now(); // Track start time for duration calculation
     window.isSessionActive = true;
 
@@ -1617,29 +1696,25 @@ async function startSessionTimer() {
         const hours = Math.floor(remaining / (1000 * 60 * 60));
         const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-
         const timeStr = `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         timerText.innerText = timeStr;
 
-        // Timer color: green(normal) → yellow(last 30 min) → red(last 10 min)
+        // Timer color: green → yellow (last 30 min) → red (last 10 min)
         const timerBox = document.getElementById('session-timer');
         const thirtyMin = 30 * 60 * 1000;
         const tenMin = 10 * 60 * 1000;
         if (timerBox) {
             if (remaining <= tenMin) {
-                // Critical: last 10 minutes — red glow
-                timerBox.style.color = 'rgba(255, 107, 107, 1)'; // Solid subtle red for readability
+                timerBox.style.color = 'rgba(255, 107, 107, 1)';
                 timerBox.style.borderColor = 'rgba(255, 68, 68, 0.5)';
                 timerBox.style.background = 'rgba(255, 50, 50, 0.1)';
                 timerBox.style.boxShadow = '0 0 12px rgba(255, 50, 50, 0.25)';
             } else if (remaining <= thirtyMin) {
-                // Warning: last 30 minutes — yellow
                 timerBox.style.color = '#f0c040';
                 timerBox.style.borderColor = 'rgba(240, 192, 64, 0.4)';
                 timerBox.style.background = 'rgba(240, 192, 64, 0.06)';
                 timerBox.style.boxShadow = '0 0 8px rgba(240, 192, 64, 0.15)';
             } else {
-                // Normal: green / cyan
                 timerBox.style.color = '#00e6c8';
                 timerBox.style.borderColor = 'rgba(0, 230, 200, 0.3)';
                 timerBox.style.background = 'rgba(0, 230, 200, 0.05)';
@@ -1808,17 +1883,8 @@ function resetSessionUI() {
 
     // Restore license badge if saved license exists
     const savedLicenseKey = localStorage.getItem('valid_license_key');
-    const licenseBadge = document.getElementById('license-status-badge');
-    if (savedLicenseKey && licenseBadge) {
-        licenseBadge.textContent = 'Licensed';
-        licenseBadge.style.color = 'rgba(100, 255, 150, 0.4)';
-        const licInput = document.getElementById('setup-license');
-        if (licInput) {
-            licInput.value = 'License Active';
-            licInput.disabled = true;
-        }
-        const demoInfoText = document.getElementById('demo-info-text');
-        if (demoInfoText) demoInfoText.style.display = 'none';
+    if (savedLicenseKey) {
+        applyLicensedFieldState();
     }
 
     // Set demo cooldown timestamp ONLY IF NOT LICENSED
@@ -1926,40 +1992,33 @@ updateHWIDDisplay();
             const middleDiv = document.createElement('div');
             // flex margin-right: auto serves to push the rest to the right
             middleDiv.id = "status-bar-middle";
-            middleDiv.style.cssText = 'display: flex; align-items: center; gap: 15px; flex: 1; justify-content: center; z-index: 10; font-size: 10px;';
+            middleDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; justify-content: flex-end; padding-right: 12px; z-index: 10; font-size: 10px; min-width: 0; overflow: visible;';
             middleDiv.innerHTML = `
-                <!-- Model -->
-                <div style="display: flex; align-items: center; gap: 4px; position: relative;">
-                    <span style="color: rgba(255, 255, 255, 0.4);"></span>
-                    <button id="model-selector-btn" style="background: rgba(120, 200, 180, 0.05); border: 1px solid rgba(120, 200, 180, 0.85); border-radius: 4px; padding: 2px 8px; color: rgba(120, 200, 180, 0.85); font-size: 10px; cursor: pointer; font-weight: 500; font-family: inherit; white-space: nowrap; min-width: max-content;"
-                        onmouseover="this.style.background='rgba(120, 200, 180, 0.1)'; this.style.color='#fff'" onmouseout="this.style.background='rgba(120, 200, 180, 0.05)'; this.style.color='rgba(120, 200, 180, 0.85)'">
-                        GPT-4o
-                    </button>
-                    <div id="model-dropdown" style="display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 5px; background: rgba(30,30,30,0.98); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; min-width: 220px; z-index: 10003; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-                    </div>
+                <!-- Unified Stats Group -->
+                <div style="display: flex; align-items: center; gap: 8px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.05); padding: 3px 10px; border-radius: 5px; font-family: 'Consolas', 'Courier New', monospace; font-size: 9px; white-space: nowrap; letter-spacing: 0.4px;">
+                    <span style="color: rgba(255,255,255,0.3);">TTFT</span>
+                    <span id="response-time-ttft" style="color: rgba(120,200,180,0.9); font-weight:500; min-width:24px;">--s</span>
+                    <span style="color:rgba(255,255,255,0.12);">|</span>
+                    <span style="color: rgba(255,255,255,0.3);">TT</span>
+                    <span id="response-time-tt" style="color: rgba(120,200,180,0.9); font-weight:500; min-width:24px;">--s</span>
+                    <span style="color:rgba(255,255,255,0.12);">|</span>
+                    <span style="color: rgba(255,255,255,0.3);">In</span>
+                    <span id="api-usage-input" style="color:rgba(255,255,255,0.65); font-weight:500;">0</span>
+                    <span style="color:rgba(255,255,255,0.12);">|</span>
+                    <span style="color: rgba(255,255,255,0.3);">Out</span>
+                    <span id="api-usage-output" style="color:rgba(255,255,255,0.65); font-weight:500;">0</span>
+                    <span style="color:rgba(255,255,255,0.12);">|</span>
+                    <span style="color: rgba(255,255,255,0.3);">Cost</span>
+                    <span id="api-cost" style="color:rgba(120,200,180,0.9); font-weight:600; min-width:34px; text-align:right;">$0.00</span>
                 </div>
 
-                <!-- Unified Stats Group -->
-                <div style="display: flex; align-items: center; gap: 10px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.05); padding: 4px 14px; border-radius: 6px; box-shadow: inset 0 1px 4px rgba(0,0,0,0.3); font-family: 'Consolas', 'Courier New', monospace; font-size: 9px; white-space: nowrap; letter-spacing: 0.5px;">
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">TTFT:</span>
-                        <span id="response-time-ttft" style="color: rgba(120, 200, 180, 0.9); font-weight: 500; min-width: 28px;">--s</span>
-                        <span style="color: rgba(255, 255, 255, 0.15); margin: 0 2px;">|</span>
-                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">TT:</span>
-                        <span id="response-time-tt" style="color: rgba(120, 200, 180, 0.9); font-weight: 500; min-width: 28px;">--s</span>
-                    </div>
-                    
-                    <div style="width: 1px; height: 12px; background: rgba(255, 255, 255, 0.15); margin: 0 2px;"></div>
-                    
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">In:</span>
-                        <span id="api-usage-input" style="color: rgba(255, 255, 255, 0.7); font-weight: 500;">0</span>
-                        <span style="color: rgba(255, 255, 255, 0.15); margin: 0 2px;">|</span>
-                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">Out:</span>
-                        <span id="api-usage-output" style="color: rgba(255, 255, 255, 0.7); font-weight: 500;">0</span>
-                        <span style="color: rgba(255, 255, 255, 0.15); margin: 0 2px;">|</span>
-                        <span style="color: rgba(255, 255, 255, 0.35); text-transform: uppercase;">Cost:</span>
-                        <span id="api-cost" style="color: rgba(120, 200, 180, 0.9); font-weight: 600; min-width: 36px; display: inline-block; text-align: right;">$0.00</span>
+                <!-- Model Selector -->
+                <div style="display: flex; align-items: center; position: relative; overflow: visible; flex-shrink: 0;">
+                    <button id="model-selector-btn" style="background: rgba(120,200,180,0.05); border: 1px solid rgba(120,200,180,0.7); border-radius: 4px; padding: 2px 8px; color: rgba(120,200,180,0.8); font-size: 10px; cursor: pointer; font-weight: 500; font-family: inherit; white-space: nowrap;"
+                        onmouseover="this.style.background='rgba(120,200,180,0.12)'; this.style.color='#fff'" onmouseout="this.style.background='rgba(120,200,180,0.05)'; this.style.color='rgba(120,200,180,0.8)'">
+                        GPT-4o
+                    </button>
+                    <div id="model-dropdown" style="display: none; position: fixed; background: rgba(22,22,30,0.99); border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; min-width: 250px; z-index: 99999; box-shadow: 0 8px 24px rgba(0,0,0,0.8);">
                     </div>
                 </div>
             `;
@@ -2027,10 +2086,29 @@ updateHWIDDisplay();
             }
             fetchModelsWithRetry(10, 2000);
 
-            // Toggle dropdown
+            // Toggle dropdown — use fixed positioning to escape body overflow:hidden
             modelBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                modelDropdown.style.display = modelDropdown.style.display === 'none' ? 'block' : 'none';
+                if (modelDropdown.style.display === 'none') {
+                    const rect = modelBtn.getBoundingClientRect();
+                    const dropW = 240;
+                    // Position above the button
+                    modelDropdown.style.display = 'block';
+                    const dropH = modelDropdown.offsetHeight;
+                    let left = rect.left + rect.width / 2 - dropW / 2;
+                    // Clamp to viewport
+                    left = Math.max(8, Math.min(left, window.innerWidth - dropW - 8));
+                    modelDropdown.style.left = left + 'px';
+                    modelDropdown.style.top = (rect.top - dropH - 6) + 'px';
+                    modelDropdown.style.width = dropW + 'px';
+                } else {
+                    modelDropdown.style.display = 'none';
+                }
+            });
+
+            // Prevent clicks inside dropdown from closing it
+            modelDropdown.addEventListener('click', (e) => {
+                e.stopPropagation();
             });
 
             // Close on outside click
@@ -2122,4 +2200,3 @@ const mountInterval = setInterval(() => {
         clearInterval(mountInterval);
     }
 }, 500);
-
