@@ -446,6 +446,26 @@ def _build_context_hash(role: str, language: str, resume_text: str, job_descript
     raw = f"{role}|{language}|{len(resume_text or '')}|{len(job_description or '')}"
     return hashlib.md5(raw.encode()).hexdigest()
 
+def _compress_context(resume_text: str, job_description: str, max_resume_chars: int = 2400, max_jd_chars: int = 1200) -> str:
+    """Trim resume and JD to a token-efficient size while preserving the most important parts.
+    
+    Resume: keep the first ~2400 chars (covers summary, skills, most recent 1-2 roles).
+    JD: keep the first ~1200 chars (covers title, requirements, key responsibilities).
+    Combined this stays well under ~1000 tokens for context, vs 4000+ for a full document.
+    """
+    context_block = ""
+    if resume_text and resume_text.strip():
+        trimmed = resume_text.strip()
+        if len(trimmed) > max_resume_chars:
+            trimmed = trimmed[:max_resume_chars] + "\n[...resume truncated for brevity...]"
+        context_block += f"\n\n--- CANDIDATE RESUME ---\n{trimmed}\n"
+    if job_description and job_description.strip():
+        trimmed_jd = job_description.strip()
+        if len(trimmed_jd) > max_jd_chars:
+            trimmed_jd = trimmed_jd[:max_jd_chars] + "\n[...JD truncated for brevity...]"
+        context_block += f"\n\n--- JOB DESCRIPTION ---\n{trimmed_jd}\n"
+    return context_block
+
 def get_system_context(role: str, language: str, resume_text: str, job_description: str, for_vision: bool = False, is_esl: bool = False, short_responses: bool = False) -> str:
     """Return a cached system prompt. Only rebuilds when role/language/resume/JD/modifiers changes."""
     global _cached_system_context, _cached_context_hash
@@ -459,11 +479,8 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
 
     print(f"[CONTEXT CACHE] {'Miss' if _cached_system_context else 'Cold start'} — building system context")
 
-    context_block = ""
-    if resume_text and resume_text.strip():
-        context_block += f"\n\n--- CANDIDATE RESUME ---\n{resume_text}\n"
-    if job_description and job_description.strip():
-        context_block += f"\n\n--- JOB DESCRIPTION ---\n{job_description}\n"
+    # Use compressed context to keep input tokens low (~800 tokens vs 4000+ raw)
+    context_block = _compress_context(resume_text, job_description)
 
     # Add Modifiers - Make them extremely strict
     modifier_block = ""
@@ -506,7 +523,8 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
 
     _cached_system_context = system_prompt
     _cached_context_hash = new_hash
-    print(f"[CONTEXT CACHE] Cached. System prompt represents updated session state.")
+    tok_estimate = len(system_prompt) // 4
+    print(f"[CONTEXT CACHE] Cached. System prompt ~{tok_estimate} tokens (compressed from raw docs).")
     return system_prompt
 
 def invalidate_context_cache():
@@ -615,10 +633,16 @@ except ImportError:
 # =============================================================================
 # HARDWARE ID GENERATION
 # =============================================================================
+_hwid_cache = None  # Computed once, reused everywhere
+
 def get_hwid():
-    """Generate a unique Hardware ID based on CPU and Machine info."""
+    """Generate a unique Hardware ID. Identical algorithm to original — cached so
+    it only runs once per process instead of twice (startup + license check)."""
+    global _hwid_cache
+    if _hwid_cache:
+        return _hwid_cache
     try:
-        # 1. CPU Serial/Info (Lazy import to speed up startup)
+        # 1. CPU Serial/Info (same as original)
         cpu_info = ""
         try:
             import cpuinfo
@@ -627,7 +651,6 @@ def get_hwid():
         except (ImportError, Exception):
             cpu_info = platform.processor()
 
-
         # 2. Machine Node/UUID (Mac Address based)
         import uuid
         mac_addr = hex(uuid.getnode())
@@ -635,12 +658,11 @@ def get_hwid():
         # 3. OS Info
         os_info = f"{platform.system()}_{platform.release()}"
 
-        # Combine and Hash
+        # Same hash formula as original — must not change
         raw_id = f"{cpu_info}_{mac_addr}_{os_info}"
         hwid = hashlib.sha256(raw_id.encode()).hexdigest().upper()
-        
-        # Format as readable groups: A1B2-C3D4-E5F6-G7H8
-        return f"{hwid[:4]}-{hwid[4:8]}-{hwid[8:12]}-{hwid[12:16]}"
+        _hwid_cache = f"{hwid[:4]}-{hwid[4:8]}-{hwid[8:12]}-{hwid[12:16]}"
+        return _hwid_cache
     except Exception as e:
         print(f"HWID Error: {e}")
         return "UNKNOWN-HWID-0000"
@@ -708,7 +730,26 @@ def initialize_keys():
     # 2. Generate keys if still missing (e.g. dev mode or missing bundle)
     ensure_keys_exist()
 
-initialize_keys()
+def check_saved_license():
+    """Restore license state from profile on backend startup."""
+    global is_licensed_backend
+    try:
+        profile = load_profile()
+        saved_key = profile.get('license_key')
+        if saved_key:
+            current_hwid = get_hwid()
+            if verify_license_signature(current_hwid, saved_key):
+                is_licensed_backend = True
+                print(f"[STARTUP] License restored from profile — full session mode active")
+            else:
+                print(f"[STARTUP] Saved license invalid for current HWID — demo mode")
+        else:
+            print(f"[STARTUP] No saved license — demo mode")
+    except Exception as e:
+        print(f"[STARTUP ERROR] License check failed: {e}")
+
+# Both MUST run synchronously and in this order — called after all
+# function definitions below to avoid NameError in PyInstaller exe.
 
 import hashlib
 @app.get('/debug/key-info')
@@ -809,28 +850,32 @@ async def validate_license(data: Dict[str, str]):
     current_hwid = get_hwid()
     
     if verify_license_signature(current_hwid, license_key):
-        global is_licensed_backend
+        global is_licensed_backend, profile_cache
         is_licensed_backend = True
+        if not isinstance(profile_cache, dict):
+            profile_cache = {}
+        profile_cache['license_key'] = license_key
+        save_profile(profile_cache)
+        print(f"[LICENSE] Valid license persisted for HWID: {current_hwid}")
         return {"valid": True, "status": "valid"}
     
     return {"valid": False, "status": "invalid"}
 
 def check_access_allowed() -> bool:
-    """Helper to check if the current request is allowed based on license/demo."""
+    """Check if the current request is allowed based on license/demo status."""
     if is_licensed_backend:
         return True
-    
+
     # Check demo status
     if demo_session_start is None:
-        # Check cooldown if no session is active
         import time
         last_end = profile_cache.get('last_demo_end_time', 0) if profile_cache else 0
         elapsed_cooldown = (time.time() * 1000) - last_end
         if elapsed_cooldown < DEMO_COOLDOWN_MS:
             print(f"[SECURITY] Access Denied: Cooldown active ({DEMO_COOLDOWN_MS - elapsed_cooldown:.0f}ms left)")
             return False
-        return True # Allow starting a new session if cooldown is over
-        
+        return True
+
     import time
     elapsed = (time.time() * 1000) - demo_session_start
     if elapsed > DEMO_LIMIT_MS:
@@ -1645,6 +1690,16 @@ async def generate_ai_response(req: AIRequest):
     except Exception as e:
         print(f"AI Generation Error: {e}")
         return {"answer": f"Error: {str(e)}"}
+
+
+# ── Startup sequence ────────────────────────────────────────────────────────
+# Must run AFTER all function definitions so PyInstaller exe doesn't hit
+# NameError on verify_license_signature / load_public_key etc.
+# Order matters:
+#   1. initialize_keys  — copies/generates public key so verify can find it
+#   2. check_saved_license — reads profile and verifies RSA signature
+initialize_keys()
+check_saved_license()
 
 
 if __name__ == "__main__":

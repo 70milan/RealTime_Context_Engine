@@ -75,7 +75,23 @@
     [role="button"],
     a,
     .modal,
-    .modal * {
+    .modal *,
+    #past-sessions-modal,
+    #past-sessions-modal *,
+    #session-history-modal,
+    #session-history-modal *,
+    #past-sessions-list,
+    #past-sessions-list *,
+    #session-history-list,
+    #session-history-list *,
+    #ethical-modal,
+    #ethical-modal *,
+    #guide-modal,
+    #guide-modal *,
+    #hotkeys-modal,
+    #hotkeys-modal *,
+    #custom-modal,
+    #custom-modal * {
       -webkit-app-region: no-drag;
       user-select: text;
     }
@@ -388,6 +404,7 @@
       flex-shrink: 0;
       letter-spacing: 0.5px;
       border-top: 1px solid rgba(255, 255, 255, 0.04);
+      overflow: visible;
     }
 
     .status-indicator {
@@ -562,7 +579,7 @@
             <button id="btn-guide" type="button" class="setup-action-btn">Guide</button>
             <button id="btn-hotkeys-setup" type="button" class="setup-action-btn">Hotkeys</button>
             <button id="btn-reset-app" type="button" class="setup-action-btn" style="color: rgba(255, 107, 107, 0.5);"
-              title="Clear all saved settings and reset the app">Reset App</button>
+              title="Clear all saved settings and user-profile, and reset the app">Reset App</button>
           </div>
         </div>
 
@@ -688,7 +705,7 @@
               </div>
               <div class="setup-field">
                 <label class="setup-label" for="setup-license">
-                  License Key <span id="license-info" class="setup-info-link" title="Get a license">(?)</span>
+                  License Key <span id="license-info" class="setup-info-link" title="Get a license">(?)</span><span id="license-lock-icon" style="display:none; margin-left:5px; cursor:not-allowed;" title="License locked to this installation"></span>
                 </label>
                 <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)"
                   autocomplete="off" />
@@ -1117,14 +1134,14 @@
     <!-- ── Log Drawer — sits just above the status bar, hidden by default ── -->
 
     <div id="status-bar" style="justify-content: space-between; gap: 10px; padding-right: 8px;">
-      <div class="status-indicator" style="flex-shrink: 0;">
+      <div class="status-indicator" style="flex-shrink: 0; min-width: 0;">
         <div id="status-dot" class="dot"></div>
         <span id="status-text">Ready</span>
         <span id="status-bar-hotkeys"
-          style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default;">Hotkeys</span>
+          style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default; white-space: nowrap;">Hotkeys</span>
         <!-- ── Log toggle button ── -->
         <span id="btn-toggle-log"
-          style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: pointer; transition: all 0.15s;"
+          style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: pointer; transition: all 0.15s; white-space: nowrap;"
           onmouseover="this.style.color='rgba(255,255,255,0.6)'; this.style.borderColor='rgba(255,255,255,0.2)'"
           onmouseout="if(!document.getElementById('log-drawer').classList.contains('open')){this.style.color='rgba(255,255,255,0.25)'; this.style.borderColor='rgba(255,255,255,0.1)'}"
           onclick="window.toggleLogDrawer()">log</span>
@@ -1143,7 +1160,6 @@
               style="height: 100%; background: #00d4ff; border-radius: 2px; width: 0%; transition: width 0.1s;"></div>
           </div>
         </div>
-        <div style="color: #888; font-size: 10px;"><span class="app-version"></span></div>
       </div>
     </div>
   </div>
@@ -1517,11 +1533,13 @@
             transcript: transcriptArea.innerText || 'Answer the questions or solve the problems shown in this screenshot. Provide direct solutions, not analysis.',
             role: window.sessionTargetRole || '',
             target_language: window.sessionTargetLanguage || '',
-            save_to_context: saveToContext
+            save_to_context: saveToContext,
+            text_model: window.selectedModel || 'gpt-4o-mini',
+            screenshot: capturedScreenshot
           };
-          if (capturedScreenshot) requestBody.screenshot = capturedScreenshot;
 
-          const res = await fetch('http://127.0.0.1:5050/ai', {
+          // ── Streaming via /ai/stream (same path as Process button) ──
+          const res = await fetch('http://127.0.0.1:5050/ai/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
@@ -1529,28 +1547,91 @@
 
           if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
 
-          const data = await res.json();
-          let formattedResponse = data.answer || 'No response from AI.';
+          // Stream the response exactly like streaming-ai.js does
+          let fullResponse = '';
+          let usedModel = '';
+          let responseCost = 0, responseInTokens = 0, responseOutTokens = 0;
+          let ttft = 0, totalTime = 0;
+          let firstChunk = false;
+          const startTime = Date.now();
 
-          const codeBlocks = [];
-          const inlineCodeBlocks = [];
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
 
-          formattedResponse = formattedResponse.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+          responseArea.innerText = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n');
+            buffer = parts.pop();
+            for (const line of parts) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const data = JSON.parse(line.substring(6));
+                if (data.error) throw new Error(data.error);
+                if (data.heartbeat) continue;
+                if (data.chunk) {
+                  if (!firstChunk) {
+                    firstChunk = true;
+                    ttft = (Date.now() - startTime) / 1000;
+                    const ttftEl = document.getElementById('response-time-ttft');
+                    if (ttftEl) ttftEl.innerText = ttft.toFixed(1) + 's';
+                  }
+                  fullResponse += data.chunk;
+                  responseArea.innerText = fullResponse;
+                  responseArea.scrollTop = responseArea.scrollHeight;
+                }
+                if (data.done) {
+                  usedModel = data.model || '';
+                  if (data.ttft > 0) { ttft = data.ttft; const ttftEl = document.getElementById('response-time-ttft'); if (ttftEl) ttftEl.innerText = ttft.toFixed(1) + 's'; }
+                  if (data.total_time > 0) { totalTime = data.total_time; const ttEl = document.getElementById('response-time-tt'); if (ttEl) ttEl.innerText = totalTime.toFixed(1) + 's'; }
+                  if (data.response_cost !== undefined) responseCost = data.response_cost;
+                  if (data.response_in_tokens !== undefined) responseInTokens = data.response_in_tokens;
+                  if (data.response_out_tokens !== undefined) responseOutTokens = data.response_out_tokens;
+                  if (data.usage) {
+                    const apiInEl = document.getElementById('api-usage-input');
+                    const apiOutEl = document.getElementById('api-usage-output');
+                    const apiCostEl = document.getElementById('api-cost');
+                    if (apiInEl) apiInEl.innerText = data.usage.input_tokens.toLocaleString();
+                    if (apiOutEl) apiOutEl.innerText = data.usage.output_tokens.toLocaleString();
+                    if (apiCostEl) {
+                      const cost = data.usage.total_cost;
+                      apiCostEl.innerText = cost < 1.00 ? (cost * 100).toFixed(2) + '¢' : '$' + cost.toFixed(2);
+                    }
+                  }
+                }
+              } catch (jsonErr) {
+                if (!(jsonErr instanceof SyntaxError)) throw jsonErr;
+              }
+            }
+          }
+
+          if (!fullResponse.trim()) throw new Error('Empty response from model');
+
+          // Format the completed response (code blocks, inline code, bold)
+          let formattedResponse = fullResponse.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+          const codeBlocks = [], inlineCodeBlocks = [];
+
+          formattedResponse = formattedResponse.replace(/`{3,}\s*([a-zA-Z0-9_#\+\-]+)?\s*\n([\s\S]*?)\n?\s*`{3,}/g, (match, lang, code) => {
             const language = lang || 'plaintext';
-            const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const trimmedCode = code.replace(/^\n+|\n+$/g, '');
+            const escapedCode = trimmedCode.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const placeholder = `___CODE_BLOCK_${codeBlocks.length}___`;
-            const copyBtnHtml = `<span class="copy-code-btn" onclick="copyCodeBlock(this)" style="position: absolute; top: 8px; right: 12px; color: rgba(255,255,255,0.4); font-size: 11px; cursor: pointer; transition: all 0.2s; z-index: 10; font-family: monospace;" onmouseover="this.style.color='#fff';" onmouseout="this.style.color='rgba(255,255,255,0.4)';">[copy]</span>`;
-            codeBlocks.push(`<div style="position: relative; margin: 8px 0;">${copyBtnHtml}<pre style="margin: 0; padding-top: 36px;"><code class="language-${language}">${escapedCode}</code></pre></div>`);
+            const copyBtnHtml = `<span class="copy-code-btn" onclick="copyCodeBlock(this)" style="position:absolute;top:8px;right:12px;color:rgba(255,255,255,0.4);font-size:11px;cursor:pointer;transition:all 0.2s;z-index:10;font-family:monospace;" onmouseover="this.style.color='#fff';" onmouseout="this.style.color='rgba(255,255,255,0.4)';">[copy]</span>`;
+            codeBlocks.push(`<div style="position:relative;margin:8px 0;">${copyBtnHtml}<pre style="margin:0;padding-top:36px;"><code class="language-${language}">${escapedCode}</code></pre></div>`);
             return placeholder;
           });
-
           formattedResponse = formattedResponse.replace(/`([^`]+)`/g, (match, code) => {
             const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const placeholder = `___INLINE_CODE_${inlineCodeBlocks.length}___`;
             inlineCodeBlocks.push(`<code>${escapedCode}</code>`);
             return placeholder;
           });
-
+          formattedResponse = formattedResponse.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+          formattedResponse = formattedResponse.replace(/^#{1,6}\s+/gm, '');
           formattedResponse = formattedResponse.replace(/\n/g, '<br>');
           codeBlocks.forEach((block, i) => { formattedResponse = formattedResponse.replace(`___CODE_BLOCK_${i}___`, block); });
           inlineCodeBlocks.forEach((code, i) => { formattedResponse = formattedResponse.replace(`___INLINE_CODE_${i}___`, code); });
@@ -1561,38 +1642,25 @@
           responseSection.classList.add('expanded');
           responseArea.scrollTop = 0;
 
-          if (data.usage) {
-            const apiInEl = document.getElementById('api-usage-input');
-            const apiOutEl = document.getElementById('api-usage-output');
-            const apiCostEl = document.getElementById('api-cost');
-            if (apiInEl) apiInEl.innerText = data.usage.input_tokens.toLocaleString();
-            if (apiOutEl) apiOutEl.innerText = data.usage.output_tokens.toLocaleString();
-            if (apiCostEl) {
-              const cost = data.usage.total_cost;
-              apiCostEl.innerText = cost < 1.00 ? (cost * 100).toFixed(2) + '¢' : '$' + cost.toFixed(2);
-              if (cost < 0.10) apiCostEl.style.color = 'rgba(120, 200, 180, 0.85)';
-              else if (cost < 0.50) apiCostEl.style.color = 'rgba(200, 170, 120, 0.85)';
-              else apiCostEl.style.color = 'rgba(200, 130, 130, 0.85)';
-            }
-          }
-
+          // Add to conversation area — label clearly by mode
           const convoArea = document.getElementById('conversation-area');
           if (convoArea) {
             const entryTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const modeLabel = saveToContext ? '📷 SCREEN + SAVE' : '📷 SCREEN (one-shot)';
             const pairDiv = document.createElement('div');
             pairDiv.style.cssText = 'margin-bottom: 14px;';
-            pairDiv.dataset.cost = data.response_cost || 0;
-            pairDiv.dataset.inTokens = data.response_in_tokens || 0;
-            pairDiv.dataset.outTokens = data.response_out_tokens || 0;
-            pairDiv.dataset.responseTime = data.ttft || 0;
-            pairDiv.dataset.totalTime = data.total_time || 0;
+            pairDiv.dataset.cost = responseCost;
+            pairDiv.dataset.inTokens = responseInTokens;
+            pairDiv.dataset.outTokens = responseOutTokens;
+            pairDiv.dataset.responseTime = ttft;
+            pairDiv.dataset.totalTime = totalTime;
             pairDiv.dataset.timestamp = new Date().toISOString();
 
             const userRow = document.createElement('div');
             userRow.style.cssText = 'display: flex; justify-content: flex-end; margin-bottom: 6px;';
             const userBubble = document.createElement('div');
             userBubble.style.cssText = 'max-width: 75%; background: rgba(60,60,70,0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px 14px 3px 14px; padding: 8px 12px; font-size: 11px; color: rgba(255,255,255,0.75); line-height: 1.5; word-break: break-word;';
-            userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:4px;letter-spacing:0.5px;">📷 SCREEN CAPTURE · ${entryTime}</div>(screenshot analysis)`;
+            userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:4px;letter-spacing:0.5px;">${modeLabel} · ${entryTime}</div>(screenshot analysis)`;
             userRow.appendChild(userBubble);
             pairDiv.appendChild(userRow);
 
@@ -1600,8 +1668,8 @@
             aiRow.style.cssText = 'display: flex; justify-content: flex-start; margin-bottom: 5px;';
             const aiBubble = document.createElement('div');
             aiBubble.style.cssText = 'max-width: 80%; background: rgba(30,40,35,0.7); border: 1px solid rgba(100,255,150,0.12); border-radius: 14px 14px 14px 3px; padding: 8px 12px; font-size: 11px; color: rgba(220,240,225,0.85); line-height: 1.5; word-break: break-word; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;';
-            const usedModelLabel = (data.model || window.selectedModel || 'AI').toUpperCase();
-            const cleanResponse = formattedResponse.replace(/<br>/g, '\n').replace(/<[^>]*>/g, '').trim();
+            const usedModelLabel = (usedModel || window.selectedModel || 'AI').toUpperCase();
+            const cleanResponse = fullResponse.replace(/\n{3,}/g, '\n').trim();
             const formattedConvo = window.formatConvoText ? window.formatConvoText(cleanResponse) : cleanResponse;
 
             const aiHeader = document.createElement('div');
@@ -1611,7 +1679,7 @@
               <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
                     onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.25)';"
                     onmouseout="this.style.color='rgba(255,255,255,0.25)';this.style.borderColor='rgba(255,255,255,0.08)';"
-                    onclick="navigator.clipboard.writeText(this.closest('div').nextSibling.innerText);this.textContent='copied!';setTimeout(()=>this.textContent='[copy]',2000);">[copy]</span>`;
+                    onclick="navigator.clipboard.writeText(this.closest('[data-timestamp]').querySelector('.ai-body').innerText);this.textContent='copied!';setTimeout(()=>this.textContent='[copy]',2000);">[copy]</span>`;
 
             const aiBody = document.createElement('div');
             aiBody.className = 'ai-body';
@@ -1621,12 +1689,12 @@
 
             const aiFooter = document.createElement('div');
             aiFooter.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; font-size: 9px; font-family: monospace; color: rgba(255,255,255,0.2); letter-spacing: 0.3px; padding-top: 5px; border-top: 1px solid rgba(100,255,150,0.07); flex-shrink: 0;';
-            const rCost = data.response_cost || 0;
+            const rCost = responseCost || 0;
             aiFooter.innerHTML = [
-              data.ttft > 0 ? `TTFT <span style="color:rgba(180,220,200,0.6)">${parseFloat(data.ttft).toFixed(1)}s</span>` : null,
-              data.total_time > 0 ? `TT <span style="color:rgba(180,220,200,0.6)">${parseFloat(data.total_time).toFixed(1)}s</span>` : null,
-              data.response_in_tokens ? `IN <span style="color:rgba(180,180,180,0.4)">${Number(data.response_in_tokens).toLocaleString()}</span>` : null,
-              data.response_out_tokens ? `OUT <span style="color:rgba(180,180,180,0.4)">${Number(data.response_out_tokens).toLocaleString()}</span>` : null,
+              ttft > 0 ? `TTFT <span style="color:rgba(180,220,200,0.6)">${ttft.toFixed(1)}s</span>` : null,
+              totalTime > 0 ? `TT <span style="color:rgba(180,220,200,0.6)">${totalTime.toFixed(1)}s</span>` : null,
+              responseInTokens ? `IN <span style="color:rgba(180,180,180,0.4)">${Number(responseInTokens).toLocaleString()}</span>` : null,
+              responseOutTokens ? `OUT <span style="color:rgba(180,180,180,0.4)">${Number(responseOutTokens).toLocaleString()}</span>` : null,
               rCost > 0 ? `<span style="color:rgba(180,180,180,0.35)">${rCost < 1 ? (rCost * 100).toFixed(3) + '¢' : '$' + rCost.toFixed(3)}</span>` : null
             ].filter(Boolean).join('<span style="opacity:0.25"> · </span>');
 
@@ -1639,26 +1707,24 @@
             convoArea.scrollTop = convoArea.scrollHeight;
 
             ipcRenderer.send('convo-update', {
-              question: '\ud83d\udcf7 SCREEN CAPTURE',
+              question: saveToContext ? '📷 SCREEN + SAVE (context saved)' : '📷 SCREEN (one-shot, no context)',
               response: formattedConvo,
-              model: data.model || window.selectedModel || 'AI',
+              model: usedModel || window.selectedModel || 'AI',
               timestamp: new Date().toISOString(),
-              ttft: data.ttft || 0,
-              totalTime: data.total_time || 0,
-              responseInTokens: data.response_in_tokens || 0,
-              responseOutTokens: data.response_out_tokens || 0,
-              responseCost: data.response_cost || 0
+              ttft: ttft,
+              totalTime: totalTime,
+              responseInTokens: responseInTokens,
+              responseOutTokens: responseOutTokens,
+              responseCost: responseCost
             });
           }
 
-          if (capturedScreenshot) {
-            capturedScreenshot = null;
-            if (btnScreenK) { btnScreenK.style.backgroundColor = 'rgba(255, 255, 255, 0.03)'; btnScreenK.style.color = 'rgba(255, 255, 255, 0.5)'; }
-            if (btnScreenS) { btnScreenS.style.backgroundColor = 'rgba(255, 255, 255, 0.03)'; btnScreenS.style.color = 'rgba(255, 255, 255, 0.5)'; }
-          }
-
+          capturedScreenshot = null;
+          if (btnScreenK) { btnScreenK.style.backgroundColor = 'rgba(255,255,255,0.03)'; btnScreenK.style.color = 'rgba(255,255,255,0.5)'; }
+          if (btnScreenS) { btnScreenS.style.backgroundColor = 'rgba(255,255,255,0.03)'; btnScreenS.style.color = 'rgba(255,255,255,0.5)'; }
           const btnGenEl = document.getElementById('btn-generate');
           if (btnGenEl) btnGenEl.classList.remove('active');
+          statusText.innerText = saveToContext ? 'Screen captured + saved' : 'Screen captured';
 
         } catch (e) {
           console.error('AI Generation Error:', e);
