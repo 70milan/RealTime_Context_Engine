@@ -503,10 +503,16 @@ function initializeStreamingAI() {
 
     // Scroll helper for global shortcuts
     window.scrollAIOutput = (direction) => {
+        // Try response-area first, fall back to its parent .section which is the actual scrollable container
         const el = document.getElementById('response-area');
-        if (el) {
-            el.scrollTop += (direction * 50); // increased scroll speed
-        }
+        if (!el) return;
+        
+        // Walk up to find the scrollable parent (.section)
+        const section = el.closest('.section') || el.parentElement;
+        const target = (section && section.scrollHeight > section.clientHeight) ? section : el;
+        
+        const amount = Math.max(120, Math.floor(target.clientHeight * 0.4));
+        target.scrollTop += (direction * amount);
     };
 
     console.log('[STREAM] Streaming AI initialized successfully!');

@@ -346,11 +346,10 @@ class AIRequest(BaseModel):
     target_language: Optional[str] = None
     screenshot: Optional[str] = None
     job_description: Optional[str] = None
-    save_to_context: Optional[bool] = True  # Set False for one-shot problems (LeetCode), True for scenarios needing follow-up
-    text_model: Optional[str] = None  # Selected model for text-only responses
+    save_to_context: Optional[bool] = True
+    text_model: Optional[str] = None
 
-    class Config:
-        extra = "ignore"  # Ignore extra fields
+    model_config = {"extra": "ignore"}
 
 
 @app.get('/models')

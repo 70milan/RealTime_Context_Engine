@@ -493,6 +493,7 @@ function createConvoWindow() {
     show: false,
     frame: false,
     alwaysOnTop: true,
+    skipTaskbar: true,
     transparent: true,
     backgroundColor: '#00000000',
     webPreferences: {
@@ -501,6 +502,7 @@ function createConvoWindow() {
     }
   });
 
+  convoWin.setContentProtection(true);
   convoWin.loadFile(path.join(__dirname, 'convo.html'));
 
   convoWin.on('focus', () => {
@@ -812,13 +814,13 @@ app.whenReady().then(() => {
     clampWindowToScreen(win);
   });
 
-  /* ---- Ctrl+Shift+Up/Down: Scroll AI ---- */
-  globalShortcut.register('CommandOrControl+Shift+Up', () => {
+  /* ---- Ctrl+Alt+[ / ]: Scroll AI response up/down ---- */
+  registerShortcut('CommandOrControl+Alt+U', () => {
     if (!win) return;
     win.webContents.executeJavaScript(`if (window.scrollAIOutput) { window.scrollAIOutput(-1); }`);
   });
 
-  globalShortcut.register('CommandOrControl+Shift+Down', () => {
+  registerShortcut('CommandOrControl+Alt+I', () => {
     if (!win) return;
     win.webContents.executeJavaScript(`if (window.scrollAIOutput) { window.scrollAIOutput(1); }`);
   });

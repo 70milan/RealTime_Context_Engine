@@ -2,7 +2,7 @@
 // Session Setup & Timer Logic
 
 const FULL_SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours (licensed)
-const DEMO_SESSION_DURATION_MS = 60 * 1000; // 12 minutes (demo)
+const DEMO_SESSION_DURATION_MS = 12 * 60 * 1000; // 12 minutes (demo)
 const DEMO_COOLDOWN_MS = 47 * 60 * 1000; // 47 minutes cooldown between demo sessions
 let SESSION_DURATION_MS = DEMO_SESSION_DURATION_MS; // Default to demo
 let sessionEndTime = null;
@@ -557,7 +557,7 @@ function initSession() {
                                 <div style="color: rgba(255,255,255,0.3); font-size: 10px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${session.job_description_preview || ''}</div>
                             </div>
                             <button onclick="event.stopPropagation(); window.deletePastSession('${session.name.replace(/'/g, "\\\\'")}')" 
-                                    style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"                                    style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"
+                                    style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"
                                     onmouseover="this.style.color='#ff5555'; this.style.borderColor='rgba(255,68,68,0.3)'; this.style.background='rgba(255,68,68,0.08)';"
                                     onmouseout="this.style.color='rgba(255,255,255,0.3)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.background='none';"
                                     title="Delete session">TRASH</button>
@@ -917,8 +917,8 @@ function initSession() {
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Shift+Q</span><span style="color: #ccc;">Quit app</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+F</span><span style="color: #ccc;">Maximize AI response</span>' +
         '<div style="grid-column: 1 / -1; height: 1px; background: rgba(255,255,255,0.1); margin: 2px 0;"></div>' +
-        '<span style="color: rgba(255,255,255,0.5);">Ctrl+Shift+Up</span><span style="color: #aaa;">Scroll AI response up</span>' +
-        '<span style="color: rgba(255,255,255,0.5);">Ctrl+Shift+Down</span><span style="color: #aaa;">Scroll AI response down</span>' +
+        '<span style="color: rgba(255,255,255,0.5);">Ctrl+Alt+U</span><span style="color: #aaa;">Scroll AI response up</span>' +        
+        '<span style="color: rgba(255,255,255,0.5);">Ctrl+Alt+I</span><span style="color: #aaa;">Scroll AI response down</span>' +
         '<span style="color: rgba(255,255,255,0.5);">Ctrl+Shift++</span><span style="color: #aaa;">Increase app size</span>' +
         '<span style="color: rgba(255,255,255,0.5);">Ctrl+Shift+-</span><span style="color: #aaa;">Decrease app size</span>' +
         '<span style="color: rgba(255,255,255,0.5);">Ctrl+Shift+O</span><span style="color: #aaa;">Reset app size</span>' +
@@ -1101,9 +1101,9 @@ window.openPastSession = async function (sessionName) {
                     const responseText = entry.response;
                     aiHeader.innerHTML = `
                         <span style="font-size:9px;color:rgba(100,255,150,0.4);letter-spacing:0.5px;">${modelLabel} · ${entryTimeStr}</span>
-                        <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
-                              onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.25)';"
-                              onmouseout="this.style.color='rgba(255,255,255,0.25)';this.style.borderColor='rgba(255,255,255,0.08)';"
+                        <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:default;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
+                              
+                              
                               onclick="navigator.clipboard.writeText(this.closest('div').nextSibling.innerText);this.textContent='copied!';setTimeout(()=>this.textContent='[copy]',2000);">[copy]</span>`;
 
                     // Body
