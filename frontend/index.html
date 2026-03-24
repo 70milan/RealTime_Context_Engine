@@ -67,6 +67,7 @@
     #transcript-area,
     #conversation-area,
     #log-drawer,
+    #backend-terminal,
     pre,
     code,
     pre code,
@@ -199,7 +200,7 @@
       padding: 6px;
       border-radius: 6px;
       font-size: 9px;
-      cursor: pointer;
+      cursor: default;
       font-weight: 500;
       transition: all 0.15s;
       background-color: rgba(255, 255, 255, 0.03);
@@ -279,7 +280,7 @@
     .section-header span {
       -webkit-app-region: no-drag;
       user-select: none;
-      cursor: pointer;
+      cursor: default;
     }
 
     #transcript-area {
@@ -289,13 +290,7 @@
       word-wrap: break-word;
       user-select: text;
       -webkit-user-select: text;
-      cursor: text;
-      flex: 1;
-      outline: none;
-      min-height: 50px;
-    }
-
-    #response-area {
+      cursor: default;
       color: #ffffff;
       font-size: 14px;
       white-space: pre-wrap;
@@ -303,7 +298,7 @@
       text-align: left;
       user-select: text;
       -webkit-user-select: text;
-      cursor: text;
+      cursor: default;
       line-height: 1.4;
       flex: 1;
       min-height: 50px;
@@ -449,7 +444,7 @@
       border: none;
       background-color: transparent;
       color: rgba(255, 255, 255, 0.45);
-      cursor: pointer;
+      cursor: default;
       transition: all 0.2s;
       display: flex;
       align-items: center;
@@ -544,6 +539,21 @@
       outline: none !important;
       box-shadow: none !important;
       -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Stealth mode: no pointer cursors in the live session UI ── */
+    #main-container *,
+    #main-container button,
+    #main-container span,
+    #main-container .btn,
+    #main-container .session-btn {
+      cursor: default !important;
+    }
+    /* Keep text areas user-selectable */
+    #transcript-area,
+    #response-area {
+      user-select: text;
+      -webkit-user-select: text;
     }
   </style>
 
@@ -723,7 +733,7 @@
             <div class="setup-group setup-group-grow">
               <div class="setup-group-title">Backend Console</div>
               <div class="setup-field setup-field-grow">
-                <div id="backend-terminal" class="backend-terminal"><span class="term-line term-dim">Waiting for
+                <div id="backend-terminal" class="backend-terminal" style="overflow-y: auto; overflow-x: hidden; max-height: 180px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;"><span class="term-line term-dim">Waiting for
                     backend...</span></div>
               </div>
             </div>
@@ -904,10 +914,10 @@
               style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Shift+Q</span><span>Quit
               App</span>
             <span
-              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Shift+↑</span><span>Scroll
+              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+[</span><span>Scroll
               AI Response Up</span>
             <span
-              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Shift+↓</span><span>Scroll
+              style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Alt+]</span><span>Scroll
               AI Response Down</span>
             <span
               style="color: rgba(100,255,150,0.8); font-family: monospace; font-size: 11px;">Ctrl+Shift++</span><span>Increase
@@ -1039,7 +1049,7 @@
             Window &amp; Layout</div>
           <div
             style="display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; color: rgba(255,255,255,0.5); font-size: 11px; line-height: 1.5;">
-            <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Up/Down</span><span>Scroll AI
+            <span style="font-family: monospace; font-size: 10px;">Ctrl+Alt+[ / ]</span><span>Scroll AI
               Response</span>
             <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Plus</span><span>Increase App Size</span>
             <span style="font-family: monospace; font-size: 10px;">Ctrl+Shift+Minus</span><span>Decrease App Size</span>
@@ -1081,27 +1091,27 @@
 
   <div id="main-container">
     <div id="controls">
-      <button id="btn-system" class="btn" title="Toggle System Audio (Ctrl+R)">System</button>
-      <button id="btn-mic" class="btn" title="Toggle Mic Audio (Ctrl+M)">Mic</button>
+      <button id="btn-system" class="btn">System</button>
+      <button id="btn-mic" class="btn">Mic</button>
       <div class="screen-btn-group"
         style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; overflow: hidden; gap: 0;">
         <button id="btn-screen-k" class="btn"
           style="flex: 1; border: none; border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 9px;"
-          title="Screenshot + AI Solution (Ctrl+K)">Screen</button>
+         >Screen</button>
         <button id="btn-screen-s" class="btn"
           style="flex: 1; border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 8px; opacity: 0.8;"
-          title="Screenshot + Save to AI Context (Ctrl+S)">Save</button>
+         >Save</button>
       </div>
-      <button id="btn-generate" class="btn" title="Process Transcript with AI (Ctrl+Enter)">Process</button>
-      <button id="btn-conversation" class="btn" title="View Conversation History (Ctrl+Alt+C)">Convo</button>
+      <button id="btn-generate" class="btn">Process</button>
+      <button id="btn-conversation" class="btn">Convo</button>
       <div id="session-timer"
         style="padding: 4px 10px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.75); font-weight: 600; font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; gap: 6px; flex-shrink: 0; letter-spacing: 1.5px; transition: all 0.5s ease;">
         <span id="session-timer-text">2:00:00</span>
       </div>
       <div class="session-btn-group">
-        <button id="btn-session-start" class="session-btn" title="Start session timer">Start</button>
-        <button id="btn-session-stop" class="session-btn" title="Pause session timer">Pause</button>
-        <button id="btn-session-end" class="session-btn" title="End session and reset">End</button>
+        <button id="btn-session-start" class="session-btn">Start</button>
+        <button id="btn-session-stop" class="session-btn">Pause</button>
+        <button id="btn-session-end" class="session-btn">End</button>
       </div>
     </div>
 
@@ -1109,9 +1119,9 @@
       <div class="section-header">
         <span>Live Transcript</span>
         <span
-          style="font-size: 11px; cursor: pointer; color: rgba(255,255,255,0.4); font-family: monospace; transition: all 0.2s;"
-          onmouseover="this.style.color='#fff'; if(this.textContent==='[clear]') this.textContent='[ctrl+backspace]';"
-          onmouseout="this.style.color='rgba(255,255,255,0.4)'; if(this.textContent==='[ctrl+backspace]') this.textContent='[clear]';"
+          style="font-size: 11px; cursor: default; color: rgba(255,255,255,0.4); font-family: monospace;"
+          
+          
           onclick="window.clearTranscript(); this.textContent = '[cleared!]'; this.style.color = '#fff'; setTimeout(() => { this.textContent = '[clear]'; this.style.color = 'rgba(255,255,255,0.4)'; }, 2000);">[clear]</span>
       </div>
       <div id="transcript-area" contenteditable="true"></div>
@@ -1124,8 +1134,8 @@
       <div class="section-header">
         <span>AI Assistant</span>
         <span
-          style="font-size: 11px; cursor: pointer; color: rgba(255,255,255,0.4); font-family: monospace; transition: all 0.2s;"
-          onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.4)'"
+          style="font-size: 11px; cursor: default; color: rgba(255,255,255,0.4); font-family: monospace;"
+          
           onclick="navigator.clipboard.writeText(document.getElementById('response-area').innerText); this.textContent = '[copied!]'; this.style.color = '#4CAF50'; setTimeout(() => { this.textContent = '[copy]'; this.style.color = 'rgba(255,255,255,0.4)'; }, 2000);">[copy]</span>
       </div>
       <div id="response-area"></div>
@@ -1141,9 +1151,9 @@
           style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default; white-space: nowrap;">Hotkeys</span>
         <!-- ── Log toggle button ── -->
         <span id="btn-toggle-log"
-          style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: pointer; transition: all 0.15s; white-space: nowrap;"
-          onmouseover="this.style.color='rgba(255,255,255,0.6)'; this.style.borderColor='rgba(255,255,255,0.2)'"
-          onmouseout="if(!document.getElementById('log-drawer').classList.contains('open')){this.style.color='rgba(255,255,255,0.25)'; this.style.borderColor='rgba(255,255,255,0.1)'}"
+          style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default; white-space: nowrap;"
+          
+          
           onclick="window.toggleLogDrawer()">log</span>
       </div>
       <!-- Middle container injected by setup.js will go here -->
@@ -1620,7 +1630,7 @@
             const trimmedCode = code.replace(/^\n+|\n+$/g, '');
             const escapedCode = trimmedCode.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const placeholder = `___CODE_BLOCK_${codeBlocks.length}___`;
-            const copyBtnHtml = `<span class="copy-code-btn" onclick="copyCodeBlock(this)" style="position:absolute;top:8px;right:12px;color:rgba(255,255,255,0.4);font-size:11px;cursor:pointer;transition:all 0.2s;z-index:10;font-family:monospace;" onmouseover="this.style.color='#fff';" onmouseout="this.style.color='rgba(255,255,255,0.4)';">[copy]</span>`;
+            const copyBtnHtml = `<span class="copy-code-btn" onclick="copyCodeBlock(this)" style="position:absolute;top:8px;right:12px;color:rgba(255,255,255,0.4);font-size:11px;cursor:default;z-index:10;font-family:monospace;">[copy]</span>`;
             codeBlocks.push(`<div style="position:relative;margin:8px 0;">${copyBtnHtml}<pre style="margin:0;padding-top:36px;"><code class="language-${language}">${escapedCode}</code></pre></div>`);
             return placeholder;
           });
@@ -1676,9 +1686,8 @@
             aiHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
             aiHeader.innerHTML = `
               <span style="font-size:9px;color:rgba(100,255,150,0.4);letter-spacing:0.5px;">${usedModelLabel} · ${entryTime}</span>
-              <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
-                    onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.25)';"
-                    onmouseout="this.style.color='rgba(255,255,255,0.25)';this.style.borderColor='rgba(255,255,255,0.08)';"
+              <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:default;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);"
+                    
                     onclick="navigator.clipboard.writeText(this.closest('[data-timestamp]').querySelector('.ai-body').innerText);this.textContent='copied!';setTimeout(()=>this.textContent='[copy]',2000);">[copy]</span>`;
 
             const aiBody = document.createElement('div');
