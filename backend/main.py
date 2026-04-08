@@ -51,10 +51,11 @@ PRICING = {
 
 
 # License State (Backend Enforcement)
+# Default to unlicensed until validation
 is_licensed_backend = False
-demo_session_start = None  # Tracks when the first demo session of this run started
-DEMO_LIMIT_MS = 12 * 60 * 1000  # 12 minutes
-DEMO_COOLDOWN_MS = 47 * 60 * 1000  # 47 minutes
+demo_session_start = None
+DEMO_LIMIT_MS = 12 * 60 * 1000
+DEMO_COOLDOWN_MS = 47 * 60 * 1000
 
 
 
@@ -153,6 +154,15 @@ if getattr(sys, 'frozen', False):
 else:
     # Running as script - store locally
     BASE_DIR = Path(__file__).parent
+
+# =============================================================================
+# KEY FILE CONFIGURATION (Must be after BASE_DIR)
+# =============================================================================
+PUBLIC_KEY_NAME = "public_key.pem"
+PRIVATE_KEY_NAME = "private_key.pem"
+# Use absolute paths for key files (essential for frozen EXEs)
+PUBLIC_KEY_FILE = BASE_DIR / PUBLIC_KEY_NAME
+PRIVATE_KEY_FILE = BASE_DIR / PRIVATE_KEY_NAME
 
 # Allow the Electron frontend and local testing to call the API
 app.add_middleware(
@@ -672,40 +682,14 @@ def get_hwid():
 # =============================================================================
 # LICENSE VERIFICATION (RSA)
 # =============================================================================
-PUBLIC_KEY_FILE = "public_key.pem"
-PRIVATE_KEY_FILE = "private_key.pem" # Added for auto-generation
+# (PUBLIC_KEY_FILE and PRIVATE_KEY_FILE moved to top of file after BASE_DIR)
 
 def ensure_keys_exist():
-    """Generate RSA keys if they don't exist."""
-    if os.path.exists(PUBLIC_KEY_FILE) and os.path.exists(PRIVATE_KEY_FILE):
+    """Ensure bundled public key exists. Auto-generation disabled in production."""
+    if os.path.exists(PUBLIC_KEY_FILE):
         return
 
-    print("[INFO] Keys missing. Auto-generating RSA Layout...")
-    try:
-        from cryptography.hazmat.primitives.asymmetric import rsa
-        private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-        )
-        
-        # Save private
-        with open(PRIVATE_KEY_FILE, "wb") as f:
-            f.write(private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption()
-            ))
-            
-        # Save public
-        public_key = private_key.public_key()
-        with open(PUBLIC_KEY_FILE, "wb") as f:
-            f.write(public_key.public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo
-            ))
-        print("[SUCCESS] Keys generated on startup.")
-    except Exception as e:
-        print(f"[ERROR] Failed to generate keys: {e}")
+    print("[WARNING] Public key missing. Application will run in demo mode.")
 
 # Call on import/startup
 def initialize_keys():
@@ -715,11 +699,11 @@ def initialize_keys():
         try:
             # PyInstaller extracts to sys._MEIPASS
             bundle_dir = sys._MEIPASS
-            bundled_key_path = os.path.join(bundle_dir, PUBLIC_KEY_FILE)
+            bundled_key_path = os.path.join(bundle_dir, PUBLIC_KEY_NAME)
             
             if os.path.exists(bundled_key_path):
                 # Copy bundled key to BASE_DIR (overwrite existing)
-                dest_path = BASE_DIR / PUBLIC_KEY_FILE
+                dest_path = PUBLIC_KEY_FILE
                 import shutil
                 shutil.copy2(bundled_key_path, dest_path)
                 print(f"[STARTUP] Enforced bundled public key: {dest_path}")
@@ -770,7 +754,7 @@ def load_public_key():
     if getattr(sys, 'frozen', False):
         try:
             bundle_dir = sys._MEIPASS
-            bundled_path = os.path.join(bundle_dir, PUBLIC_KEY_FILE)
+            bundled_path = os.path.join(bundle_dir, PUBLIC_KEY_NAME)
             if os.path.exists(bundled_path):
                 print(f"[VERIFY] Using bundled key from: {bundled_path}")
                 with open(bundled_path, "rb") as f:
@@ -861,25 +845,20 @@ async def validate_license(data: Dict[str, str]):
     return {"valid": False, "status": "invalid"}
 
 def check_access_allowed() -> bool:
-    """Check if the current request is allowed based on license/demo status."""
+    """Enforce hardware-locked licensing and trial limits."""
     if is_licensed_backend:
         return True
-
-    # Check demo status
+    
+    global demo_session_start
     if demo_session_start is None:
-        import time
-        last_end = profile_cache.get('last_demo_end_time', 0) if profile_cache else 0
-        elapsed_cooldown = (time.time() * 1000) - last_end
-        if elapsed_cooldown < DEMO_COOLDOWN_MS:
-            print(f"[SECURITY] Access Denied: Cooldown active ({DEMO_COOLDOWN_MS - elapsed_cooldown:.0f}ms left)")
-            return False
+        # If not started yet, allow it (will be started on first request or save/load)
         return True
-
+        
     import time
     elapsed = (time.time() * 1000) - demo_session_start
     if elapsed > DEMO_LIMIT_MS:
-        print(f"[SECURITY] Access Denied: Demo expired ({elapsed/1000:.1f}s)")
         return False
+        
     return True
 
 
@@ -1014,9 +993,10 @@ async def save_session_data(data: Dict[str, Any]):
     # Start/Reset demo timer if not licensed
     if not is_licensed_backend:
         global demo_session_start
-        import time
-        demo_session_start = time.time() * 1000
-        print(f"[SECURITY] Demo session started at {demo_session_start}")
+        if demo_session_start is None:
+            import time
+            demo_session_start = time.time() * 1000
+            print(f"[SECURITY] Demo session started at {demo_session_start}")
 
     session_file = session_dir / 'session.json'
     
@@ -1196,7 +1176,7 @@ async def list_sessions():
 @app.get('/session/load/{session_name}')
 async def load_session(session_name: str):
     """Load a previous session's data"""
-    global current_session_name, profile_cache, session_usage
+    global current_session_name, profile_cache, session_usage, demo_session_start
     try:
         session_dir = SESSIONS_DIR / session_name
         session_file = session_dir / 'session.json'
@@ -1205,6 +1185,12 @@ async def load_session(session_name: str):
             return {"status": "error", "error": "Session not found"}
         
         data = json.loads(session_file.read_text(encoding='utf-8'))
+        
+        # Start demo timer if not licensed and not already started
+        if not is_licensed_backend and demo_session_start is None:
+            import time
+            demo_session_start = time.time() * 1000
+            print(f"[SECURITY] Demo session started on load at {demo_session_start}")
         
         # Load conversation history
         conv_file = session_dir / 'conversation.json'
@@ -1238,14 +1224,14 @@ async def load_session(session_name: str):
         profile_cache['target_role'] = data.get('target_role', '')
         profile_cache['target_language'] = data.get('target_language', '')
         
-        # 2. Restore API key: Only use session.json value if it's valid and looks real
+        # 2. Restore API key: Prefer the currently validated global key
         session_key = data.get('openai_api_key', '').strip()
-        if session_key.startswith("sk-") and not session_key.endswith("KiwA"):
+        if current_valid_key:
+            profile_cache['openai_api_key'] = current_valid_key
+            print(f"[SESSION] Using current global API key (Session key was ignored)")
+        elif session_key.startswith("sk-") and not session_key.endswith("KiwA"):
             profile_cache['openai_api_key'] = session_key
             print(f"[SESSION] API key restored from session '{session_name}'")
-        elif current_valid_key:
-            profile_cache['openai_api_key'] = current_valid_key
-            print(f"[SESSION] Using current global API key (Session key was placeholder/empty)")
         else:
             print(f"[SESSION] WARNING: No API key available - user must re-enter key")
         
@@ -1698,7 +1684,9 @@ async def generate_ai_response(req: AIRequest):
 #   1. initialize_keys  — copies/generates public key so verify can find it
 #   2. check_saved_license — reads profile and verifies RSA signature
 initialize_keys()
-check_saved_license()
+# Personal build: skip license check, always licensed
+is_licensed_backend = True
+print("[STARTUP] Personal build — full access enabled, no license required")
 
 
 if __name__ == "__main__":

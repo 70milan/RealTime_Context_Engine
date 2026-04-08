@@ -126,4 +126,17 @@ generate_keys_force.py
 key_gen.py
 backend/generate_license.py
 
+# Test scripts
+backend/run_all_tests.py
+backend/test_openai_realtime.py
+backend/tests/
+
+# Local/personal runner scripts
+run_gkg.bat
+run_kalshi.bat
+
+# Junk / editor artifacts
+$null
+.agent/
+
 

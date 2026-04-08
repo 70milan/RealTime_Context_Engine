@@ -4,15 +4,15 @@
 const FULL_SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours (licensed)
 const DEMO_SESSION_DURATION_MS = 12 * 60 * 1000; // 12 minutes (demo)
 const DEMO_COOLDOWN_MS = 47 * 60 * 1000; // 47 minutes cooldown between demo sessions
-let SESSION_DURATION_MS = DEMO_SESSION_DURATION_MS; // Default to demo
+let SESSION_DURATION_MS = DEMO_SESSION_DURATION_MS; // Default to demo duration
 let sessionEndTime = null;
 let timerInterval = null;
 let sessionCreated = false;
 let sessionTimerStarted = false;
-let currentSessionName = null;  // Track current session name
-let isLicensed = false; // Track license status
-let sessionStartTimestamp = null; // Track when session started for duration calculation
-let backendReady = false; // Track if backend has finished starting
+let currentSessionName = null;
+let isLicensed = false; // Default to unlicensed
+let sessionStartTimestamp = null;
+let backendReady = false;
 
 // Helper to check demo cooldown remaining time (in ms)
 function getRemainingDemoCooldown() {
@@ -258,10 +258,11 @@ function checkAllInputs() {
     }
 }
 
-// Backend health check - polls until backend is responsive
+// Backend health check - polls until backend is responsive, gives up after 60s
 async function waitForBackend() {
     const pastSessionsBtn = document.getElementById('btn-past-sessions');
-    const startBtn = document.getElementById('btn-start-session');
+    const MAX_ATTEMPTS = 120; // 60 seconds total (120 × 500ms)
+    let attempts = 0;
 
     // Show starting state on Past Sessions button
     if (pastSessionsBtn) {
@@ -271,6 +272,7 @@ async function waitForBackend() {
     }
 
     const poll = async () => {
+        attempts++;
         try {
             const res = await fetch('http://127.0.0.1:5050/sessions', { signal: AbortSignal.timeout(2000) });
             if (res.ok) {
@@ -297,7 +299,24 @@ async function waitForBackend() {
         } catch (e) {
             // Backend not ready yet
         }
-        // Retry every 500ms instead of 2s — backend is usually up in <1s
+
+        // Give up after MAX_ATTEMPTS and show a clear error
+        if (attempts >= MAX_ATTEMPTS) {
+            console.error('[BACKEND] Timed out waiting for backend after 60 seconds.');
+            const status = document.getElementById('setup-status');
+            if (status) {
+                status.innerText = 'Backend failed to start. Please restart the app.';
+                status.style.color = 'rgba(255, 80, 80, 0.9)';
+            }
+            if (pastSessionsBtn) {
+                pastSessionsBtn.innerHTML = '&#9888; Backend Error';
+                pastSessionsBtn.style.opacity = '0.5';
+                pastSessionsBtn.style.cursor = 'not-allowed';
+            }
+            return; // Stop polling — no more retries
+        }
+
+        // Retry every 500ms
         setTimeout(poll, 500);
     };
 

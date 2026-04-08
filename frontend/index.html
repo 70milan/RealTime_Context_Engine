@@ -1443,6 +1443,12 @@
             }
             transcriptArea.innerText += data.text;
             transcriptArea.scrollTop = transcriptArea.scrollHeight;
+          } else if (data.type === 'error') {
+            console.error('WebSocket Application Error:', data.message);
+            statusText.innerText = 'App Error';
+            statusDot.className = 'dot error';
+            responseArea.innerText = `Error: ${data.message}\n\nPlease check your OpenAI API key and credits.`;
+            if (activeMode) stopCapture();
           }
         };
 
@@ -1454,8 +1460,14 @@
           responseArea.innerText = 'Cannot connect to the backend server.\n\nMake sure the app is fully loaded and try again. If this persists, restart the application.';
         };
 
-        socket.onclose = () => {
-          console.log('WebSocket Closed');
+        socket.onclose = (event) => {
+          console.log('WebSocket Closed', event ? event.code : 'unknown', event ? event.reason : '');
+          if (event && event.code && event.code !== 1000 && event.code !== 1001 && event.code !== 1005) {
+             statusText.innerText = 'Connection Error';
+             statusDot.className = 'dot error';
+             let reason = event.reason || 'Unknown error (Check your API key credits or model string)';
+             responseArea.innerText = `WebSocket connection closed by server.\nCode: ${event.code}\nReason: ${reason}\n\nMake sure your OpenAI API key is still valid and has billing credits enabled.`;
+          }
           if (activeMode) stopCapture();
         };
 
