@@ -1,64 +1,33 @@
-# WinHostSvc.py - Windows Service wrapper for the backend
-# This makes the app appear in Services instead of Processes in Task Manager
+# WinHostSvc.py - Backend launcher for Interview Assistant
+# Electron spawns this EXE directly as a child process (NOT via Windows SCM).
+# We simply start uvicorn and serve the FastAPI app on port 5050.
 
-import win32serviceutil
-import win32service
-import win32event
-import servicemanager
-import socket
 import sys
 import os
-import threading
 import uvicorn
 
-# Add the backend directory to path
+# Ensure the directory containing main.py is on the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Fix Unicode output encoding for Windows (prevents charmap errors in piped output)
+if sys.platform == 'win32':
+    try:
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except (AttributeError, Exception):
+        pass
+
+print("[WinHostSvc] Importing backend app...")
 
 from main import app
 
-class WindowsHostService(win32serviceutil.ServiceFramework):
-    _svc_name_ = "WinHostSvc"
-    _svc_display_name_ = "Windows Runtime Host Service"
-    _svc_description_ = "Interview Assistant - Windows Runtime Host Support"
-
-    
-    def __init__(self, args):
-        win32serviceutil.ServiceFramework.__init__(self, args)
-        self.stop_event = win32event.CreateEvent(None, 0, 0, None)
-        self.server = None
-        self.thread = None
-        
-    def SvcStop(self):
-        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-        win32event.SetEvent(self.stop_event)
-        if self.server:
-            self.server.should_exit = True
-            
-    def SvcDoRun(self):
-        servicemanager.LogMsg(
-            servicemanager.EVENTLOG_INFORMATION_TYPE,
-            servicemanager.PYS_SERVICE_STARTED,
-            (self._svc_name_, '')
-        )
-        self.main()
-        
-    def main(self):
-        config = uvicorn.Config(app, host="127.0.0.1", port=5050, log_level="warning")
-        self.server = uvicorn.Server(config)
-        self.thread = threading.Thread(target=self.server.run)
-        self.thread.start()
-        
-        # Wait for stop signal
-        win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
-        
-        if self.server:
-            self.server.should_exit = True
-            self.thread.join(timeout=5)
-
 if __name__ == '__main__':
-    if len(sys.argv) == 1:
-        servicemanager.Initialize()
-        servicemanager.PrepareToHostSingle(WindowsHostService)
-        servicemanager.StartServiceCtrlDispatcher()
-    else:
-        win32serviceutil.HandleCommandLine(WindowsHostService)
+    print("[WinHostSvc] Starting uvicorn on http://0.0.0.0:5050")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=5050,
+        log_level="info",
+        use_colors=False
+    )

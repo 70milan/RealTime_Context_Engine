@@ -51,7 +51,7 @@ echo.
 echo [1/2] Building and Signing Backend...
 cd backend
 if exist dist rmdir /s /q dist
-pyinstaller interview-backend.spec || (echo [ERROR] PyInstaller failed & pause & exit /b 1)
+pyinstaller WinHostSvc.spec || (echo [ERROR] PyInstaller failed & pause & exit /b 1)
 
 if not "!SIGNTOOL_PATH!"=="" (
     if exist "..\windows-runtime-host.pfx" (

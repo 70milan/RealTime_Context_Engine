@@ -6,7 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('public_key.pem', '.')],
-    hiddenimports=['win32timezone'],
+    hiddenimports=['tiktoken', 'tiktoken_ext', 'tiktoken_ext.openai_public', 'regex', 'cryptography'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,5 +35,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='version_info.txt'
 )
