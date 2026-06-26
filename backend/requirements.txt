@@ -9,3 +9,4 @@ pydantic
 starlette
 pyinstaller
 tiktoken
+python-docx

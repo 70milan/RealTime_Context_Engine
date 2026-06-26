@@ -235,10 +235,12 @@ async def realtime(ws: WebSocket):
     
     api_key = get_api_key()
     
-    url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
+    # GA Realtime transcription session. The Beta Realtime API was removed
+    # ("Realtime Beta API no longer supported" / close 4000); GA drops the
+    # OpenAI-Beta header and uses the ?intent=transcription endpoint.
+    url = "wss://api.openai.com/v1/realtime?intent=transcription"
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "OpenAI-Beta": "realtime=v1",
     }
     
     if not api_key:
@@ -250,21 +252,26 @@ async def realtime(ws: WebSocket):
     try:
         async with websockets.connect(url, additional_headers=headers) as openai_ws:
             print("Connected to OpenAI Realtime API!")
-            # Initialize session
+            # Initialize session — GA transcription schema. Audio config is now
+            # nested under session.audio.input (was flat in Beta). The client
+            # streams 24kHz mono PCM16; server VAD segments each utterance.
             session_update = {
                 "type": "session.update",
                 "session": {
-                    "modalities": ["text"],
-                    "input_audio_format": "pcm16",
-                    "input_audio_transcription": {
-                        "model": "whisper-1"
-                    },
-                    "turn_detection": {
-                        "type": "server_vad",
-                        "threshold": 0.45,
-                        "prefix_padding_ms": 200,
-                        "silence_duration_ms": 350,
-                        "create_response": False
+                    "type": "transcription",
+                    "audio": {
+                        "input": {
+                            "format": {"type": "audio/pcm", "rate": 24000},
+                            "transcription": {
+                                "model": "whisper-1"
+                            },
+                            "turn_detection": {
+                                "type": "server_vad",
+                                "threshold": 0.45,
+                                "prefix_padding_ms": 200,
+                                "silence_duration_ms": 350
+                            }
+                        }
                     }
                 }
             }
@@ -1684,9 +1691,7 @@ async def generate_ai_response(req: AIRequest):
 #   1. initialize_keys  — copies/generates public key so verify can find it
 #   2. check_saved_license — reads profile and verifies RSA signature
 initialize_keys()
-# Personal build: skip license check, always licensed
-is_licensed_backend = True
-print("[STARTUP] Personal build — full access enabled, no license required")
+check_saved_license()
 
 
 if __name__ == "__main__":

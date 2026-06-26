@@ -1677,6 +1677,24 @@ async function startSessionTimer() {
         return;
     }
 
+    // Re-sync license state with the backend before anchoring the timer. The
+    // backend was just pinged above, so /validate-license will reach it and
+    // re-affirm is_licensed_backend=True for a valid license. This closes the
+    // desync bug where the frontend ran a 2h licensed timer while the backend's
+    // own demo enforcement still cut access off at 12 min (a "demo expired"
+    // warning appearing in the middle of a licensed session).
+    const savedLicenseForSync = localStorage.getItem('valid_license_key');
+    if (savedLicenseForSync) {
+        const licStatus = await validateLicense(savedLicenseForSync);
+        if (licStatus === 'valid') {
+            isLicensed = true;
+        } else if (licStatus === 'invalid') {
+            isLicensed = false;
+            localStorage.removeItem('valid_license_key');
+        }
+        // 'empty'/unreachable: backend was just reachable, so keep current state
+    }
+
     // Anchor session end time to THIS exact moment (when Start is clicked)
     const duration = isLicensed ? FULL_SESSION_DURATION_MS : DEMO_SESSION_DURATION_MS;
     sessionEndTime = Date.now() + duration;
