@@ -701,6 +701,12 @@ app.whenReady().then(() => {
     win.webContents.executeJavaScript(`if (window.generateAIOnly) { window.generateAIOnly(); }`);
   });
 
+  /* ---- Ctrl+Alt+A: Toggle Hands-Free Auto-Response ---- */
+  registerShortcut('CommandOrControl+Alt+A', () => {
+    if (!win) return;
+    win.webContents.executeJavaScript(`if (window.toggleAutoMode) { window.toggleAutoMode(); }`);
+  });
+
   /* ---- Ctrl+M: Toggle Mic ---- */
   registerShortcut('CommandOrControl+M', () => {
     if (!win) return;

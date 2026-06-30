@@ -1147,6 +1147,7 @@
       <div class="status-indicator" style="flex-shrink: 0; min-width: 0;">
         <div id="status-dot" class="dot"></div>
         <span id="status-text">Ready</span>
+        <span id="auto-mode-indicator" title="Hands-free auto-response (Ctrl+Alt+A)" style="display:none; margin-left:8px; color:#00e6c8; font-size:9px; text-transform:uppercase; letter-spacing:1px; border:1px solid rgba(0,230,200,0.45); padding:2px 6px; border-radius:3px; white-space:nowrap;">● Auto</span>
         <span id="status-bar-hotkeys"
           style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default; white-space: nowrap;">Hotkeys</span>
         <!-- ── Log toggle button ── -->
@@ -1330,6 +1331,50 @@
     let capturedScreenshot = null;
     const SAMPLE_RATE = 24000;
 
+    // ── Hands-free auto-response (toggle Ctrl+Alt+A, default OFF) ───────────────
+    // State lives on window so streaming-ai.js (which runs the AI request) and the
+    // screenshot path can flip the in-flight lock that tryAutoFire() checks.
+    window.__autoModeEnabled = false;   // master toggle
+    window.__autoFireTimer = null;      // pending fire timeout handle
+    window.__aiRequestInFlight = false; // true while any /ai/stream request runs
+    window.__lastResponseTime = 0;      // ms timestamp of last completed response
+    window.__lastFiredText = '';        // transcript of the last auto-fire (no double-fire)
+    const AUTO_SILENCE_MS = 3000;       // fire 3s after the last transcript chunk
+    const AUTO_SPEECHSTOP_MS = 1500;    // or 1.5s after VAD reports speech_stopped
+    const AUTO_COOLDOWN_MS = 2000;      // block auto-fire for 2s after a response
+    const AUTO_MIN_WORDS = 5;           // ignore short filler like "um, okay so"
+
+    function clearAutoFireTimer() {
+      if (window.__autoFireTimer) { clearTimeout(window.__autoFireTimer); window.__autoFireTimer = null; }
+    }
+
+    function scheduleAutoFire(delayMs) {
+      if (!window.__autoModeEnabled) return;
+      clearAutoFireTimer();
+      window.__autoFireTimer = setTimeout(tryAutoFire, delayMs);
+    }
+
+    function tryAutoFire() {
+      window.__autoFireTimer = null;
+      if (!window.__autoModeEnabled) return;                                  // mode off
+      if (window.__aiRequestInFlight) return;                                 // in-flight lock
+      if (Date.now() - window.__lastResponseTime < AUTO_COOLDOWN_MS) return;  // post-response cooldown
+      const text = (transcriptArea.innerText || '').trim();
+      const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+      if (words < AUTO_MIN_WORDS) return;                                     // minimum length
+      if (text === window.__lastFiredText) return;                            // reset-on-fire guard
+      window.__lastFiredText = text;
+      window.generateAIOnly();
+    }
+
+    window.toggleAutoMode = () => {
+      window.__autoModeEnabled = !window.__autoModeEnabled;
+      const ind = document.getElementById('auto-mode-indicator');
+      if (ind) ind.style.display = window.__autoModeEnabled ? 'inline-block' : 'none';
+      if (!window.__autoModeEnabled) clearAutoFireTimer();
+      console.log('[AUTO] Hands-free auto-response ' + (window.__autoModeEnabled ? 'ON' : 'OFF'));
+    };
+
     function floatTo16BitPCM(float32Array) {
       const buffer = new ArrayBuffer(float32Array.length * 2);
       const view = new DataView(buffer);
@@ -1443,6 +1488,11 @@
             }
             transcriptArea.innerText += data.text;
             transcriptArea.scrollTop = transcriptArea.scrollHeight;
+            // Hands-free: (re)arm the silence timer on every new transcript chunk
+            scheduleAutoFire(AUTO_SILENCE_MS);
+          } else if (data.type === 'speech_stopped') {
+            // Hands-free: VAD says the speaker stopped — shorter confirmation window
+            scheduleAutoFire(AUTO_SPEECHSTOP_MS);
           } else if (data.type === 'error') {
             console.error('WebSocket Application Error:', data.message);
             statusText.innerText = 'App Error';
@@ -1462,6 +1512,7 @@
 
         socket.onclose = (event) => {
           console.log('WebSocket Closed', event ? event.code : 'unknown', event ? event.reason : '');
+          clearAutoFireTimer();
           if (event && event.code && event.code !== 1000 && event.code !== 1001 && event.code !== 1005) {
              statusText.innerText = 'Connection Error';
              statusDot.className = 'dot error';
@@ -1481,6 +1532,7 @@
     }
 
     function stopCapture() {
+      clearAutoFireTimer();   // don't let a pending auto-fire run after capture stops
       if (processor) { processor.disconnect(); processor = null; }
       if (source) { source.disconnect(); source = null; }
       if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
@@ -1551,6 +1603,7 @@
         responseArea.innerText = 'Generating...';
 
         try {
+          window.__aiRequestInFlight = true;
           const requestBody = {
             transcript: transcriptArea.innerText || 'Answer the questions or solve the problems shown in this screenshot. Provide direct solutions, not analysis.',
             role: window.sessionTargetRole || '',
@@ -1753,6 +1806,9 @@
           responseArea.innerText = friendlyError(e);
           transcriptSection.classList.remove('minimized');
           responseSection.classList.remove('maximized');
+        } finally {
+          window.__aiRequestInFlight = false;
+          window.__lastResponseTime = Date.now();
         }
       } catch (e) {
         console.error('Screen Capture Error:', e);

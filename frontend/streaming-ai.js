@@ -121,6 +121,7 @@ function initializeStreamingAI() {
         const ttEl = document.getElementById('response-time-tt');
 
         try {
+            window.__aiRequestInFlight = true;
             const requestBody = {
                 transcript: transcript || 'Analyze this screenshot',
                 role: window.sessionTargetRole || '',
@@ -496,6 +497,9 @@ function initializeStreamingAI() {
             responseArea.innerText = `Error: ${e.message}\n\nCheck if backend is running on port 5050.`;
             const btnGenEl = document.getElementById('btn-generate');
             if (btnGenEl) btnGenEl.classList.remove('active');
+        } finally {
+            window.__aiRequestInFlight = false;
+            window.__lastResponseTime = Date.now();
         }
     };
 

@@ -318,6 +318,8 @@ async def realtime(ws: WebSocket):
 
                         elif etype == "input_audio_buffer.speech_stopped":
                             print("[VAD] Speech ended — committing buffer")
+                            # Forward to client so hands-free auto-response can time off it
+                            await ws.send_json({"type": "speech_stopped"})
 
                         elif etype in ["response.text.delta", "response.audio_transcript.delta"]:
                             delta = event.get("delta", "")
