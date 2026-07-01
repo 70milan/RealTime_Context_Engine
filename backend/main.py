@@ -172,6 +172,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Lightweight liveness probe — lets the Electron launcher show the window the
+# moment the backend is actually ready, instead of waiting a fixed delay.
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 # Debug middleware to log raw requests
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

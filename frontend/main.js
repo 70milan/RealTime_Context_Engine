@@ -550,10 +550,35 @@ function stackWindows(frontWin, backWin) {
   }
 }
 
+// ── Backend readiness helpers ──────────────────────────────────────────────
+function pingBackendHealth(cb) {
+  const http = require('http');
+  const req = http.get('http://127.0.0.1:5050/health', (res) => { res.resume(); cb(res.statusCode === 200); });
+  req.on('error', () => cb(false));
+  req.setTimeout(1000, () => { try { req.destroy(); } catch (e) { } });
+}
+
+// Poll /health and start the UI the instant the backend answers, instead of a
+// fixed 2s delay. Falls back to starting after timeoutMs so a backend that
+// never comes up can't hang the app.
+function waitForBackendReady(timeoutMs, onReady) {
+  const start = Date.now();
+  let done = false;
+  const finish = () => { if (!done) { done = true; onReady(); } };
+  const attempt = () => {
+    pingBackendHealth((ok) => {
+      if (ok) { console.log('[STARTUP] Backend ready'); finish(); }
+      else if (Date.now() - start > timeoutMs) { console.warn('[STARTUP] Backend health timeout — starting UI anyway'); finish(); }
+      else setTimeout(attempt, 150);
+    });
+  };
+  attempt();
+}
+
 app.whenReady().then(() => {
   startBackend();
 
-  setTimeout(() => {
+  waitForBackendReady(20000, () => {
     createWindow();
     createConvoWindow();
 
@@ -565,7 +590,7 @@ app.whenReady().then(() => {
         }
       }, 3000);
     }
-  }, 2000);
+  });
 
   ipcMain.handle('GET_SOURCES', async (event, types) => {
     const sources = await desktopCapturer.getSources({ types });
@@ -1020,6 +1045,7 @@ app.whenReady().then(() => {
 function cleanupBackend() {
   console.log('[EXIT] Starting synchronous cleanup...');
 
+  let killedTracked = false;
   if (backendProcess && !backendProcess.killed) {
     try {
       console.log(`[EXIT] Killing tracked PID: ${backendProcess.pid}`);
@@ -1028,6 +1054,7 @@ function cleanupBackend() {
       } else {
         backendProcess.kill('SIGKILL');
       }
+      killedTracked = true;
     } catch (e) {
       console.log(`[EXIT] PID kill failed: ${e.message}`);
     }
@@ -1038,18 +1065,23 @@ function cleanupBackend() {
       execSync('taskkill /IM WinHostSvc.exe /F', { stdio: 'ignore' });
     } catch (e) { }
 
-    try {
-      const output = execSync('netstat -ano | findstr :5050', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-      if (output) {
-        output.trim().split('\n').forEach(line => {
-          const parts = line.trim().split(/\s+/);
-          const pid = parts[parts.length - 1];
-          if (pid && pid !== '0' && !isNaN(pid)) {
-            try { execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' }); } catch (e) { }
-          }
-        });
-      }
-    } catch (e) { }
+    // The netstat sweep enumerates every TCP connection and is slow (~1-3s),
+    // which delays app exit and the next relaunch. Only fall back to it when we
+    // had no tracked PID to kill (e.g. dev, where uvicorn runs separately).
+    if (!killedTracked) {
+      try {
+        const output = execSync('netstat -ano | findstr :5050', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+        if (output) {
+          output.trim().split('\n').forEach(line => {
+            const parts = line.trim().split(/\s+/);
+            const pid = parts[parts.length - 1];
+            if (pid && pid !== '0' && !isNaN(pid)) {
+              try { execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' }); } catch (e) { }
+            }
+          });
+        }
+      } catch (e) { }
+    }
   }
 
   if (tray && !tray.isDestroyed()) {
