@@ -1,4 +1,4 @@
-fastapi
+fastapi==0.121.3
 uvicorn
 python-dotenv
 openai
@@ -6,7 +6,7 @@ requests
 websockets
 colorama
 pydantic
-starlette
+starlette==0.50.0
 pyinstaller
 tiktoken
 python-docx
