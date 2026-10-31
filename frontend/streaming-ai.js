@@ -283,7 +283,7 @@ function initializeStreamingAI() {
                     const labelText = transcript
                         ? `<div style="margin-bottom:6px;">${window.formatConvoText(transcript)}</div>`
                         : '';
-                    userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:4px;letter-spacing:0.5px;">📷 SCREEN CAPTURE · ${entryTime}</div>${labelText}<img src="${wasScreenshot}" style="max-width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.12);display:block;">`;
+                    userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:4px;letter-spacing:0.5px;">📷 SCREEN CAPTURE · ${entryTime}</div>${labelText}<img src="${wasScreenshot}" style="max-width:100%;border-radius:10px;border:1px solid rgba(255,255,255,0.12);display:block;">`;
                 } else {
                     const formattedInput = window.formatConvoText(transcript);
                     userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${entryTime}</div>${formattedInput}`;
@@ -312,7 +312,7 @@ function initializeStreamingAI() {
                 aiHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
                 aiHeader.innerHTML = `
                     <span style="font-size:9px;color:rgba(100,255,150,0.4);letter-spacing:0.5px;">${modelLabel} · ${entryTime}</span>
-                    <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
+                    <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
                           onmouseover="this.style.color='#fff';this.style.borderColor='rgba(255,255,255,0.25)';"
                           onmouseout="this.style.color='rgba(255,255,255,0.25)';this.style.borderColor='rgba(255,255,255,0.08)';"
                           onclick="

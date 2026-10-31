@@ -23,7 +23,7 @@
 
     ::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.15);
-      border-radius: 4px;
+      border-radius: 8px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
@@ -40,8 +40,11 @@
       scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
     }
 
+    /* Rounded window: the BrowserWindow is transparent, so the app background is
+       painted by body::before and everything (incl. fixed overlays) is clipped to the corners. */
     body {
-      background: linear-gradient(160deg, #0a0a0a 0%, #141428 100%);
+      background: transparent;
+      clip-path: inset(0 round 16px);
       color: #ffffff;
       font-family: "Segoe UI", "Helvetica Neue", sans-serif;
       padding: 0;
@@ -52,6 +55,16 @@
       overflow: hidden;
       -webkit-app-region: drag;
       user-select: none;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      border-radius: 16px;
+      background: linear-gradient(160deg, #0a0a0a 0%, #141428 100%);
+      pointer-events: none;
     }
 
     /* All interactive elements must remain clickable */
@@ -103,6 +116,7 @@
       background-color: transparent !important;
       background: transparent !important;
       border-radius: 50%;
+      clip-path: none;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -111,6 +125,10 @@
 
     body.mini>*:not(#mini-icon) {
       display: none !important;
+    }
+
+    body.mini::before {
+      display: none;
     }
 
     body.mini #mini-icon {
@@ -200,7 +218,7 @@
       flex: 1;
       border: 1px solid rgba(255, 255, 255, 0.06);
       padding: 6px;
-      border-radius: 6px;
+      border-radius: 10px;
       font-size: 9px;
       cursor: default;
       font-weight: 500;
@@ -240,7 +258,7 @@
     .section {
       flex: 5;
       background-color: rgba(255, 255, 255, 0.02);
-      border-radius: 8px;
+      border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.05);
       padding: 12px 14px;
       overflow-y: auto;
@@ -318,7 +336,7 @@
       opacity: 0.85;
       background: rgba(20, 20, 20, 0.4);
       padding: 3px 6px;
-      border-radius: 4px;
+      border-radius: 8px;
       display: block;
       float: right;
       clear: both;
@@ -327,7 +345,7 @@
     #response-area code {
       background-color: rgba(255, 255, 255, 0.07);
       padding: 2px 5px;
-      border-radius: 4px;
+      border-radius: 8px;
       font-family: 'Consolas', 'Courier New', monospace;
       font-size: 13px;
       color: rgba(100, 255, 150, 0.75);
@@ -337,7 +355,7 @@
     #response-area pre {
       background-color: rgba(10, 10, 18, 0.6);
       padding: 12px;
-      border-radius: 8px;
+      border-radius: 12px;
       overflow-x: auto;
       margin: 8px 0;
       border: 1px solid rgba(255, 255, 255, 0.06);
@@ -365,7 +383,7 @@
       overflow-y: auto;
       background: rgba(10, 10, 18, 0.97);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
+      border-radius: 12px;
       padding: 10px 12px;
       font-family: 'Consolas', 'Courier New', monospace;
       font-size: 10px;
@@ -386,7 +404,7 @@
 
     #log-drawer::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.12);
-      border-radius: 3px;
+      border-radius: 6px;
     }
 
     /* ── Status Bar ─────────────────────────────────────────── */
@@ -434,7 +452,7 @@
       gap: 2px;
       flex: 1;
       border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 6px;
+      border-radius: 10px;
       background-color: rgba(255, 255, 255, 0.02);
       padding: 3px;
     }
@@ -442,7 +460,7 @@
     .session-btn {
       padding: 2px 6px;
       font-size: 8px;
-      border-radius: 4px;
+      border-radius: 8px;
       border: none;
       background-color: transparent;
       color: rgba(255, 255, 255, 0.45);
@@ -565,7 +583,7 @@
 <body>
   <!-- Session Error Popup -->
   <div id="session-error-popup"
-    style="display: none; position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(10, 10, 18, 0.95); border: 1px solid rgba(255, 107, 107, 0.3); color: rgba(255, 107, 107, 0.85); padding: 8px 16px; border-radius: 8px; font-size: 11px; z-index: 20000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s ease; opacity: 0; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">
+    style="display: none; position: fixed; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(10, 10, 18, 0.95); border: 1px solid rgba(255, 107, 107, 0.3); color: rgba(255, 107, 107, 0.85); padding: 8px 16px; border-radius: 12px; font-size: 11px; z-index: 20000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s ease; opacity: 0; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">
     Please start the session first
   </div>
 
@@ -775,13 +793,13 @@
   <div id="past-sessions-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10001; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 500px; width: 90%; max-height: 70vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
+      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px 28px; max-width: 500px; width: 90%; max-height: 70vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <span
           style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Past
           Sessions</span>
         <button id="close-past-sessions" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
+          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 8px; transition: all 0.15s;"
           onmouseover="this.style.color='#ff5555'"
           onmouseout="this.style.color='rgba(255,255,255,0.35)'">&times;</button>
       </div>
@@ -795,13 +813,13 @@
   <div id="session-history-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10002; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 580px; width: 72%; max-height: 64vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
+      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px 28px; max-width: 580px; width: 72%; max-height: 64vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <span id="session-history-title"
           style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Session
           History</span>
         <button id="close-session-history" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
+          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 8px; transition: all 0.15s;"
           onmouseover="this.style.color='#ff5555'"
           onmouseout="this.style.color='rgba(255,255,255,0.35)'">&times;</button>
       </div>
@@ -812,12 +830,12 @@
       <div
         style="display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 15px;">
         <button id="btn-resume-session" type="button"
-          style="flex: 1; padding: 10px 0; background: rgba(100, 255, 150, 0.08); border: 1px solid rgba(100, 255, 150, 0.2); border-radius: 4px; color: rgba(100, 255, 150, 0.7); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; font-weight: 500; transition: all 0.2s;"
+          style="flex: 1; padding: 10px 0; background: rgba(100, 255, 150, 0.08); border: 1px solid rgba(100, 255, 150, 0.2); border-radius: 8px; color: rgba(100, 255, 150, 0.7); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; font-weight: 500; transition: all 0.2s;"
           onmouseover="this.style.color='rgba(100,255,150,0.95)'; this.style.borderColor='rgba(100,255,150,0.4)'; this.style.background='rgba(100,255,150,0.12)';"
           onmouseout="this.style.color='rgba(100,255,150,0.7)'; this.style.borderColor='rgba(100,255,150,0.2)'; this.style.background='rgba(100,255,150,0.08)';">Resume
           Session</button>
         <button id="btn-close-history" type="button"
-          style="flex: 1; padding: 10px 0; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; font-weight: 500; transition: all 0.2s;"
+          style="flex: 1; padding: 10px 0; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; font-weight: 500; transition: all 0.2s;"
           onmouseover="this.style.color='rgba(255,255,255,0.7)'; this.style.borderColor='rgba(255,255,255,0.2)';"
           onmouseout="this.style.color='rgba(255,255,255,0.5)'; this.style.borderColor='rgba(255,255,255,0.1)';">Close</button>
       </div>
@@ -828,7 +846,7 @@
   <div id="ethical-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.95); z-index: 20002; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 25px; max-width: 500px; width: 90%; display: flex; flex-direction: column; gap: 15px;">
+      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 25px; max-width: 500px; width: 90%; display: flex; flex-direction: column; gap: 15px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <span
           style="color: rgba(255,255,255,0.6); font-size: 13px; text-transform: uppercase; letter-spacing: 2px;">Ethical
@@ -854,7 +872,7 @@
         </ul>
       </div>
       <button id="btn-ethical-agree-modal" type="button"
-        style="width: 100%; padding: 12px; background: rgba(100, 255, 150, 0.1); border: 1px solid rgba(100, 255, 150, 0.3); border-radius: 4px; color: rgba(100, 255, 150, 0.8); cursor: pointer; text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px;">Acknowledge
+        style="width: 100%; padding: 12px; background: rgba(100, 255, 150, 0.1); border: 1px solid rgba(100, 255, 150, 0.3); border-radius: 8px; color: rgba(100, 255, 150, 0.8); cursor: pointer; text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px;">Acknowledge
         & Close</button>
     </div>
   </div>
@@ -863,12 +881,12 @@
   <div id="guide-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10001; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 620px; width: 95%; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
+      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px 28px; max-width: 620px; width: 95%; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <span
           style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Guide</span>
         <button id="close-guide" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
+          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 8px; transition: all 0.15s;"
           onmouseover="this.style.color='#ff5555'"
           onmouseout="this.style.color='rgba(255,255,255,0.35)'">&times;</button>
       </div>
@@ -1004,13 +1022,13 @@
   <div id="hotkeys-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8, 8, 16, 0.92); z-index: 10001; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 24px 28px; max-width: 720px; width: 92%; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
+      style="background: rgba(24, 24, 36, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px 28px; max-width: 720px; width: 92%; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <span
           style="color: rgba(100,255,150,0.85); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Keyboard
           Shortcuts</span>
         <button id="close-hotkeys" type="button"
-          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 4px; transition: all 0.15s;"
+          style="background: none; border: none; color: rgba(255,255,255,0.35); font-size: 22px; cursor: pointer; padding: 2px 6px; line-height: 1; border-radius: 8px; transition: all 0.15s;"
           onmouseover="this.style.color='#ff5555'"
           onmouseout="this.style.color='rgba(255,255,255,0.35)'">&times;</button>
       </div>
@@ -1080,14 +1098,14 @@
   <div id="custom-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 10, 10, 0.9); z-index: 10002; align-items: center; justify-content: center;">
     <div
-      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 20px; max-width: 400px; width: 90%; display: flex; flex-direction: column; gap: 15px;">
+      style="background: rgba(30, 30, 30, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 20px; max-width: 400px; width: 90%; display: flex; flex-direction: column; gap: 15px;">
       <div id="custom-modal-message"
         style="color: rgba(255,255,255,0.8); font-size: 13px; line-height: 1.5; text-align: center;"></div>
       <div id="custom-modal-buttons" style="display: flex; gap: 10px; justify-content: center;">
         <button id="custom-modal-ok"
-          style="padding: 10px 24px; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">OK</button>
+          style="padding: 10px 24px; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">OK</button>
         <button id="custom-modal-cancel"
-          style="display: none; padding: 10px 24px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">Cancel</button>
+          style="display: none; padding: 10px 24px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">Cancel</button>
       </div>
     </div>
   </div>
@@ -1101,7 +1119,7 @@
       <button id="btn-system" class="btn">System</button>
       <button id="btn-mic" class="btn">Mic</button>
       <div class="screen-btn-group"
-        style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; overflow: hidden; gap: 0;">
+        style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; overflow: hidden; gap: 0;">
         <button id="btn-screen-k" class="btn"
           style="flex: 1; border: none; border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 9px;">Screen</button>
         <button id="btn-screen-s" class="btn"
@@ -1110,7 +1128,7 @@
       <button id="btn-generate" class="btn">Process</button>
       <button id="btn-conversation" class="btn">Convo</button>
       <div id="session-timer"
-        style="padding: 4px 10px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.75); font-weight: 600; font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; gap: 6px; flex-shrink: 0; letter-spacing: 1.5px; transition: all 0.5s ease;">
+        style="padding: 4px 10px; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.75); font-weight: 600; font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; gap: 6px; flex-shrink: 0; letter-spacing: 1.5px; transition: all 0.5s ease;">
         <span id="session-timer-text">2:00:00</span>
       </div>
       <div class="session-btn-group">
@@ -1148,13 +1166,13 @@
         <div id="status-dot" class="dot"></div>
         <span id="status-text">Ready</span>
         <span id="auto-mode-indicator" title="Hands-free auto-response (Ctrl+Alt+A)"
-          style="display:none; margin-left:8px; color:#00e6c8; font-size:9px; text-transform:uppercase; letter-spacing:1px; border:1px solid rgba(0,230,200,0.45); padding:2px 6px; border-radius:3px; white-space:nowrap;">●
+          style="display:none; margin-left:8px; color:#00e6c8; font-size:9px; text-transform:uppercase; letter-spacing:1px; border:1px solid rgba(0,230,200,0.45); padding:2px 6px; border-radius:6px; white-space:nowrap;">●
           Auto</span>
         <span id="status-bar-hotkeys"
-          style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default; white-space: nowrap;">Hotkeys</span>
+          style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; cursor: default; white-space: nowrap;">Hotkeys</span>
         <!-- ── Log toggle button ── -->
         <span id="btn-toggle-log"
-          style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default; white-space: nowrap;"
+          style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; cursor: default; white-space: nowrap;"
           onclick="window.toggleLogDrawer()">log</span>
       </div>
       <!-- Middle container injected by setup.js will go here -->
@@ -1166,9 +1184,9 @@
             <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
           </svg>
           <div
-            style="width: 40px; height: 4px; background: rgba(255, 255, 255, 0.05); border-radius: 2px; position: relative; border: 1px solid rgba(255, 255, 255, 0.1);">
+            style="width: 40px; height: 4px; background: rgba(255, 255, 255, 0.05); border-radius: 999px; position: relative; border: 1px solid rgba(255, 255, 255, 0.1);">
             <div id="volume-bar"
-              style="height: 100%; background: #00d4ff; border-radius: 2px; width: 0%; transition: width 0.1s;"></div>
+              style="height: 100%; background: #00d4ff; border-radius: 999px; width: 0%; transition: width 0.1s;"></div>
           </div>
         </div>
       </div>
@@ -1798,7 +1816,7 @@
             aiHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
             aiHeader.innerHTML = `
               <span style="font-size:9px;color:rgba(100,255,150,0.4);letter-spacing:0.5px;">${usedModelLabel} · ${entryTime}</span>
-              <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:default;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);"
+              <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:default;padding:1px 5px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);"
                     
                     onclick="navigator.clipboard.writeText(this.closest('[data-timestamp]').querySelector('.ai-body').innerText);this.textContent='copied!';setTimeout(()=>this.textContent='[copy]',2000);">[copy]</span>`;
 

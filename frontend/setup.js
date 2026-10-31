@@ -567,7 +567,7 @@ function initSession() {
                             } catch (e) { /* keep original */ }
                         }
                         return `
-                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 12px; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center;" 
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center;" 
                              onmouseover="this.style.background='rgba(255,255,255,0.06)'" 
                              onmouseout="this.style.background='rgba(255,255,255,0.03)'">
                             <div style="flex: 1; cursor: pointer; min-width: 0; overflow: hidden;" onclick="window.openPastSession('${session.name.replace(/'/g, "\\'")}')"> 
@@ -576,7 +576,7 @@ function initSession() {
                                 <div style="color: rgba(255,255,255,0.3); font-size: 10px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${window.escapeHtml(session.job_description_preview || '')}</div>
                             </div>
                             <button onclick="event.stopPropagation(); window.deletePastSession('${session.name.replace(/'/g, "\\\\'")}')" 
-                                    style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"
+                                    style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"
                                     onmouseover="this.style.color='#ff5555'; this.style.borderColor='rgba(255,68,68,0.3)'; this.style.background='rgba(255,68,68,0.08)';"
                                     onmouseout="this.style.color='rgba(255,255,255,0.3)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.background='none';"
                                     title="Delete session">TRASH</button>
@@ -709,7 +709,7 @@ function initSession() {
             tooltip.style.color = 'rgba(255, 255, 255, 0.85)';
             tooltip.style.border = '1px solid rgba(100, 255, 150, 0.3)';
             tooltip.style.padding = '15px';
-            tooltip.style.borderRadius = '6px';
+            tooltip.style.borderRadius = '10px';
             tooltip.style.fontSize = '12px';
             tooltip.style.zIndex = '100000';
             tooltip.style.width = '300px';
@@ -1120,7 +1120,7 @@ window.openPastSession = async function (sessionName) {
                     const responseText = entry.response;
                     aiHeader.innerHTML = `
                         <span style="font-size:9px;color:rgba(100,255,150,0.4);letter-spacing:0.5px;">${modelLabel} · ${entryTimeStr}</span>
-                        <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:default;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
+                        <span style="font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:default;padding:1px 5px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;"
                               
                               
                               onclick="navigator.clipboard.writeText(this.closest('div').nextSibling.innerText);this.textContent='copied!';setTimeout(()=>this.textContent='[copy]',2000);">[copy]</span>`;
@@ -2038,7 +2038,7 @@ updateHWIDDisplay();
             middleDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; justify-content: flex-end; padding-right: 12px; z-index: 10; font-size: 10px; min-width: 0; overflow: visible;';
             middleDiv.innerHTML = `
                 <!-- Unified Stats Group -->
-                <div style="display: flex; align-items: center; gap: 8px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.05); padding: 3px 10px; border-radius: 5px; font-family: 'Consolas', 'Courier New', monospace; font-size: 9px; white-space: nowrap; letter-spacing: 0.4px;">
+                <div style="display: flex; align-items: center; gap: 8px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.05); padding: 3px 10px; border-radius: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 9px; white-space: nowrap; letter-spacing: 0.4px;">
                     <span style="color: rgba(255,255,255,0.3);">TTFT</span>
                     <span id="response-time-ttft" style="color: rgba(120,200,180,0.9); font-weight:500; min-width:24px;">--s</span>
                     <span style="color:rgba(255,255,255,0.12);">|</span>
@@ -2057,11 +2057,11 @@ updateHWIDDisplay();
 
                 <!-- Model Selector -->
                 <div style="display: flex; align-items: center; position: relative; overflow: visible; flex-shrink: 0;">
-                    <button id="model-selector-btn" style="background: rgba(120,200,180,0.05); border: 1px solid rgba(120,200,180,0.7); border-radius: 4px; padding: 2px 8px; color: rgba(120,200,180,0.8); font-size: 10px; cursor: pointer; font-weight: 500; font-family: inherit; white-space: nowrap;"
+                    <button id="model-selector-btn" style="background: rgba(120,200,180,0.05); border: 1px solid rgba(120,200,180,0.7); border-radius: 8px; padding: 2px 8px; color: rgba(120,200,180,0.8); font-size: 10px; cursor: pointer; font-weight: 500; font-family: inherit; white-space: nowrap;"
                         onmouseover="this.style.background='rgba(120,200,180,0.12)'; this.style.color='#fff'" onmouseout="this.style.background='rgba(120,200,180,0.05)'; this.style.color='rgba(120,200,180,0.8)'">
                         GPT-4o
                     </button>
-                    <div id="model-dropdown" style="display: none; position: fixed; background: rgba(22,22,30,0.99); border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; min-width: 250px; z-index: 99999; box-shadow: 0 8px 24px rgba(0,0,0,0.8);">
+                    <div id="model-dropdown" style="display: none; position: fixed; background: rgba(22,22,30,0.99); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; min-width: 250px; z-index: 99999; box-shadow: 0 8px 24px rgba(0,0,0,0.8);">
                     </div>
                 </div>
             `;

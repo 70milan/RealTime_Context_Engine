@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
             aiHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
             const copyBtn = document.createElement('span');
             copyBtn.textContent = '[copy]';
-            copyBtn.style.cssText = 'font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;';
+            copyBtn.style.cssText = 'font-size:9px;color:rgba(255,255,255,0.25);font-family:monospace;cursor:pointer;padding:1px 5px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);transition:all 0.15s;';
             copyBtn.onmouseover = () => { copyBtn.style.color = '#fff'; copyBtn.style.borderColor = 'rgba(255,255,255,0.25)'; };
             copyBtn.onmouseout = () => { copyBtn.style.color = 'rgba(255,255,255,0.25)'; copyBtn.style.borderColor = 'rgba(255,255,255,0.08)'; };
             copyBtn.onclick = () => window.copyToClipboard(copyBtn);

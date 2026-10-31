@@ -35,7 +35,7 @@ function renderMarkdownLite(text, variant) {
             const copyBtnHtml = `<span class="copy-code-btn" onclick="copyCodeBlock(this)" style="position:absolute;top:8px;right:12px;color:rgba(255,255,255,0.4);font-size:11px;cursor:default;z-index:10;font-family:monospace;">[copy]</span>`;
             codeBlocks.push(`<div style="position:relative;margin:8px 0;">${copyBtnHtml}<pre style="margin:0;padding-top:36px;"><code class="language-${language}">${trimmedCode}</code></pre></div>`);
         } else {
-            codeBlocks.push(`<pre style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:8px;margin:4px 0;overflow-x:auto;"><code class="language-${language}" style="font-size:10px;line-height:1.3;">${trimmedCode}</code></pre>`);
+            codeBlocks.push(`<pre style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px;margin:4px 0;overflow-x:auto;"><code class="language-${language}" style="font-size:10px;line-height:1.3;">${trimmedCode}</code></pre>`);
         }
         return placeholder;
     });
@@ -45,7 +45,7 @@ function renderMarkdownLite(text, variant) {
         const placeholder = `___INLINE_CODE_${inlineCodeBlocks.length}___`;
         inlineCodeBlocks.push(variant === 'response'
             ? `<code>${code}</code>`
-            : `<code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px;font-size:10px;">${code}</code>`);
+            : `<code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:6px;font-size:10px;">${code}</code>`);
         return placeholder;
     });
 
