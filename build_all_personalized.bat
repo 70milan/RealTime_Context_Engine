@@ -51,12 +51,17 @@ echo.
 echo [1/2] Building and Signing Backend...
 cd backend
 if exist dist rmdir /s /q dist
-pyinstaller WinHostSvc.spec || (echo [ERROR] PyInstaller failed & pause & exit /b 1)
+if not exist ".venv-build\Scripts\python.exe" (
+    echo [INFO] Creating clean build venv backend\.venv-build ...
+    python -m venv .venv-build || (echo [ERROR] venv creation failed & pause & exit /b 1)
+)
+".venv-build\Scripts\python.exe" -m pip install -q -r requirements.txt || (echo [ERROR] pip install failed & pause & exit /b 1)
+".venv-build\Scripts\python.exe" -m PyInstaller --noconfirm WinHostSvc.spec || (echo [ERROR] PyInstaller failed & pause & exit /b 1)
 
 if not "!SIGNTOOL_PATH!"=="" (
     if exist "..\windows-runtime-host.pfx" (
         echo [INFO] Signing backend binary...
-        signtool sign /f "..\windows-runtime-host.pfx" /p "!CSC_KEY_PASSWORD!" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\WinHostSvc.exe"
+        signtool sign /f "..\windows-runtime-host.pfx" /p "!CSC_KEY_PASSWORD!" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\WinHostSvc\WinHostSvc.exe"
     )
 )
 cd ..

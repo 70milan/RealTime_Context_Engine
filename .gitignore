@@ -140,3 +140,8 @@ $null
 .agent/
 
 
+
+# Clean build venv for the backend (see build-all.bat)
+backend/.venv-build/
+# Stray output from batch files redirecting to "$null"
+$null
