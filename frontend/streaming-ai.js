@@ -64,6 +64,10 @@ function initializeStreamingAI() {
         // Smart Interview sends the speaker-labeled exchange instead of the raw text
         const smartText = window.__smartMode && window.getSmartExchangeText ? window.getSmartExchangeText() : '';
         const transcript = smartText || transcriptArea.innerText.trim();
+        // Convo tab shows the interviewer's question, not everything that was said
+        const displayQuestion = (smartText && window.getSmartQuestionText && window.getSmartQuestionText()) || transcript;
+        // Models sometimes echo the transcript's speaker labels; never show them
+        const stripLabel = (text) => smartText ? text.replace(/^\s*\**\s*(?:Me|Candidate|Answer)\s*(?::\s*\**|\**\s*:)\s*/i, '') : text;
         if (!transcript && !capturedScreenshot) {
             responseArea.innerText = 'No transcript or screenshot to process.';
             return;
@@ -151,7 +155,7 @@ function initializeStreamingAI() {
                                     }
                                 }
                                 fullResponse += data.chunk;
-                                responseArea.innerText = fullResponse;
+                                responseArea.innerText = stripLabel(fullResponse);
                                 responseArea.scrollTop = responseArea.scrollHeight;
                             }
 
@@ -226,6 +230,8 @@ function initializeStreamingAI() {
                 }
             }
 
+            fullResponse = stripLabel(fullResponse);
+
             // If stream ended with no content, show error
             if (!fullResponse.trim()) {
                 const modelName = window.selectedModel || 'unknown';
@@ -294,7 +300,7 @@ function initializeStreamingAI() {
                         : '';
                     userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:4px;letter-spacing:0.5px;">📷 SCREEN CAPTURE · ${entryTime}</div>${labelText}<img src="${wasScreenshot}" style="max-width:100%;border-radius:10px;border:1px solid rgba(255,255,255,0.12);display:block;">`;
                 } else {
-                    const formattedInput = window.formatConvoText(transcript);
+                    const formattedInput = window.formatConvoText(displayQuestion);
                     userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${entryTime}</div>${formattedInput}`;
                 }
                 userRow.appendChild(userBubble);
@@ -418,7 +424,10 @@ function initializeStreamingAI() {
             // Cancelled or replaced by a newer request: that request owns the UI now
             if (e.name === 'AbortError' || controller.signal.aborted) return;
             console.error('AI Generation Error:', e);
-            responseArea.innerText = `Error: ${e.message}\n\nCheck if backend is running on port 5050.`;
+            responseArea.innerText = String(e.message).includes('OUT_OF_CREDITS') && window.friendlyError
+                ? window.friendlyError(e)
+                : `Error: ${e.message}\n\nCheck if backend is running on port 5050.`;
+            if (window.refreshUsage) window.refreshUsage({ outOfCredits: String(e.message).includes('OUT_OF_CREDITS') });
             const btnGenEl = document.getElementById('btn-generate');
             if (btnGenEl) btnGenEl.classList.remove('active');
         } finally {

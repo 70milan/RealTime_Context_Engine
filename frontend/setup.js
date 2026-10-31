@@ -2059,12 +2059,13 @@ updateHWIDDisplay();
                     <span style="color: rgba(255,255,255,0.3);">TT</span>
                     <span id="response-time-tt" style="color: rgba(120,200,180,0.9); font-weight:500; min-width:24px;">--s</span>
                     <span style="color:rgba(255,255,255,0.12);">|</span>
-                    <span style="color: rgba(255,255,255,0.3);">In</span>
+                    <!-- Token counts moved to the usage panel; kept hidden so existing updates still work -->
+                    <span style="display: none;"><span style="color: rgba(255,255,255,0.3);">In</span>
                     <span id="api-usage-input" style="color:rgba(255,255,255,0.65); font-weight:500;">0</span>
                     <span style="color:rgba(255,255,255,0.12);">|</span>
                     <span style="color: rgba(255,255,255,0.3);">Out</span>
                     <span id="api-usage-output" style="color:rgba(255,255,255,0.65); font-weight:500;">0</span>
-                    <span style="color:rgba(255,255,255,0.12);">|</span>
+                    <span style="color:rgba(255,255,255,0.12);">|</span></span>
                     <span style="color: rgba(255,255,255,0.3);">Cost</span>
                     <span id="api-cost" style="color:rgba(120,200,180,0.9); font-weight:600; min-width:34px; text-align:right;">$0.00</span>
                 </div>

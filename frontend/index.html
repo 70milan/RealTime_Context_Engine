@@ -79,6 +79,9 @@
     #status-bar-hotkeys,
     #auto-mode-indicator,
     #btn-toggle-log,
+    #btn-toggle-usage,
+    #usage-drawer,
+    #usage-drawer *,
     #response-area,
     #transcript-area,
     #conversation-area,
@@ -569,6 +572,149 @@
     #main-container .btn,
     #main-container .session-btn {
       cursor: default !important;
+    }
+
+    /* Usage chip + drawer */
+    #btn-toggle-usage {
+      margin-left: 6px;
+      color: rgba(255, 255, 255, 0.25);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    #btn-toggle-usage.open {
+      color: rgba(100, 255, 150, 0.7);
+      border-color: rgba(100, 255, 150, 0.3);
+      background: rgba(100, 255, 150, 0.06);
+    }
+
+    #btn-toggle-usage.low {
+      color: rgba(255, 180, 80, 0.9);
+      border-color: rgba(255, 180, 80, 0.45);
+    }
+
+    #btn-toggle-usage.empty {
+      color: rgba(255, 107, 107, 0.9);
+      border-color: rgba(255, 107, 107, 0.5);
+    }
+
+    #usage-drawer {
+      display: none;
+      position: fixed;
+      left: 8px;
+      width: 300px;
+      background: rgba(10, 10, 18, 0.97);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.75);
+      z-index: 9000;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      -webkit-app-region: no-drag;
+    }
+
+    #usage-drawer.open {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    #usage-drawer .ud-title {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(100, 255, 150, 0.5);
+      margin-top: 4px;
+    }
+
+    #usage-drawer .ud-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      column-gap: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #usage-drawer .ud-row b {
+      font-family: Consolas, 'Courier New', monospace;
+      font-weight: 600;
+      color: rgba(120, 200, 180, 0.95);
+    }
+
+    #usage-drawer .ud-row i {
+      grid-column: 1 / -1;
+      font-style: normal;
+      font-size: 9.5px;
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    #usage-drawer .ud-total {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 5px;
+    }
+
+    #usage-drawer .ud-balance {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    #usage-drawer .ud-balance b {
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 16px;
+      color: #fff;
+    }
+
+    #usage-drawer .ud-balance.low b { color: rgba(255, 180, 80, 0.95); }
+    #usage-drawer .ud-balance.empty b { color: rgba(255, 107, 107, 0.95); }
+
+    #usage-drawer .ud-balance span {
+      font-size: 9.5px;
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    #usage-drawer .ud-set {
+      display: flex;
+      gap: 6px;
+    }
+
+    #usage-drawer .ud-set input {
+      flex: 1;
+      min-width: 0;
+      padding: 5px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+      color: #fff;
+      font-size: 11px;
+      outline: none;
+    }
+
+    #usage-drawer .ud-set input:focus {
+      border-color: rgba(100, 255, 150, 0.35);
+    }
+
+    #usage-drawer .ud-set button {
+      padding: 5px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(100, 255, 150, 0.25);
+      background: rgba(100, 255, 150, 0.08);
+      color: rgba(100, 255, 150, 0.85);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #usage-drawer .ud-help {
+      font-size: 9.5px;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.3);
     }
 
     /* Smart Interview chip in the status bar */
@@ -1221,6 +1367,8 @@
         <span id="btn-toggle-log"
           style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; cursor: default; white-space: nowrap;"
           onclick="window.toggleLogDrawer()">log</span>
+        <span id="btn-toggle-usage" title="API spend and estimated OpenAI balance"
+          onclick="window.toggleUsageDrawer()">usage</span>
       </div>
       <!-- Middle container injected by setup.js will go here -->
       <div style="display: flex; gap: 10px; align-items: center; font-size: 11px; flex-shrink: 0; white-space: nowrap;">
@@ -1342,8 +1490,89 @@
     });
 
     // Friendly error message helper
+    // ── Usage drawer ─────────────────────────────────────────────────────────
+    // Session spend comes from the backend (/usage: AI answers + transcription).
+    // OpenAI has no API for a key to read its own balance, so the user enters it
+    // once and we subtract everything spent through the app since then.
+    const LOW_BALANCE = 1.0;
+    function loadBalance() {
+      try { return JSON.parse(localStorage.getItem('openai_balance') || 'null'); } catch (e) { return null; }
+    }
+    function saveBalance(b) {
+      try { localStorage.setItem('openai_balance', JSON.stringify(b)); } catch (e) { }
+    }
+    const money = (v, d = 4) => '$' + (v || 0).toFixed(d);
+
+    window.refreshUsage = async ({ outOfCredits = false } = {}) => {
+      let u = null;
+      try { u = await (await fetch('http://127.0.0.1:5050/usage')).json(); } catch (e) { return; }
+      const total = u.total_cost || 0;
+      const bal = loadBalance();
+      if (bal) {
+        // Session totals reset when a new session starts: count only what's new
+        const delta = total >= (bal.lastTotal || 0) ? total - (bal.lastTotal || 0) : total;
+        bal.spent = (bal.spent || 0) + delta;
+        bal.lastTotal = total;
+        if (outOfCredits) bal.outOfCredits = true;
+        saveBalance(bal);
+      }
+      const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+      const ai = u.ai_cost != null ? u.ai_cost : Math.max(0, total - (u.transcription_cost || 0));
+      set('ud-ai', money(ai));
+      set('ud-ai-sub', `${u.request_count || 0} answers · ${((u.input_tokens || 0) + (u.output_tokens || 0)).toLocaleString()} tokens`);
+      set('ud-tr', money(u.transcription_cost));
+      set('ud-tr-sub', `${((u.transcription_seconds || 0) / 60).toFixed(1)} min of audio (both sides count in Smart mode)`);
+      set('ud-total', money(total));
+
+      const chip = document.getElementById('btn-toggle-usage');
+      const box = document.querySelector('#usage-drawer .ud-balance');
+      let state = '';
+      if (bal) {
+        const left = Math.max(0, bal.amount - bal.spent);
+        state = bal.outOfCredits || left <= 0.005 ? 'empty' : left < LOW_BALANCE ? 'low' : '';
+        set('ud-left', bal.outOfCredits ? 'Out of credits' : '≈ ' + money(left, 2) + ' left');
+        set('ud-left-note', `of ${money(bal.amount, 2)} set ${new Date(bal.setAt).toLocaleDateString()}`);
+        if (chip) chip.textContent = bal.outOfCredits ? 'no credits' : money(left, 2);
+      } else {
+        set('ud-left', 'Not set');
+        set('ud-left-note', '');
+        if (chip) chip.textContent = 'usage';
+      }
+      if (chip) { chip.classList.toggle('low', state === 'low'); chip.classList.toggle('empty', state === 'empty'); }
+      if (box) { box.classList.toggle('low', state === 'low'); box.classList.toggle('empty', state === 'empty'); }
+    };
+
+    document.getElementById('ud-balance-save')?.addEventListener('click', async () => {
+      const input = document.getElementById('ud-balance-input');
+      const amount = parseFloat(input.value);
+      if (!(amount >= 0)) { input.focus(); return; }
+      let total = 0;
+      try { total = (await (await fetch('http://127.0.0.1:5050/usage')).json()).total_cost || 0; } catch (e) { }
+      saveBalance({ amount, spent: 0, lastTotal: total, setAt: Date.now() });
+      input.value = '';
+      window.refreshUsage();
+    });
+
+    window.toggleUsageDrawer = () => {
+      const drawer = document.getElementById('usage-drawer');
+      const btn = document.getElementById('btn-toggle-usage');
+      if (!drawer || !btn) return;
+      if (drawer.classList.toggle('open')) {
+        const r = btn.getBoundingClientRect();
+        drawer.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+        window.refreshUsage();
+      }
+      btn.classList.toggle('open', drawer.classList.contains('open'));
+    };
+
+    // Keep the chip's balance current while a session runs
+    setInterval(() => { if (window.isSessionActive) window.refreshUsage(); }, 5000);
+    window.refreshUsage();
+
     function friendlyError(err) {
       const msg = (err && err.message) ? err.message : String(err);
+      if (msg.includes('OUT_OF_CREDITS'))
+        return 'Your OpenAI account is out of credits.\n\nAdd credits at platform.openai.com → Settings → Billing, then press System (or Process) again.';
       if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ECONNREFUSED'))
         return 'Cannot connect to the backend server.\n\nMake sure the app backend is running. Try restarting the application.';
       if (msg.includes('401') || msg.includes('Unauthorized'))
@@ -1475,6 +1704,21 @@
       });
       return turns;
     }
+
+    // What the interviewer actually asked, for the convo tab: the last interviewer turn,
+    // plus your clarifying question and their original question when you asked one.
+    // (The AI still gets the whole exchange, including you reading back earlier answers.)
+    window.getSmartQuestionText = () => {
+      const turns = exchangeTurns();
+      let i = turns.length - 1;
+      while (i >= 0 && turns[i].src !== 'system') i--;
+      if (i < 0) return '';
+      let start = i;
+      while (start >= 2 && turns[start - 1].src === 'mic' && looksLikeQuestion(turns[start - 1].text)) start -= 2;
+      return turns.slice(start, i + 1)
+        .filter(t => t.src === 'mic' || !isAcknowledgement(t.text))
+        .map(t => `${SPEAKER_LABEL[t.src]}: ${t.text}`).join('\n');
+    };
 
     // Speaker-labeled exchange for the AI ('' when there are no labeled lines)
     window.getSmartExchangeText = () =>
@@ -1811,9 +2055,13 @@
 
         case 'error':
           console.error('WebSocket Application Error:', data.message);
+          logError('Transcription error: ' + data.message);
           statusText.innerText = 'App Error';
           statusDot.className = 'dot error';
-          responseArea.innerText = `Error: ${data.message}\n\nPlease check your OpenAI API key and credits.`;
+          responseArea.innerText = String(data.message).startsWith('OUT_OF_CREDITS')
+            ? 'Your OpenAI account is out of credits.\n\nAdd credits at platform.openai.com → Settings → Billing, then press System (or Process) again.'
+            : `Error: ${data.message}\n\nPlease check your OpenAI API key and credits.`;
+          if (window.refreshUsage) window.refreshUsage({ outOfCredits: String(data.message).startsWith('OUT_OF_CREDITS') });
           stopCapture();
           break;
       }
@@ -1829,43 +2077,67 @@
       const stream = src === 'system' ? await getSystemAudioStream() : await getMicAudioStream();
       if (!stream) { statusText.innerText = 'Stream Failed'; return false; }
 
-      const ch = { input: null, stream, socket: null, ctx: null, node: null, sink: null, rms: 0 };
+      const ch = { input: null, stream, socket: null, ctx: null, node: null, sink: null, rms: 0, retries: 0, stableTimer: null };
       channels[src] = ch;
-      ch.socket = new WebSocket(channelWsUrl(src));
-
-      ch.socket.onopen = () => {
-        console.log(`WebSocket Connected (${src})`);
-        updateCaptureStatus();
-        startAudioPipeline(ch).catch(err => {
-          console.error('Audio pipeline error:', err);
-          logError('Audio pipeline error: ' + err.message);
-          stopCapture();
-        });
-      };
-
-      ch.socket.onmessage = (event) => onChannelMessage(src, JSON.parse(event.data));
-
-      ch.socket.onerror = (err) => {
-        console.error('WebSocket Error:', err);
-        logError('WebSocket Error: ' + (err.message || 'connection failed'));
-        statusText.innerText = 'Connection Error';
-        statusDot.className = 'dot error';
-        responseArea.innerText = 'Cannot connect to the backend server.\n\nMake sure the app is fully loaded and try again. If this persists, restart the application.';
-      };
-
-      ch.socket.onclose = (event) => {
-        console.log(`WebSocket Closed (${src})`, event ? event.code : 'unknown', event ? event.reason : '');
-        if (channels[src] !== ch) return;  // closed on purpose
-        if (event && event.code && event.code !== 1000 && event.code !== 1001 && event.code !== 1005) {
-          statusText.innerText = 'Connection Error';
-          statusDot.className = 'dot error';
-          let reason = event.reason || 'Unknown error (Check your API key credits or model string)';
-          responseArea.innerText = `WebSocket connection closed by server.\nCode: ${event.code}\nReason: ${reason}\n\nMake sure your OpenAI API key is still valid and has billing credits enabled.`;
-        }
-        stopCapture();
-      };
+      connectChannel(src, ch);
       updateButtons();
       return true;
+    }
+
+    // (Re)connects a channel's WebSocket. If the connection drops mid-interview
+    // (network blip, OpenAI ending the session) it reconnects on its own; the audio
+    // pipeline keeps running and only the ~1 s gap is lost.
+    const MAX_RECONNECTS = 6;
+    function connectChannel(src, ch) {
+      const socket = new WebSocket(channelWsUrl(src));
+      ch.socket = socket;
+
+      socket.onopen = () => {
+        console.log(`WebSocket Connected (${src})`);
+        clearTimeout(ch.stableTimer);
+        ch.stableTimer = setTimeout(() => { ch.retries = 0; }, 20000);
+        updateCaptureStatus();
+        if (!ch.ctx) {
+          startAudioPipeline(ch).catch(err => {
+            console.error('Audio pipeline error:', err);
+            logError('Audio pipeline error: ' + err.message);
+            stopCapture();
+          });
+        }
+      };
+
+      socket.onmessage = (event) => onChannelMessage(src, JSON.parse(event.data));
+
+      socket.onerror = () => {
+        console.error(`WebSocket Error (${src})`);
+      };
+
+      socket.onclose = (event) => {
+        if (channels[src] !== ch || ch.socket !== socket) return;  // closed on purpose
+        const code = event ? event.code : 0;
+        const reason = (event && event.reason) || '';
+        console.log(`WebSocket Closed (${src})`, code, reason);
+        logError(`WebSocket closed (${src}): ${code} ${reason}`);
+        smart.src[src].speaking = false;
+        smart.src[src].pending.clear();
+
+        // 1008 = auth / missing API key: retrying can't fix it
+        if (code !== 1008 && window.isSessionActive && ch.retries < MAX_RECONNECTS) {
+          ch.retries++;
+          const delay = Math.min(250 * 2 ** ch.retries, 4000);
+          statusText.innerText = 'Reconnecting...';
+          statusDot.className = 'dot error';
+          setTimeout(() => { if (channels[src] === ch) connectChannel(src, ch); }, delay);
+          return;
+        }
+
+        statusText.innerText = 'Connection Error';
+        statusDot.className = 'dot error';
+        responseArea.innerText = code === 1008
+          ? 'The backend rejected the connection.\n\nCheck your OpenAI API key on the setup screen.'
+          : `Lost the connection to OpenAI and couldn't reconnect (code ${code}${reason ? ', ' + reason : ''}).\n\nCheck your internet connection, then press System again.`;
+        stopCapture();
+      };
     }
 
     function closeChannel(src) {
@@ -1881,6 +2153,7 @@
       if (ch.input) ch.input.disconnect();
       if (ch.stream) ch.stream.getTracks().forEach(t => t.stop());
       if (ch.ctx) { ch.ctx.close(); ch.ctx = null; }
+      clearTimeout(ch.stableTimer);
       if (ch.socket) ch.socket.close();
       smart.src[src].speaking = false;
       smart.src[src].pending.clear();
@@ -2199,6 +2472,8 @@
 
     window.toggleSystemCapture = () => { if (!window.isSessionActive) { window.showSessionError(); return; } startCapture('system'); };
     window.toggleMicCapture = () => { if (!window.isSessionActive) { window.showSessionError(); return; } startCapture('mic'); };
+    window.friendlyError = friendlyError;
+
     window.captureScreen = (saveToContext = false) => {
       if (!window.isSessionActive) { window.showSessionError(); return; }
       handleScreenCapture(saveToContext, saveToContext ? btnScreenS : btnScreenK);
@@ -2284,6 +2559,19 @@
   <script src="setup.js?v=3.3"></script>
   <script src="streaming-ai.js?v=3.2"></script>
   <div id="log-drawer"></div>
+  <div id="usage-drawer">
+    <div class="ud-title">This session</div>
+    <div class="ud-row"><span>AI answers</span><b id="ud-ai">$0.0000</b><i id="ud-ai-sub"></i></div>
+    <div class="ud-row"><span>Transcription</span><b id="ud-tr">$0.0000</b><i id="ud-tr-sub"></i></div>
+    <div class="ud-row ud-total"><span>Total</span><b id="ud-total">$0.0000</b><i></i></div>
+    <div class="ud-title">OpenAI balance</div>
+    <div class="ud-balance"><b id="ud-left">Not set</b><span id="ud-left-note"></span></div>
+    <div class="ud-set">
+      <input id="ud-balance-input" type="number" min="0" step="0.01" placeholder="Current balance, e.g. 9.85">
+      <button id="ud-balance-save" type="button">Set</button>
+    </div>
+    <div class="ud-help">OpenAI doesn't let apps read your balance. Enter it from platform.openai.com &rarr; Settings &rarr; Billing and this counts down as you use the app.</div>
+  </div>
 </body>
 
 </html>
