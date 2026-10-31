@@ -6,7 +6,7 @@
     const BACKEND_ORIGIN = 'http://127.0.0.1:5050';
     let token = '';
     try {
-        token = require('electron').ipcRenderer.sendSync('get-backend-token') || '';
+        token = window.ipcBridge.sendSync('get-backend-token') || '';
     } catch (e) {
         console.error('[AUTH] Could not get backend token:', e);
     }

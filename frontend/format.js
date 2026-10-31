@@ -1,7 +1,7 @@
 // format.js — the ONE place AI/transcript text is turned into HTML.
 //
-// SECURITY: these windows run with nodeIntegration, so any HTML that reaches
-// innerHTML can call require('child_process') and run commands on the PC.
+// SECURITY: injected HTML could run script in the app window (and, before the
+// preload/contextIsolation change, reach Node via require('child_process')).
 // AI answers and transcribed speech are attacker-influenceable (a spoken or
 // on-screen "<img onerror=...>" gets echoed back), so we escape EVERYTHING
 // first and only then add our own tags. Never insert un-escaped text with

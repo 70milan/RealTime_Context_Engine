@@ -551,6 +551,7 @@
     #main-container .session-btn {
       cursor: default !important;
     }
+
     /* Keep text areas user-selectable */
     #transcript-area,
     #response-area {
@@ -717,7 +718,9 @@
               </div>
               <div class="setup-field">
                 <label class="setup-label" for="setup-license">
-                  License Key <span id="license-info" class="setup-info-link" title="Get a license">(?)</span><span id="license-lock-icon" style="display:none; margin-left:5px; cursor:not-allowed;" title="License locked to this installation"></span>
+                  License Key <span id="license-info" class="setup-info-link" title="Get a license">(?)</span><span
+                    id="license-lock-icon" style="display:none; margin-left:5px; cursor:not-allowed;"
+                    title="License locked to this installation"></span>
                 </label>
                 <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)"
                   autocomplete="off" />
@@ -735,7 +738,9 @@
             <div class="setup-group setup-group-grow">
               <div class="setup-group-title">Backend Console</div>
               <div class="setup-field setup-field-grow">
-                <div id="backend-terminal" class="backend-terminal" style="overflow-y: auto; overflow-x: hidden; max-height: 180px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;"><span class="term-line term-dim">Waiting for
+                <div id="backend-terminal" class="backend-terminal"
+                  style="overflow-y: auto; overflow-x: hidden; max-height: 180px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;">
+                  <span class="term-line term-dim">Waiting for
                     backend...</span></div>
               </div>
             </div>
@@ -1098,11 +1103,9 @@
       <div class="screen-btn-group"
         style="display: flex; flex-direction: column; flex: 1; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 6px; overflow: hidden; gap: 0;">
         <button id="btn-screen-k" class="btn"
-          style="flex: 1; border: none; border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 9px;"
-         >Screen</button>
+          style="flex: 1; border: none; border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 9px;">Screen</button>
         <button id="btn-screen-s" class="btn"
-          style="flex: 1; border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 8px; opacity: 0.8;"
-         >Save</button>
+          style="flex: 1; border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0; line-height: 1.2; padding: 2px 5px; height: auto; font-size: 8px; opacity: 0.8;">Save</button>
       </div>
       <button id="btn-generate" class="btn">Process</button>
       <button id="btn-conversation" class="btn">Convo</button>
@@ -1120,10 +1123,7 @@
     <div class="section" id="transcript-section">
       <div class="section-header">
         <span>Live Transcript</span>
-        <span
-          style="font-size: 11px; cursor: default; color: rgba(255,255,255,0.4); font-family: monospace;"
-          
-          
+        <span style="font-size: 11px; cursor: default; color: rgba(255,255,255,0.4); font-family: monospace;"
           onclick="window.clearTranscript(); this.textContent = '[cleared!]'; this.style.color = '#fff'; setTimeout(() => { this.textContent = '[clear]'; this.style.color = 'rgba(255,255,255,0.4)'; }, 2000);">[clear]</span>
       </div>
       <div id="transcript-area" contenteditable="true"></div>
@@ -1135,9 +1135,7 @@
     <div class="section" id="response-section">
       <div class="section-header">
         <span>AI Assistant</span>
-        <span
-          style="font-size: 11px; cursor: default; color: rgba(255,255,255,0.4); font-family: monospace;"
-          
+        <span style="font-size: 11px; cursor: default; color: rgba(255,255,255,0.4); font-family: monospace;"
           onclick="navigator.clipboard.writeText(document.getElementById('response-area').innerText); this.textContent = '[copied!]'; this.style.color = '#4CAF50'; setTimeout(() => { this.textContent = '[copy]'; this.style.color = 'rgba(255,255,255,0.4)'; }, 2000);">[copy]</span>
       </div>
       <div id="response-area"></div>
@@ -1149,14 +1147,14 @@
       <div class="status-indicator" style="flex-shrink: 0; min-width: 0;">
         <div id="status-dot" class="dot"></div>
         <span id="status-text">Ready</span>
-        <span id="auto-mode-indicator" title="Hands-free auto-response (Ctrl+Alt+A)" style="display:none; margin-left:8px; color:#00e6c8; font-size:9px; text-transform:uppercase; letter-spacing:1px; border:1px solid rgba(0,230,200,0.45); padding:2px 6px; border-radius:3px; white-space:nowrap;">● Auto</span>
+        <span id="auto-mode-indicator" title="Hands-free auto-response (Ctrl+Alt+A)"
+          style="display:none; margin-left:8px; color:#00e6c8; font-size:9px; text-transform:uppercase; letter-spacing:1px; border:1px solid rgba(0,230,200,0.45); padding:2px 6px; border-radius:3px; white-space:nowrap;">●
+          Auto</span>
         <span id="status-bar-hotkeys"
           style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default; white-space: nowrap;">Hotkeys</span>
         <!-- ── Log toggle button ── -->
         <span id="btn-toggle-log"
           style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; cursor: default; white-space: nowrap;"
-          
-          
           onclick="window.toggleLogDrawer()">log</span>
       </div>
       <!-- Middle container injected by setup.js will go here -->
@@ -1178,14 +1176,8 @@
   </div>
 
   <script>
-    // Robust global IPC access
-    if (typeof window.ipcRenderer === 'undefined') {
-      try {
-        window.ipcRenderer = require('electron').ipcRenderer;
-      } catch (e) {
-        console.warn('[IPC] Failed to require ipcRenderer:', e);
-      }
-    }
+    // preload.js exposes window.ipcBridge (whitelisted channels only)
+    window.ipcRenderer = window.ipcBridge;
 
     if (window.ipcRenderer) {
       window.ipcRenderer.on('debug-log', (event, message) => {
@@ -1327,6 +1319,7 @@
     let socket = null;
     let audioContext = null;
     let processor = null;
+    let sinkNode = null;
     let source = null;
     let currentStream = null;
     let activeMode = null;
@@ -1377,6 +1370,87 @@
       console.log('[AUTO] Hands-free auto-response ' + (window.__autoModeEnabled ? 'ON' : 'OFF'));
     };
 
+    // Audio is sent in ~100 ms batches (2400 samples @ 24 kHz) instead of a 512-sample
+    // chunk ~47x/second: 10 WebSocket messages and 10 volume-bar updates a second.
+    const AUDIO_BATCH_SAMPLES = 2400;
+
+    // Runs on the audio rendering thread, not the UI thread. Loaded from a Blob URL
+    // so it works from file:// and survives the build's obfuscation step.
+    const CAPTURE_WORKLET_SRC = `
+      class PcmBatcher extends AudioWorkletProcessor {
+        constructor(options) {
+          super();
+          this.size = options.processorOptions.batchSamples;
+          this.buf = new Int16Array(this.size);
+          this.pos = 0;
+          this.sumSq = 0;
+        }
+        process(inputs) {
+          const ch = inputs[0] && inputs[0][0];
+          if (!ch) return true;
+          for (let i = 0; i < ch.length; i++) {
+            const s = Math.max(-1, Math.min(1, ch[i]));
+            this.sumSq += s * s;
+            this.buf[this.pos++] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            if (this.pos === this.size) {
+              const rms = Math.sqrt(this.sumSq / this.size);
+              const out = this.buf.buffer;
+              this.port.postMessage({ pcm: out, rms }, [out]);
+              this.buf = new Int16Array(this.size);
+              this.pos = 0;
+              this.sumSq = 0;
+            }
+          }
+          return true;
+        }
+      }
+      registerProcessor('pcm-batcher', PcmBatcher);
+    `;
+
+    // Called ~10x/second with one batch of 16-bit PCM
+    function onAudioBatch(pcm, rms) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      const volume = Math.min(100, Math.round(rms * 1000));
+      const volumeBar = document.getElementById('volume-bar');
+      if (volumeBar) volumeBar.style.width = volume + '%';
+      socket.send(pcm);
+    }
+
+    async function startAudioPipeline(stream) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+      source = audioContext.createMediaStreamSource(stream);
+      // Silent sink keeps the graph pulled without playing anything
+      sinkNode = audioContext.createGain();
+      sinkNode.gain.value = 0;
+      sinkNode.connect(audioContext.destination);
+
+      try {
+        const url = URL.createObjectURL(new Blob([CAPTURE_WORKLET_SRC], { type: 'application/javascript' }));
+        const ctx = audioContext;
+        await ctx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+        if (audioContext !== ctx) return;  // capture was stopped while loading
+        processor = new AudioWorkletNode(audioContext, 'pcm-batcher', {
+          numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1,
+          processorOptions: { batchSamples: AUDIO_BATCH_SAMPLES }
+        });
+        processor.port.onmessage = (e) => onAudioBatch(e.data.pcm, e.data.rms);
+      } catch (err) {
+        // Fallback: ScriptProcessor on the UI thread, still batched to ~85 ms
+        console.warn('AudioWorklet unavailable, using ScriptProcessor:', err);
+        processor = audioContext.createScriptProcessor(2048, 1, 1);
+        processor.onaudioprocess = (e) => {
+          const data = e.inputBuffer.getChannelData(0);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+          onAudioBatch(floatTo16BitPCM(data), Math.sqrt(sum / data.length));
+        };
+      }
+
+      source.connect(processor);
+      processor.connect(sinkNode);
+    }
+
     function floatTo16BitPCM(float32Array) {
       const buffer = new ArrayBuffer(float32Array.length * 2);
       const view = new DataView(buffer);
@@ -1394,10 +1468,14 @@
         console.log('Sources:', sources);
         const source = sources.find(s => s.name === 'Entire Screen' || s.name === 'Screen 1') || sources[0];
         if (!source) throw new Error('No screen source found. Available: ' + sources.map(s => s.name).join(', '));
+        // Chromium only grants desktop audio together with a video track. Ask for the
+        // smallest, slowest video possible, then stop it so the screen isn't being
+        // captured and encoded for the whole session.
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: source.id } },
-          video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: source.id } }
+          video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: source.id, maxWidth: 160, maxHeight: 120, maxFrameRate: 1 } }
         });
+        stream.getVideoTracks().forEach(t => { t.stop(); stream.removeTrack(t); });
         return stream;
       } catch (e) {
         console.error('System Audio Error:', e);
@@ -1448,37 +1526,20 @@
           activeMode = mode;
           updateButtons();
 
-          audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-          source = audioContext.createMediaStreamSource(currentStream);
-          processor = audioContext.createScriptProcessor(512, 1, 1);
+          // Set the input indicator once, not on every audio callback
+          const inputModeDot = document.getElementById('input-indicator-dot');
+          const inputModeText = document.getElementById('input-mode-text');
+          if (inputModeDot) inputModeDot.className = 'dot connected';
+          if (inputModeText) {
+            inputModeText.innerText = mode === 'system' ? 'System' : 'Mic';
+            inputModeText.style.color = '#00d4ff';
+          }
 
-          processor.onaudioprocess = (e) => {
-            if (!socket || socket.readyState !== WebSocket.OPEN) return;
-            const inputData = e.inputBuffer.getChannelData(0);
-
-            let sum = 0;
-            for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
-            const rms = Math.sqrt(sum / inputData.length);
-            const volume = Math.min(100, Math.round(rms * 1000));
-
-            const volumeBar = document.getElementById('volume-bar');
-            const inputModeDot = document.getElementById('input-indicator-dot');
-            const inputModeText = document.getElementById('input-mode-text');
-
-            if (volumeBar) volumeBar.style.width = (volume / 100) * 100 + '%';
-            if (inputModeDot) {
-              inputModeDot.className = 'dot connected';
-              if (inputModeText) {
-                inputModeText.innerText = activeMode === 'system' ? 'System' : 'Mic';
-                inputModeText.style.color = '#00d4ff';
-              }
-            }
-
-            socket.send(floatTo16BitPCM(inputData));
-          };
-
-          source.connect(processor);
-          processor.connect(audioContext.destination);
+          startAudioPipeline(currentStream).catch(err => {
+            console.error('Audio pipeline error:', err);
+            logError('Audio pipeline error: ' + err.message);
+            stopCapture();
+          });
         };
 
         socket.onmessage = (event) => {
@@ -1516,10 +1577,10 @@
           console.log('WebSocket Closed', event ? event.code : 'unknown', event ? event.reason : '');
           clearAutoFireTimer();
           if (event && event.code && event.code !== 1000 && event.code !== 1001 && event.code !== 1005) {
-             statusText.innerText = 'Connection Error';
-             statusDot.className = 'dot error';
-             let reason = event.reason || 'Unknown error (Check your API key credits or model string)';
-             responseArea.innerText = `WebSocket connection closed by server.\nCode: ${event.code}\nReason: ${reason}\n\nMake sure your OpenAI API key is still valid and has billing credits enabled.`;
+            statusText.innerText = 'Connection Error';
+            statusDot.className = 'dot error';
+            let reason = event.reason || 'Unknown error (Check your API key credits or model string)';
+            responseArea.innerText = `WebSocket connection closed by server.\nCode: ${event.code}\nReason: ${reason}\n\nMake sure your OpenAI API key is still valid and has billing credits enabled.`;
           }
           if (activeMode) stopCapture();
         };
@@ -1535,7 +1596,13 @@
 
     function stopCapture() {
       clearAutoFireTimer();   // don't let a pending auto-fire run after capture stops
-      if (processor) { processor.disconnect(); processor = null; }
+      if (processor) {
+        if (processor.port) processor.port.onmessage = null;
+        processor.onaudioprocess = null;
+        processor.disconnect();
+        processor = null;
+      }
+      if (sinkNode) { sinkNode.disconnect(); sinkNode = null; }
       if (source) { source.disconnect(); source = null; }
       if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
       if (audioContext) { audioContext.close(); audioContext = null; }

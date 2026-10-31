@@ -188,10 +188,10 @@ function setupAutoUpdaterEvents() {
     const yesBtn = document.getElementById('update-yes-btn');
     const noBtn = document.getElementById('update-no-btn');
     if (yesBtn) yesBtn.addEventListener('click', () => {
-      require('electron').ipcRenderer.send('update-accept');
+      window.ipcBridge.send('update-accept');
     });
     if (noBtn) noBtn.addEventListener('click', () => {
-      require('electron').ipcRenderer.send('update-decline');
+      window.ipcBridge.send('update-decline');
     });
   }`);
   });
@@ -260,10 +260,10 @@ function setupAutoUpdaterEvents() {
     const restartBtn = document.getElementById('update-restart-btn');
     const laterBtn = document.getElementById('update-later-btn');
     if (restartBtn) restartBtn.addEventListener('click', () => {
-      require('electron').ipcRenderer.send('update-restart');
+      window.ipcBridge.send('update-restart');
     });
     if (laterBtn) laterBtn.addEventListener('click', () => {
-      require('electron').ipcRenderer.send('update-later');
+      window.ipcBridge.send('update-later');
     });
   }`);
   });
@@ -325,7 +325,8 @@ function startBackend() {
   console.log('Starting backend from:', backendPath);
 
   backendProcess = spawn(backendPath, [], {
-    env: { ...process.env, WINHOST_TOKEN: BACKEND_TOKEN },
+    // WINHOST_PARENT_PID lets the backend exit on its own if Electron crashes
+    env: { ...process.env, WINHOST_TOKEN: BACKEND_TOKEN, WINHOST_PARENT_PID: String(process.pid) },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,
     windowsHide: true
@@ -426,8 +427,10 @@ function createWindow() {
     opacity: 0.95,
     resizable: true,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      // Pages get no Node access; preload.js exposes a whitelisted window.ipcRenderer
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
       backgroundThrottling: false,
     },
   });
@@ -504,8 +507,9 @@ function createConvoWindow() {
     transparent: true,
     backgroundColor: '#00000000',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true
     }
   });
 

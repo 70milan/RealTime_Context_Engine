@@ -1790,7 +1790,13 @@ function resetSessionUI() {
     // Reset usage for next session
     fetch('http://127.0.0.1:5050/usage/reset', { method: 'POST' }).catch(() => { });
 
-    // Clear conversation history on backend
+    // End the session on the backend: clears history + rolling summary and, in
+    // demo mode, records the end time so the backend enforces the cooldown
+    fetch('http://127.0.0.1:5050/session/end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_name: currentSessionName || '' })
+    }).catch(() => { });
     fetch('http://127.0.0.1:5050/conversation/clear', { method: 'POST' }).catch(() => { });
 
     // Clear and hide floating conversation window when session ends
@@ -2215,8 +2221,7 @@ const mountInterval = setInterval(() => {
             updateBtn.textContent = 'Checking...';
             updateBtn.style.pointerEvents = 'none';
 
-            // We use standard require if window.ipcRenderer isn't ready yet, as a fallback
-            const ipc = window.ipcRenderer || (typeof require !== 'undefined' ? require('electron').ipcRenderer : null);
+            const ipc = window.ipcRenderer;
 
             if (ipc) {
                 ipc.send('manual-update-check');

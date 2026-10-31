@@ -1,4 +1,5 @@
-const { ipcRenderer } = require('electron');
+// preload.js exposes window.ipcBridge (whitelisted channels only)
+const ipcRenderer = window.ipcBridge;
 
 let currentSessionStats = {
     sumTtft: 0,
