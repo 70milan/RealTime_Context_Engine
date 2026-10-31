@@ -61,11 +61,18 @@ function initializeStreamingAI() {
 
         if (!transcriptArea || !responseArea) return;
 
-        const transcript = transcriptArea.innerText.trim();
+        // Smart Interview sends the speaker-labeled exchange instead of the raw text
+        const smartText = window.__smartMode && window.getSmartExchangeText ? window.getSmartExchangeText() : '';
+        const transcript = smartText || transcriptArea.innerText.trim();
         if (!transcript && !capturedScreenshot) {
             responseArea.innerText = 'No transcript or screenshot to process.';
             return;
         }
+
+        // Newest request wins: a Smart re-answer replaces one still streaming
+        if (window.__aiAbort) window.__aiAbort.abort();
+        const controller = new AbortController();
+        window.__aiAbort = controller;
 
         btnGenerate.classList.add('active');
         responseArea.innerText = 'Generating...';
@@ -80,7 +87,8 @@ function initializeStreamingAI() {
                 role: window.sessionTargetRole || '',
                 target_language: window.sessionTargetLanguage || '',
                 save_to_context: true,
-                text_model: window.selectedModel || 'gpt-3.5-turbo'
+                text_model: window.selectedModel || 'gpt-3.5-turbo',
+                smart_mode: !!smartText
             };
 
             if (capturedScreenshot) {
@@ -91,7 +99,8 @@ function initializeStreamingAI() {
             const res = await fetch('http://127.0.0.1:5050/ai/stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
             });
 
             if (!res.ok) {
@@ -406,14 +415,32 @@ function initializeStreamingAI() {
             // Flag transcript to clear on next user input instead of flashing to empty immediately
             window.shouldClearTranscriptOnNextInput = true;
         } catch (e) {
+            // Cancelled or replaced by a newer request: that request owns the UI now
+            if (e.name === 'AbortError' || controller.signal.aborted) return;
             console.error('AI Generation Error:', e);
             responseArea.innerText = `Error: ${e.message}\n\nCheck if backend is running on port 5050.`;
             const btnGenEl = document.getElementById('btn-generate');
             if (btnGenEl) btnGenEl.classList.remove('active');
         } finally {
-            window.__aiRequestInFlight = false;
-            window.__lastResponseTime = Date.now();
+            if (window.__aiAbort === controller) {
+                window.__aiAbort = null;
+                window.__aiRequestInFlight = false;
+                window.__lastResponseTime = Date.now();
+            }
         }
+    };
+
+    // Smart Interview calls this when the interviewer keeps talking right after an
+    // early answer started: drop it and wait for the full question.
+    window.cancelAIRequest = () => {
+        const controller = window.__aiAbort;
+        if (!controller) return;
+        window.__aiAbort = null;
+        window.__aiRequestInFlight = false;
+        controller.abort();
+        btnGenerate.classList.remove('active');
+        const responseArea = document.getElementById('response-area');
+        if (responseArea) responseArea.innerText = '';
     };
 
 

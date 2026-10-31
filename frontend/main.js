@@ -741,10 +741,10 @@ app.whenReady().then(() => {
     win.webContents.executeJavaScript(`if (window.generateAIOnly) { window.generateAIOnly(); }`);
   });
 
-  /* ---- Ctrl+Alt+A: Toggle Hands-Free Auto-Response ---- */
+  /* ---- Ctrl+Alt+A: Toggle Smart Interview ---- */
   registerShortcut('CommandOrControl+Alt+A', () => {
     if (!win) return;
-    win.webContents.executeJavaScript(`if (window.toggleAutoMode) { window.toggleAutoMode(); }`);
+    win.webContents.executeJavaScript(`if (window.toggleSmartMode) { window.toggleSmartMode(); }`);
   });
 
   /* ---- Ctrl+M: Toggle Mic ---- */

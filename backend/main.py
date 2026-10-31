@@ -280,6 +280,33 @@ def get_async_client(api_key: Optional[str] = None) -> "AsyncOpenAI":
         _async_clients[key] = client
     return client
 
+# Streaming transcription model: emits word-level deltas while the person is still
+# talking (whisper-1 only returns text once the utterance ends). whisper-1 stays as
+# the fallback for API keys/projects that don't have access to it.
+TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
+FALLBACK_TRANSCRIBE_MODEL = "whisper-1"
+
+
+def _transcription_session(model: str, source: str, role: str) -> dict:
+    transcription = {"model": model}
+    if role and model != FALLBACK_TRANSCRIBE_MODEL:
+        # Biases spelling of technical terms toward the interview's domain
+        transcription["prompt"] = f"Live job interview for a {role} role. Technical vocabulary is common."
+    audio_input = {
+        "format": {"type": "audio/pcm", "rate": 24000},
+        "transcription": transcription,
+        "turn_detection": {
+            "type": "server_vad",
+            "threshold": 0.45,
+            "prefix_padding_ms": 200,
+            "silence_duration_ms": 350,
+        },
+    }
+    if source == "mic":
+        audio_input["noise_reduction"] = {"type": "near_field"}
+    return {"type": "session.update", "session": {"type": "transcription", "audio": {"input": audio_input}}}
+
+
 @app.websocket("/realtime")
 async def realtime(ws: WebSocket):
     # WebSockets bypass CORS and HTTP middleware entirely - check Host + token here
@@ -287,16 +314,22 @@ async def realtime(ws: WebSocket):
         await ws.close(code=1008)
         return
     await ws.accept()
-    
+
+    # "system" = the other side of the call (interviewer), "mic" = the user
+    source = ws.query_params.get("source", "system")
+    if source not in ("system", "mic"):
+        source = "system"
+    tag = f"[WS:{source}]"
+
     access_allowed = check_access_allowed()
     if not access_allowed:
-        print("[WS] Access denied (demo expired or unlicensed)")
+        print(f"{tag} Access denied (demo expired or unlicensed)")
         await ws.send_json({"type": "error", "message": "Demo expired. Please purchase a license to continue."})
         await ws.close()
         return
-    
+
     api_key = get_api_key()
-    
+
     # GA Realtime transcription session. The Beta Realtime API was removed
     # ("Realtime Beta API no longer supported" / close 4000); GA drops the
     # OpenAI-Beta header and uses the ?intent=transcription endpoint.
@@ -304,47 +337,33 @@ async def realtime(ws: WebSocket):
     headers = {
         "Authorization": f"Bearer {api_key}",
     }
-    
+
     if not api_key:
-        print("[WS] ERROR: API key not found in profile or environment!")
+        print(f"{tag} ERROR: API key not found in profile or environment!")
         await ws.close(code=1008, reason="Missing API Key")
         return
 
-    print(f"Connecting to OpenAI at {url}...")
+    role = ""
+    if isinstance(profile_cache, dict):
+        role = (profile_cache.get("target_role") or "").strip()
+
+    print(f"{tag} Connecting to OpenAI at {url}...")
     try:
         async with websockets.connect(url, additional_headers=headers) as openai_ws:
-            print("Connected to OpenAI Realtime API!")
-            # Initialize session — GA transcription schema. Audio config is now
-            # nested under session.audio.input (was flat in Beta). The client
-            # streams 24kHz mono PCM16; server VAD segments each utterance.
-            session_update = {
-                "type": "session.update",
-                "session": {
-                    "type": "transcription",
-                    "audio": {
-                        "input": {
-                            "format": {"type": "audio/pcm", "rate": 24000},
-                            "transcription": {
-                                "model": "whisper-1"
-                            },
-                            "turn_detection": {
-                                "type": "server_vad",
-                                "threshold": 0.45,
-                                "prefix_padding_ms": 200,
-                                "silence_duration_ms": 350
-                            }
-                        }
-                    }
-                }
-            }
-            await openai_ws.send(json.dumps(session_update))
+            model = TRANSCRIBE_MODEL
+            print(f"{tag} Connected to OpenAI Realtime API (model {model})")
+            # GA transcription schema: audio config is nested under session.audio.input.
+            # The client streams 24kHz mono PCM16; server VAD segments each utterance.
+            await openai_ws.send(json.dumps(_transcription_session(model, source, role)))
 
             async def receive_from_client():
                 try:
                     while True:
                         message = await ws.receive()
+                        if message.get("type") == "websocket.disconnect":
+                            break
 
-                        if "bytes" in message:
+                        if message.get("bytes") is not None:
                             import base64
                             audio_b64 = base64.b64encode(message["bytes"]).decode()
                         else:
@@ -358,54 +377,66 @@ async def realtime(ws: WebSocket):
                 except WebSocketDisconnect:
                     pass
                 except Exception as e:
-                    print(f"[receive_from_client] Error: {e}")
+                    print(f"{tag} [receive_from_client] Error: {e}")
+                finally:
+                    # Client left: close upstream so receive_from_openai ends too
+                    try:
+                        await openai_ws.close()
+                    except Exception:
+                        pass
 
             async def receive_from_openai():
+                nonlocal model
                 try:
                     async for message in openai_ws:
                         event = json.loads(message)
                         etype = event.get("type", "")
+                        item_id = event.get("item_id", "")
 
-                        if etype == "conversation.item.input_audio_transcription.completed":
-                            transcript = event.get("transcript", "").strip()
-                            if transcript:
-                                print(f"[TRANSCRIPT] {transcript}")
-                                await ws.send_json({
-                                    "type": "transcript",
-                                    "text": f"{transcript}\n"
-                                })
-
-                        elif etype == "input_audio_buffer.speech_started":
-                            print("[VAD] Speech detected")
-
-                        elif etype == "input_audio_buffer.speech_stopped":
-                            print("[VAD] Speech ended — committing buffer")
-                            # Forward to client so hands-free auto-response can time off it
-                            await ws.send_json({"type": "speech_stopped"})
-
-                        elif etype in ["response.text.delta", "response.audio_transcript.delta"]:
+                        if etype == "conversation.item.input_audio_transcription.delta":
                             delta = event.get("delta", "")
                             if delta:
-                                await ws.send_json({"type": "transcript", "text": delta})
+                                await ws.send_json({"type": "transcript_delta", "item_id": item_id, "text": delta})
+
+                        elif etype == "conversation.item.input_audio_transcription.completed":
+                            transcript = event.get("transcript", "").strip()
+                            print(f"{tag} [TRANSCRIPT] {transcript}")
+                            await ws.send_json({"type": "transcript_final", "item_id": item_id, "text": transcript})
+
+                        elif etype == "conversation.item.input_audio_transcription.failed":
+                            print(f"{tag} [TRANSCRIPT FAILED] {event.get('error')}")
+                            await ws.send_json({"type": "transcript_final", "item_id": item_id, "text": ""})
+
+                        elif etype == "input_audio_buffer.speech_started":
+                            await ws.send_json({"type": "speech_started", "item_id": item_id})
+
+                        elif etype == "input_audio_buffer.speech_stopped":
+                            await ws.send_json({"type": "speech_stopped", "item_id": item_id})
 
                         elif etype == "error":
-                            err = event.get("error", {})
-                            print(f"[OPENAI ERROR] {err.get('code')} — {err.get('message')}")
-                            await ws.send_json({
-                                "type": "error",
-                                "message": err.get("message", "Unknown OpenAI error")
-                            })
+                            err = event.get("error", {}) or {}
+                            msg = err.get("message", "Unknown OpenAI error")
+                            print(f"{tag} [OPENAI ERROR] {err.get('code')} - {msg}")
+                            # No access to the streaming model: fall back to whisper-1
+                            if model != FALLBACK_TRANSCRIBE_MODEL and (
+                                "model" in (err.get("param") or "") or "model" in msg.lower()
+                            ):
+                                model = FALLBACK_TRANSCRIBE_MODEL
+                                print(f"{tag} Falling back to {model}")
+                                await openai_ws.send(json.dumps(_transcription_session(model, source, role)))
+                                continue
+                            await ws.send_json({"type": "error", "message": msg})
 
                 except Exception as e:
-                    print(f"[receive_from_openai] Exception: {e}")
+                    print(f"{tag} [receive_from_openai] Exception: {e}")
 
             await asyncio.gather(receive_from_client(), receive_from_openai())
 
     except websockets.exceptions.ConnectionClosed as e:
-        print(f"OpenAI Connection Closed: {e.code} {e.reason}")
+        print(f"{tag} OpenAI Connection Closed: {e.code} {e.reason}")
         await ws.close(code=1011, reason=f"OpenAI Closed: {e.code}")
     except Exception as e:
-        print(f"Connection error: {e}")
+        print(f"{tag} Connection error: {e}")
         # Try to send the error to the client before closing
         try:
             await ws.close(code=1011, reason=f"Upstream Error: {str(e)[:100]}")
@@ -430,6 +461,8 @@ class AIRequest(BaseModel):
     job_description: Optional[str] = None
     save_to_context: Optional[bool] = True
     text_model: Optional[str] = None
+    # Smart Interview: transcript is a speaker-labeled exchange (Interviewer / Me)
+    smart_mode: Optional[bool] = False
 
     model_config = {"extra": "ignore"}
 
@@ -1195,6 +1228,7 @@ async def save_session_data(data: Dict[str, Any]):
             'target_language': data.get('target_language', ''),
             'is_esl': data.get('is_esl', False),
             'short_responses': data.get('short_responses', False),
+            'smart_interview': data.get('smart_interview', False),
             'created_at': data.get('created_at', ''),
             'updated_at': datetime.now().isoformat(),
             'text_model': data.get('text_model', DEFAULT_TEXT_MODEL),
@@ -1509,6 +1543,57 @@ async def upload_resume(file: UploadFile = File(...)):
 
 # ----------------------------------------------------------------------------
 
+# ============ SMART INTERVIEW ============
+SMART_INTERVIEW_INSTRUCTIONS = (
+    "SMART INTERVIEW MODE: the user message is a live exchange transcribed from a call, "
+    "labeled by speaker. 'Interviewer:' lines come from the interviewer; 'Me:' lines are "
+    "the candidate you are helping. Write what the candidate should say next in answer to "
+    "the interviewer's latest question or task. If the candidate asked a clarifying question "
+    "and the interviewer answered it, follow that clarification exactly. Never answer the "
+    "candidate's own clarifying questions. If the interviewer is clarifying or changing a "
+    "question you already answered earlier in this conversation, give the revised answer. "
+    "Transcripts may contain small speech-to-text errors; infer the intended words."
+)
+
+
+class SmartClassifyRequest(BaseModel):
+    exchange: str = ""
+    previous_question: str = ""
+
+    model_config = {"extra": "ignore"}
+
+
+@app.post("/smart/classify")
+async def smart_classify(req: SmartClassifyRequest):
+    """Fast yes/no: should the candidate answer now? Used only for interviewer turns
+    the client-side question heuristics can't decide."""
+    if not check_access_allowed() or not req.exchange.strip():
+        return {"answer_now": False}
+    prompt = (
+        "You watch a live job interview transcript. Decide whether the interviewer has just "
+        "finished a question, task, or clarification that the candidate should respond to now. "
+        "Answer NO for small talk, acknowledgements, an unfinished sentence, or the interviewer "
+        "still explaining before asking. Reply with exactly YES or NO."
+    )
+    user = req.exchange.strip()[-2000:]
+    if req.previous_question.strip():
+        user = f"(Previously answered question: {req.previous_question.strip()[-500:]})\n\n{user}"
+    try:
+        client = get_async_client()
+        res = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": user}],
+            max_tokens=1,
+            temperature=0,
+        )
+        verdict = (res.choices[0].message.content or "").strip().upper()
+        print(f"[SMART] classify -> {verdict}")
+        return {"answer_now": verdict.startswith("Y")}
+    except Exception as e:
+        print(f"[SMART] classify error: {e}")
+        return {"answer_now": False}
+
+
 @app.post("/ai/stream")
 async def stream_ai_response(req: AIRequest):
     """Streaming endpoint for real-time AI responses using Server-Sent Events"""
@@ -1550,6 +1635,8 @@ async def stream_ai_response(req: AIRequest):
                 short_responses=short_responses
             )
             messages = [{"role": "system", "content": system_content}]
+            if req.smart_mode:
+                messages.append({"role": "system", "content": SMART_INTERVIEW_INSTRUCTIONS})
 
             # Inject rolling summary if available — compressed memory of evicted turns
             if conversation_summary:

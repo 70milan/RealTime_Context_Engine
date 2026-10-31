@@ -443,6 +443,16 @@ function initSession() {
         });
     }
 
+    // Smart Interview: the in-session toggle (Ctrl+Alt+A / status chip) and this
+    // checkbox are the same setting; setSmartMode keeps them in sync.
+    const smartCheckbox = document.getElementById('setup-smart');
+    if (smartCheckbox) {
+        smartCheckbox.checked = !!window.__smartMode;
+        smartCheckbox.addEventListener('change', () => {
+            if (window.setSmartMode) window.setSmartMode(smartCheckbox.checked);
+        });
+    }
+
     // Check for saved valid license - verify it's still valid with current backend/HWID
     const licenseInput = document.getElementById('setup-license');
     const savedLicense = localStorage.getItem('valid_license_key');
@@ -911,7 +921,8 @@ function initSession() {
         const eslHoverContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
             '<strong style="color: rgba(100, 255, 150, 0.9);">ESL Mode</strong> &mdash; simplifies vocabulary and uses shorter sentences so answers are easier to follow.<br><br>' +
             '<strong style="color: rgba(100, 255, 150, 0.9);">Short Responses</strong> &mdash; keeps AI answers 30&ndash;50% shorter, cuts filler, and prefers bullet points.<br><br>' +
-            '<em style="opacity: 0.7;">Select both or none or either.</em></div>';
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Smart Interview</strong> &mdash; listens to the interviewer (system audio) and you (mic) at the same time, labels who said what, and answers automatically when a question is finished. If you ask a clarifying question, it waits for their reply first. Use headphones for best results. Toggle anytime with Ctrl+Alt+A.<br><br>' +
+            '<em style="opacity: 0.7;">Turn on any combination.</em></div>';
         createHoverTooltip('checks-info-btn', eslHoverContent);
     }
 
@@ -931,6 +942,7 @@ function initSession() {
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+K</span><span style="color: #ccc;">Screenshot + quick solve</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+S</span><span style="color: #ccc;">Screenshot + save context</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Enter</span><span style="color: #ccc;">Process transcript with AI</span>' +
+        '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Alt+A</span><span style="color: #ccc;">Toggle Smart Interview</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Backspace</span><span style="color: #ccc;">Clear transcript</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Q</span><span style="color: #ccc;">Toggle mini mode</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Shift+Q</span><span style="color: #ccc;">Quit app</span>' +
@@ -1214,6 +1226,7 @@ window.openPastSession = async function (sessionName) {
                     shortRespCheckbox.checked = !!sessionData.short_responses;
                     localStorage.setItem('short_responses', !!sessionData.short_responses);
                 }
+                if (window.setSmartMode) window.setSmartMode(!!sessionData.smart_interview);
 
                 // Reset status bar metrics for the resumed session logic
                 const apiInEl = document.getElementById('api-usage-input');
@@ -1562,6 +1575,7 @@ async function handleCreateSession() {
             target_language: targetLang,
             is_esl: eslCheckbox ? eslCheckbox.checked : false,
             short_responses: shortRespCheckbox ? shortRespCheckbox.checked : false,
+            smart_interview: !!window.__smartMode,
             created_at: new Date().toISOString()
         };
 

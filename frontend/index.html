@@ -77,6 +77,7 @@
     .session-btn,
     .vol-slider-wrapper,
     #status-bar-hotkeys,
+    #auto-mode-indicator,
     #btn-toggle-log,
     #response-area,
     #transcript-area,
@@ -570,6 +571,52 @@
       cursor: default !important;
     }
 
+    /* Smart Interview chip in the status bar */
+    #auto-mode-indicator {
+      margin-left: 8px;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      white-space: nowrap;
+      color: rgba(255, 255, 255, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    #auto-mode-indicator.on {
+      color: #00e6c8;
+      border-color: rgba(0, 230, 200, 0.45);
+    }
+
+    /* Transcript lines (one per utterance); speaker labels in Smart Interview */
+    #transcript-area .seg.partial .seg-text {
+      opacity: 0.6;
+    }
+
+    #transcript-area .seg-who {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 0 6px;
+      border-radius: 6px;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      vertical-align: 1px;
+      user-select: none;
+    }
+
+    #transcript-area .seg-who.system {
+      color: rgba(0, 212, 255, 0.8);
+      background: rgba(0, 212, 255, 0.08);
+    }
+
+    #transcript-area .seg-who.mic {
+      color: rgba(100, 255, 150, 0.8);
+      background: rgba(100, 255, 150, 0.08);
+    }
+
     /* Keep text areas user-selectable */
     #transcript-area,
     #response-area {
@@ -708,6 +755,8 @@
                   <label class="setup-check"><input type="checkbox" id="setup-esl" /><span>ESL Mode</span></label>
                   <label class="setup-check"><input type="checkbox" id="setup-short-responses" /><span>Short
                       Responses</span></label>
+                  <label class="setup-check"><input type="checkbox" id="setup-smart" /><span>Smart
+                      Interview</span></label>
                   <button type="button" id="checks-info-btn" class="setup-info-link"
                     style="background:none;border:none;padding:0;font:inherit;cursor:pointer;color:rgba(100,255,150,0.65);font-size:10px;font-weight:500;">(?)</button>
                 </div>
@@ -1165,9 +1214,7 @@
       <div class="status-indicator" style="flex-shrink: 0; min-width: 0;">
         <div id="status-dot" class="dot"></div>
         <span id="status-text">Ready</span>
-        <span id="auto-mode-indicator" title="Hands-free auto-response (Ctrl+Alt+A)"
-          style="display:none; margin-left:8px; color:#00e6c8; font-size:9px; text-transform:uppercase; letter-spacing:1px; border:1px solid rgba(0,230,200,0.45); padding:2px 6px; border-radius:6px; white-space:nowrap;">●
-          Auto</span>
+        <span id="auto-mode-indicator" title="Smart Interview: hears both sides and answers questions automatically (Ctrl+Alt+A)">Smart</span>
         <span id="status-bar-hotkeys"
           style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; cursor: default; white-space: nowrap;">Hotkeys</span>
         <!-- ── Log toggle button ── -->
@@ -1334,59 +1381,220 @@
     const btnScreenS = document.getElementById('btn-screen-s');
     const btnGenerate = document.getElementById('btn-generate');
 
-    let socket = null;
-    let audioContext = null;
-    let processor = null;
-    let sinkNode = null;
-    let source = null;
-    let currentStream = null;
-    let activeMode = null;
+    // One capture channel per audio source ('system' = the other side of the call,
+    // 'mic' = you). Manual mode runs one at a time; Smart Interview runs both.
+    const channels = {};
     let capturedScreenshot = null;
     const SAMPLE_RATE = 24000;
 
-    // ── Hands-free auto-response (toggle Ctrl+Alt+A, default OFF) ───────────────
+    // ── Smart Interview (toggle Ctrl+Alt+A, or the "Smart" chip, or the setup checkbox) ──
+    // Captures system audio (Interviewer) and mic (Me) together, labels each line by
+    // speaker, and answers on its own once the interviewer finishes a question. If you
+    // cut in with a clarifying question, it waits for the interviewer's reply and then
+    // answers using the whole exchange.
     // State lives on window so streaming-ai.js (which runs the AI request) and the
-    // screenshot path can flip the in-flight lock that tryAutoFire() checks.
-    window.__autoModeEnabled = false;   // master toggle
-    window.__autoFireTimer = null;      // pending fire timeout handle
+    // screenshot path can see the in-flight request.
+    window.__smartMode = false;
     window.__aiRequestInFlight = false; // true while any /ai/stream request runs
     window.__lastResponseTime = 0;      // ms timestamp of last completed response
-    window.__lastFiredText = '';        // transcript of the last auto-fire (no double-fire)
-    const AUTO_SILENCE_MS = 3000;       // fire 3s after the last transcript chunk
-    const AUTO_SPEECHSTOP_MS = 1500;    // or 1.5s after VAD reports speech_stopped
-    const AUTO_COOLDOWN_MS = 2000;      // block auto-fire for 2s after a response
-    const AUTO_MIN_WORDS = 5;           // ignore short filler like "um, okay so"
 
-    function clearAutoFireTimer() {
-      if (window.__autoFireTimer) { clearTimeout(window.__autoFireTimer); window.__autoFireTimer = null; }
+    const SPEAKER_LABEL = { system: 'Interviewer', mic: 'Me' };
+    const QUESTION_GRACE_MS = 150;       // VAD already waited 350 ms of silence
+    const SPECULATIVE_WINDOW_MS = 4000;  // interviewer resumes within this → cancel and wait
+    const PENDING_TIMEOUT_MS = 4000;     // forget an utterance whose transcript never came
+    const ECHO_WINDOW_MS = 10000;        // mic lines that repeat recent interviewer speech
+    const ECHO_OVERLAP = 0.6;            //   (speaker bleed into the mic) are dropped
+
+    const smart = {
+      src: {
+        system: { speaking: false, pending: new Map() },
+        mic: { speaking: false, pending: new Map() }
+      },
+      recentSystem: [],        // [{ words: Set, t }] for echo detection
+      deferredMic: new Set(),  // mic segs waiting for the interviewer's transcript to compare
+      lastHandledId: null,     // last interviewer segment the trigger looked at
+      lastQuestion: '',        // exchange text of the last auto-answer (context for the classifier)
+      fireTimer: null,
+      firedAt: 0
+    };
+
+    function resetSmartState() {
+      clearTimeout(smart.fireTimer);
+      smart.fireTimer = null;
+      for (const s of Object.values(smart.src)) { s.speaking = false; s.pending.clear(); }
+      smart.recentSystem = [];
+      smart.deferredMic.clear();
+      smart.lastHandledId = null;
     }
 
-    function scheduleAutoFire(delayMs) {
-      if (!window.__autoModeEnabled) return;
-      clearAutoFireTimer();
-      window.__autoFireTimer = setTimeout(tryAutoFire, delayMs);
+    const normWords = (text) => (text.toLowerCase().match(/[a-z0-9']+/g) || []);
+
+    function isBusy(src) {
+      const s = smart.src[src];
+      if (!channels[src]) return false;
+      if (s.speaking) return true;
+      const now = Date.now();
+      for (const [id, t] of s.pending) {
+        if (now - t > PENDING_TIMEOUT_MS) s.pending.delete(id); else return true;
+      }
+      return src === 'mic' && smart.deferredMic.size > 0;
     }
 
-    function tryAutoFire() {
-      window.__autoFireTimer = null;
-      if (!window.__autoModeEnabled) return;                                  // mode off
-      if (window.__aiRequestInFlight) return;                                 // in-flight lock
-      if (Date.now() - window.__lastResponseTime < AUTO_COOLDOWN_MS) return;  // post-response cooldown
-      const text = (transcriptArea.innerText || '').trim();
-      const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
-      if (words < AUTO_MIN_WORDS) return;                                     // minimum length
-      if (text === window.__lastFiredText) return;                            // reset-on-fire guard
-      window.__lastFiredText = text;
+    function isEcho(text) {
+      const words = normWords(text);
+      if (words.length < 2) return false;
+      const cutoff = Date.now() - ECHO_WINDOW_MS;
+      smart.recentSystem = smart.recentSystem.filter(r => r.t >= cutoff);
+      return smart.recentSystem.some(r => {
+        const hits = words.filter(w => r.words.has(w)).length;
+        return hits / words.length >= ECHO_OVERLAP;
+      });
+    }
+
+    // Decide deferred mic lines once the interviewer's matching transcript is in
+    function resolveDeferredMic(force) {
+      if (!force && isBusy('system')) return;
+      for (const seg of smart.deferredMic) {
+        if (seg.isConnected && isEcho(seg.querySelector('.seg-text').textContent)) seg.remove();
+        else seg.classList.remove('partial');
+      }
+      smart.deferredMic.clear();
+    }
+
+    // Final segments of the current exchange, consecutive lines by one speaker merged
+    function exchangeTurns() {
+      const turns = [];
+      transcriptArea.querySelectorAll('.seg').forEach(seg => {
+        if (seg.classList.contains('partial')) return;
+        const text = (seg.querySelector('.seg-text')?.textContent || '').trim();
+        if (!text) return;
+        const src = seg.dataset.src;
+        const last = turns[turns.length - 1];
+        if (last && last.src === src) { last.text += ' ' + text; last.id = seg.dataset.item; }
+        else turns.push({ src, text, id: seg.dataset.item });
+      });
+      return turns;
+    }
+
+    // Speaker-labeled exchange for the AI ('' when there are no labeled lines)
+    window.getSmartExchangeText = () =>
+      exchangeTurns().map(t => `${SPEAKER_LABEL[t.src]}: ${t.text}`).join('\n');
+
+    const FILLER = /^(?:(?:so|okay|ok|alright|all right|um+|uh+|and|well|right|now|great|cool|perfect|good|yeah|next)[,.!]?\s+)+/i;
+    const Q_START = /^(what|what's|whats|why|how|how's|when|where|which|who|whose|can|could|would|will|do|does|did|is|are|was|were|have|has|should|shall|may|tell|walk|explain|describe|write|implement|design|build|create|give|show|talk|share|define|compare|imagine|suppose|let's|lets|say|code|solve|find)\b/i;
+    const Q_PHRASE = /\b(tell me|walk me through|can you|could you|would you|will you|how would you|how do you|how did you|what would you|what is|what are|what's the|explain|describe|difference between|how does|why did|why do|have you|give me an example|write (a|an|me|some|the)|implement|design (a|an)|go ahead and|i'?d like you to|i would like you to|i want you to|your approach|time complexity)\b/i;
+
+    function looksLikeQuestion(turn) {
+      const t = turn.trim();
+      if (t.endsWith('?')) return true;
+      const sentences = t.split(/(?<=[.!?])\s+/).filter(Boolean);
+      const tail = sentences.slice(-2).join(' ');
+      const lastSentence = (sentences[sentences.length - 1] || '').replace(FILLER, '');
+      return Q_START.test(lastSentence) || Q_PHRASE.test(tail);
+    }
+
+    const ACK_WORDS = new Set(['ok', 'okay', 'great', 'good', 'nice', 'perfect', 'cool', 'alright', 'all', 'right',
+      'sure', 'yeah', 'yes', 'yep', 'got', 'it', 'i', 'see', 'makes', 'sense', 'sounds', 'awesome', 'excellent',
+      'thanks', 'thank', 'you', 'mm', 'mhm', 'hmm', 'uh', 'huh', 'interesting', "that's", 'thats', 'very', 'so', 'well', 'fine']);
+    function isAcknowledgement(turn) {
+      const words = normWords(turn);
+      return words.length > 0 && words.length <= 6 && words.every(w => ACK_WORDS.has(w));
+    }
+
+    function stillIdle(id) {
+      return window.__smartMode && smart.lastHandledId === id && !isBusy('system') && !isBusy('mic');
+    }
+
+    function fireSmart() {
+      if (window.__aiRequestInFlight && !window.__aiAbort) return;  // a screenshot request is running
+      smart.firedAt = Date.now();
+      smart.lastQuestion = window.getSmartExchangeText();
+      console.log('[SMART] Answering');
       window.generateAIOnly();
     }
 
-    window.toggleAutoMode = () => {
-      window.__autoModeEnabled = !window.__autoModeEnabled;
+    async function classifyTurn() {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 2500);
+      try {
+        const res = await fetch('http://127.0.0.1:5050/smart/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exchange: window.getSmartExchangeText(), previous_question: smart.lastQuestion }),
+          signal: ctrl.signal
+        });
+        return !!(await res.json()).answer_now;
+      } catch (e) {
+        return false;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // Runs whenever someone stops talking or a transcript lands
+    function smartEvaluate() {
+      if (!window.__smartMode || !window.isSessionActive || !channels.system) return;
+      resolveDeferredMic(false);
+      if (isBusy('system') || isBusy('mic')) return;
+      const turns = exchangeTurns();
+      const last = turns[turns.length - 1];
+      if (!last || last.src !== 'system' || last.id === smart.lastHandledId) return;
+      const id = last.id;
+      smart.lastHandledId = id;
+
+      const followsMe = turns.length > 1;  // interviewer is replying to something I said
+      if (isAcknowledgement(last.text)) return;
+      if (looksLikeQuestion(last.text)) {
+        clearTimeout(smart.fireTimer);
+        smart.fireTimer = setTimeout(() => { if (stillIdle(id)) fireSmart(); }, QUESTION_GRACE_MS);
+        return;
+      }
+      if (!followsMe && normWords(last.text).length < 4) return;
+      classifyTurn().then(yes => { if (yes && stillIdle(id)) fireSmart(); });
+    }
+
+    function smartOnSpeechStarted(src) {
+      clearTimeout(smart.fireTimer);
+      smart.fireTimer = null;
+      // The interviewer kept going right after we started answering: they weren't done.
+      // Drop the early answer; the next pause re-evaluates with the full question.
+      if (src === 'system' && window.__smartMode && window.__aiAbort &&
+          Date.now() - smart.firedAt < SPECULATIVE_WINDOW_MS) {
+        console.log('[SMART] Interviewer resumed — cancelling early answer');
+        window.cancelAIRequest && window.cancelAIRequest();
+        smart.lastHandledId = null;
+      }
+    }
+
+    function updateSmartIndicator() {
       const ind = document.getElementById('auto-mode-indicator');
-      if (ind) ind.style.display = window.__autoModeEnabled ? 'inline-block' : 'none';
-      if (!window.__autoModeEnabled) clearAutoFireTimer();
-      console.log('[AUTO] Hands-free auto-response ' + (window.__autoModeEnabled ? 'ON' : 'OFF'));
+      if (!ind) return;
+      ind.textContent = window.__smartMode ? '● Smart' : 'Smart';
+      ind.classList.toggle('on', window.__smartMode);
+    }
+
+    window.setSmartMode = (on) => {
+      on = !!on;
+      const changed = window.__smartMode !== on;
+      window.__smartMode = on;
+      try { localStorage.setItem('smart_interview', on); } catch (e) { }
+      const cb = document.getElementById('setup-smart');
+      if (cb) cb.checked = on;
+      updateSmartIndicator();
+      if (!changed) return;
+      resetSmartState();
+      console.log('[SMART] Smart Interview ' + (on ? 'ON' : 'OFF'));
+      // Switch capture layout if audio was running: both sources in Smart, system only in manual
+      if (channels.system || channels.mic) {
+        stopCapture();
+        setTimeout(() => startCapture('system'), 150);
+      }
     };
+    window.toggleSmartMode = () => window.setSmartMode(!window.__smartMode);
+    window.toggleAutoMode = window.toggleSmartMode;  // old hotkey name
+
+    try { window.setSmartMode(localStorage.getItem('smart_interview') === 'true'); } catch (e) { }
+    document.getElementById('auto-mode-indicator')?.addEventListener('click', () => window.toggleSmartMode());
 
     // Audio is sent in ~100 ms batches (2400 samples @ 24 kHz) instead of a 512-sample
     // chunk ~47x/second: 10 WebSocket messages and 10 volume-bar updates a second.
@@ -1425,48 +1633,51 @@
       registerProcessor('pcm-batcher', PcmBatcher);
     `;
 
-    // Called ~10x/second with one batch of 16-bit PCM
-    function onAudioBatch(pcm, rms) {
-      if (!socket || socket.readyState !== WebSocket.OPEN) return;
-      const volume = Math.min(100, Math.round(rms * 1000));
+    // Called ~10x/second per channel with one batch of 16-bit PCM
+    function onAudioBatch(ch, pcm, rms) {
+      if (!ch.socket || ch.socket.readyState !== WebSocket.OPEN) return;
+      ch.rms = rms;
+      let peak = 0;
+      for (const c of Object.values(channels)) peak = Math.max(peak, c.rms || 0);
       const volumeBar = document.getElementById('volume-bar');
-      if (volumeBar) volumeBar.style.width = volume + '%';
-      socket.send(pcm);
+      if (volumeBar) volumeBar.style.width = Math.min(100, Math.round(peak * 1000)) + '%';
+      ch.socket.send(pcm);
     }
 
-    async function startAudioPipeline(stream) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-      source = audioContext.createMediaStreamSource(stream);
+    async function startAudioPipeline(ch) {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+      ch.ctx = ctx;
+      ch.input = ctx.createMediaStreamSource(ch.stream);
       // Silent sink keeps the graph pulled without playing anything
-      sinkNode = audioContext.createGain();
-      sinkNode.gain.value = 0;
-      sinkNode.connect(audioContext.destination);
+      ch.sink = ctx.createGain();
+      ch.sink.gain.value = 0;
+      ch.sink.connect(ctx.destination);
 
       try {
         const url = URL.createObjectURL(new Blob([CAPTURE_WORKLET_SRC], { type: 'application/javascript' }));
-        const ctx = audioContext;
         await ctx.audioWorklet.addModule(url);
         URL.revokeObjectURL(url);
-        if (audioContext !== ctx) return;  // capture was stopped while loading
-        processor = new AudioWorkletNode(audioContext, 'pcm-batcher', {
+        if (ch.ctx !== ctx) return;  // capture was stopped while loading
+        ch.node = new AudioWorkletNode(ctx, 'pcm-batcher', {
           numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1,
           processorOptions: { batchSamples: AUDIO_BATCH_SAMPLES }
         });
-        processor.port.onmessage = (e) => onAudioBatch(e.data.pcm, e.data.rms);
+        ch.node.port.onmessage = (e) => onAudioBatch(ch, e.data.pcm, e.data.rms);
       } catch (err) {
+        if (ch.ctx !== ctx) return;
         // Fallback: ScriptProcessor on the UI thread, still batched to ~85 ms
         console.warn('AudioWorklet unavailable, using ScriptProcessor:', err);
-        processor = audioContext.createScriptProcessor(2048, 1, 1);
-        processor.onaudioprocess = (e) => {
+        ch.node = ctx.createScriptProcessor(2048, 1, 1);
+        ch.node.onaudioprocess = (e) => {
           const data = e.inputBuffer.getChannelData(0);
           let sum = 0;
           for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-          onAudioBatch(floatTo16BitPCM(data), Math.sqrt(sum / data.length));
+          onAudioBatch(ch, floatTo16BitPCM(data), Math.sqrt(sum / data.length));
         };
       }
 
-      source.connect(processor);
-      processor.connect(sinkNode);
+      ch.input.connect(ch.node);
+      ch.node.connect(ch.sink);
     }
 
     function floatTo16BitPCM(float32Array) {
@@ -1516,6 +1727,165 @@
       }
     }
 
+    // ── Transcript lines ──────────────────────────────────────────────────────
+    // Each utterance is one .seg line, created on its first streamed word and
+    // replaced by the final transcript. In Smart mode it carries a speaker label.
+    function findSeg(itemId) {
+      return itemId ? transcriptArea.querySelector(`.seg[data-item="${CSS.escape(itemId)}"]`) : null;
+    }
+
+    function segFor(src, itemId) {
+      let seg = findSeg(itemId);
+      if (seg) return seg;
+      if (window.shouldClearTranscriptOnNextInput) {
+        transcriptArea.innerText = '';
+        window.shouldClearTranscriptOnNextInput = false;
+        smart.deferredMic.clear();
+      }
+      seg = document.createElement('div');
+      seg.className = 'seg partial';
+      seg.dataset.item = itemId || ('local-' + Date.now() + Math.random());
+      seg.dataset.src = src;
+      if (window.__smartMode) {
+        const who = document.createElement('span');
+        who.className = 'seg-who ' + src;
+        who.contentEditable = 'false';
+        who.textContent = SPEAKER_LABEL[src];
+        seg.appendChild(who);
+      }
+      const text = document.createElement('span');
+      text.className = 'seg-text';
+      seg.appendChild(text);
+      transcriptArea.appendChild(seg);
+      return seg;
+    }
+
+    function onChannelMessage(src, data) {
+      const st = smart.src[src];
+      switch (data.type) {
+        case 'speech_started':
+          st.speaking = true;
+          if (data.item_id) st.pending.set(data.item_id, Date.now());
+          smartOnSpeechStarted(src);
+          break;
+
+        case 'speech_stopped':
+          st.speaking = false;
+          if (data.item_id) st.pending.set(data.item_id, Date.now());
+          smartEvaluate();
+          break;
+
+        case 'transcript_delta': {
+          const seg = segFor(src, data.item_id);
+          seg.querySelector('.seg-text').textContent += data.text;
+          transcriptArea.scrollTop = transcriptArea.scrollHeight;
+          break;
+        }
+
+        case 'transcript_final': {
+          st.pending.delete(data.item_id);
+          const text = (data.text || '').trim();
+          let seg = findSeg(data.item_id);
+          if (!text) {
+            if (seg) seg.remove();
+          } else {
+            seg = seg || segFor(src, data.item_id);
+            seg.querySelector('.seg-text').textContent = text;
+            if (src === 'system') {
+              smart.recentSystem.push({ words: new Set(normWords(text)), t: Date.now() });
+              seg.classList.remove('partial');
+              resolveDeferredMic(false);
+            } else if (window.__smartMode && channels.system) {
+              // Without headphones the mic also hears the interviewer. Compare with the
+              // interviewer's transcript (now, or once it arrives) and drop repeats.
+              smart.deferredMic.add(seg);
+              resolveDeferredMic(false);
+            } else {
+              seg.classList.remove('partial');
+            }
+            transcriptArea.scrollTop = transcriptArea.scrollHeight;
+          }
+          smartEvaluate();
+          break;
+        }
+
+        case 'error':
+          console.error('WebSocket Application Error:', data.message);
+          statusText.innerText = 'App Error';
+          statusDot.className = 'dot error';
+          responseArea.innerText = `Error: ${data.message}\n\nPlease check your OpenAI API key and credits.`;
+          stopCapture();
+          break;
+      }
+    }
+
+    // ── Capture channels ─────────────────────────────────────────────────────
+    function channelWsUrl(src) {
+      const url = window.backendWsUrl('/realtime');
+      return url + (url.includes('?') ? '&' : '?') + 'source=' + src;
+    }
+
+    async function openChannel(src) {
+      const stream = src === 'system' ? await getSystemAudioStream() : await getMicAudioStream();
+      if (!stream) { statusText.innerText = 'Stream Failed'; return false; }
+
+      const ch = { input: null, stream, socket: null, ctx: null, node: null, sink: null, rms: 0 };
+      channels[src] = ch;
+      ch.socket = new WebSocket(channelWsUrl(src));
+
+      ch.socket.onopen = () => {
+        console.log(`WebSocket Connected (${src})`);
+        updateCaptureStatus();
+        startAudioPipeline(ch).catch(err => {
+          console.error('Audio pipeline error:', err);
+          logError('Audio pipeline error: ' + err.message);
+          stopCapture();
+        });
+      };
+
+      ch.socket.onmessage = (event) => onChannelMessage(src, JSON.parse(event.data));
+
+      ch.socket.onerror = (err) => {
+        console.error('WebSocket Error:', err);
+        logError('WebSocket Error: ' + (err.message || 'connection failed'));
+        statusText.innerText = 'Connection Error';
+        statusDot.className = 'dot error';
+        responseArea.innerText = 'Cannot connect to the backend server.\n\nMake sure the app is fully loaded and try again. If this persists, restart the application.';
+      };
+
+      ch.socket.onclose = (event) => {
+        console.log(`WebSocket Closed (${src})`, event ? event.code : 'unknown', event ? event.reason : '');
+        if (channels[src] !== ch) return;  // closed on purpose
+        if (event && event.code && event.code !== 1000 && event.code !== 1001 && event.code !== 1005) {
+          statusText.innerText = 'Connection Error';
+          statusDot.className = 'dot error';
+          let reason = event.reason || 'Unknown error (Check your API key credits or model string)';
+          responseArea.innerText = `WebSocket connection closed by server.\nCode: ${event.code}\nReason: ${reason}\n\nMake sure your OpenAI API key is still valid and has billing credits enabled.`;
+        }
+        stopCapture();
+      };
+      updateButtons();
+      return true;
+    }
+
+    function closeChannel(src) {
+      const ch = channels[src];
+      if (!ch) return;
+      delete channels[src];
+      if (ch.node) {
+        if (ch.node.port) ch.node.port.onmessage = null;
+        ch.node.onaudioprocess = null;
+        ch.node.disconnect();
+      }
+      if (ch.sink) ch.sink.disconnect();
+      if (ch.input) ch.input.disconnect();
+      if (ch.stream) ch.stream.getTracks().forEach(t => t.stop());
+      if (ch.ctx) { ch.ctx.close(); ch.ctx = null; }
+      if (ch.socket) ch.socket.close();
+      smart.src[src].speaking = false;
+      smart.src[src].pending.clear();
+    }
+
     async function startCapture(mode) {
       if (!window.isSessionActive) {
         statusText.innerText = 'Start a session first';
@@ -1523,86 +1893,27 @@
         return;
       }
 
-      if (mode === 'system') transcriptArea.innerText = '';
-
-      if (activeMode === mode) { stopCapture(); return; }
-      if (activeMode) { stopCapture(); await new Promise(r => setTimeout(r, 100)); }
-
       try {
+        if (window.__smartMode) {
+          // Smart: System starts/stops listening to both sides; Mic mutes/unmutes you
+          if (mode === 'mic') {
+            if (channels.mic) { closeChannel('mic'); updateCaptureStatus(); }
+            else await openChannel('mic');
+            return;
+          }
+          if (channels.system) { stopCapture(); return; }
+          statusText.innerText = 'Connecting...';
+          resetSmartState();
+          await openChannel('system');
+          if (channels.system && !channels.mic) await openChannel('mic');
+          return;
+        }
+
+        if (mode === 'system') transcriptArea.innerText = '';
+        if (channels[mode]) { stopCapture(); return; }
+        if (Object.keys(channels).length) { stopCapture(); await new Promise(r => setTimeout(r, 100)); }
         statusText.innerText = 'Connecting...';
-        let stream = mode === 'system' ? await getSystemAudioStream() : await getMicAudioStream();
-
-        if (!stream) { statusText.innerText = 'Stream Failed'; return; }
-
-        currentStream = stream;
-        socket = new WebSocket(window.backendWsUrl('/realtime'));
-
-        socket.onopen = () => {
-          console.log('WebSocket Connected');
-          statusText.innerText = mode === 'system' ? 'Capturing System...' : 'Capturing Mic...';
-          statusDot.className = 'dot connected';
-          activeMode = mode;
-          updateButtons();
-
-          // Set the input indicator once, not on every audio callback
-          const inputModeDot = document.getElementById('input-indicator-dot');
-          const inputModeText = document.getElementById('input-mode-text');
-          if (inputModeDot) inputModeDot.className = 'dot connected';
-          if (inputModeText) {
-            inputModeText.innerText = mode === 'system' ? 'System' : 'Mic';
-            inputModeText.style.color = '#00d4ff';
-          }
-
-          startAudioPipeline(currentStream).catch(err => {
-            console.error('Audio pipeline error:', err);
-            logError('Audio pipeline error: ' + err.message);
-            stopCapture();
-          });
-        };
-
-        socket.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.type === 'transcript') {
-            if (window.shouldClearTranscriptOnNextInput) {
-              transcriptArea.innerText = '';
-              window.shouldClearTranscriptOnNextInput = false;
-            }
-            transcriptArea.innerText += data.text;
-            transcriptArea.scrollTop = transcriptArea.scrollHeight;
-            // Hands-free: (re)arm the silence timer on every new transcript chunk
-            scheduleAutoFire(AUTO_SILENCE_MS);
-          } else if (data.type === 'speech_stopped') {
-            // Hands-free: VAD says the speaker stopped — shorter confirmation window
-            scheduleAutoFire(AUTO_SPEECHSTOP_MS);
-          } else if (data.type === 'error') {
-            console.error('WebSocket Application Error:', data.message);
-            statusText.innerText = 'App Error';
-            statusDot.className = 'dot error';
-            responseArea.innerText = `Error: ${data.message}\n\nPlease check your OpenAI API key and credits.`;
-            if (activeMode) stopCapture();
-          }
-        };
-
-        socket.onerror = (err) => {
-          console.error('WebSocket Error:', err);
-          logError('WebSocket Error: ' + (err.message || 'connection failed'));
-          statusText.innerText = 'Connection Error';
-          statusDot.className = 'dot error';
-          responseArea.innerText = 'Cannot connect to the backend server.\n\nMake sure the app is fully loaded and try again. If this persists, restart the application.';
-        };
-
-        socket.onclose = (event) => {
-          console.log('WebSocket Closed', event ? event.code : 'unknown', event ? event.reason : '');
-          clearAutoFireTimer();
-          if (event && event.code && event.code !== 1000 && event.code !== 1001 && event.code !== 1005) {
-            statusText.innerText = 'Connection Error';
-            statusDot.className = 'dot error';
-            let reason = event.reason || 'Unknown error (Check your API key credits or model string)';
-            responseArea.innerText = `WebSocket connection closed by server.\nCode: ${event.code}\nReason: ${reason}\n\nMake sure your OpenAI API key is still valid and has billing credits enabled.`;
-          }
-          if (activeMode) stopCapture();
-        };
-
+        await openChannel(mode);
       } catch (err) {
         console.error('Start Error:', err);
         logError('Start Error: ' + err.message);
@@ -1613,38 +1924,39 @@
     }
 
     function stopCapture() {
-      clearAutoFireTimer();   // don't let a pending auto-fire run after capture stops
-      if (processor) {
-        if (processor.port) processor.port.onmessage = null;
-        processor.onaudioprocess = null;
-        processor.disconnect();
-        processor = null;
-      }
-      if (sinkNode) { sinkNode.disconnect(); sinkNode = null; }
-      if (source) { source.disconnect(); source = null; }
-      if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
-      if (audioContext) { audioContext.close(); audioContext = null; }
-      if (socket) { socket.close(); socket = null; }
+      clearTimeout(smart.fireTimer);  // don't let a pending auto-answer run after capture stops
+      Object.keys(channels).forEach(closeChannel);
+      updateCaptureStatus();
+    }
 
-      activeMode = null;
-      statusText.innerText = 'Ready';
-      statusDot.className = 'dot';
-
+    function updateCaptureStatus() {
+      const sys = !!channels.system, mic = !!channels.mic;
       const inputModeDot = document.getElementById('input-indicator-dot');
       const inputModeText = document.getElementById('input-mode-text');
       const volumeBar = document.getElementById('volume-bar');
-      if (inputModeDot) inputModeDot.className = 'dot';
-      if (inputModeText) { inputModeText.innerText = '--'; inputModeText.style.color = '#888'; }
-      if (volumeBar) volumeBar.style.width = '0%';
-
+      if (!sys && !mic) {
+        statusText.innerText = 'Ready';
+        statusDot.className = 'dot';
+        if (inputModeDot) inputModeDot.className = 'dot';
+        if (inputModeText) { inputModeText.innerText = '--'; inputModeText.style.color = '#888'; }
+        if (volumeBar) volumeBar.style.width = '0%';
+      } else {
+        statusText.innerText = sys && mic ? 'Listening (Smart)...' : sys ? 'Capturing System...' : 'Capturing Mic...';
+        statusDot.className = 'dot connected';
+        if (inputModeDot) inputModeDot.className = 'dot connected';
+        if (inputModeText) {
+          inputModeText.innerText = sys && mic ? 'Both' : sys ? 'System' : 'Mic';
+          inputModeText.style.color = '#00d4ff';
+        }
+      }
       updateButtons();
     }
 
     function updateButtons() {
       btnSystem.className = 'btn';
       btnMic.className = 'btn';
-      if (activeMode === 'system') btnSystem.classList.add('active');
-      else if (activeMode === 'mic') btnMic.classList.add('active');
+      if (channels.system) btnSystem.classList.add('active');
+      if (channels.mic) btnMic.classList.add('active');
     }
 
     btnSystem.onclick = () => {
