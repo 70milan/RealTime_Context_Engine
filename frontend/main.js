@@ -14,6 +14,12 @@ let lastMiniPosition = null;
 let isQuitting = false;
 let backendLogBuffer = []; // Buffer logs that fire before window is ready
 
+// Per-launch secret shared with the backend (env var) and our own renderer (IPC).
+// The backend rejects requests without it, so other web pages / local programs
+// can't read the API key or call the API on 127.0.0.1:5050.
+const BACKEND_TOKEN = require('crypto').randomBytes(32).toString('hex');
+ipcMain.on('get-backend-token', (event) => { event.returnValue = app.isPackaged ? BACKEND_TOKEN : ''; });
+
 // ============ FILE LOGGER ============
 const LOG_FILE = path.join(app.getPath('userData'), 'app-log.txt');
 
@@ -319,6 +325,7 @@ function startBackend() {
   console.log('Starting backend from:', backendPath);
 
   backendProcess = spawn(backendPath, [], {
+    env: { ...process.env, WINHOST_TOKEN: BACKEND_TOKEN },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,
     windowsHide: true
@@ -860,13 +867,15 @@ app.whenReady().then(() => {
   const iconPath = path.join(__dirname, 'icon.ico');
   tray = new Tray(nativeImage.createFromPath(iconPath));
   tray.setToolTip('Windows Command Controller');
+  // win is null until the backend answers /health — guard so an early click can't crash the app
+  const toggleWin = () => { if (win && !win.isDestroyed()) (win.isVisible() ? win.hide() : win.show()); };
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show / Hide', click: () => (win.isVisible() ? win.hide() : win.show()) },
+    { label: 'Show / Hide', click: toggleWin },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]);
   tray.setContextMenu(contextMenu);
-  tray.on('click', () => (win.isVisible() ? win.hide() : win.show()));
+  tray.on('click', toggleWin);
 
   /* ---- IPC: Export Conversation ---- */
   ipcMain.handle('export-conversation', async (event, content, defaultName) => {

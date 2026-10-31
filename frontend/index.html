@@ -6,6 +6,8 @@
   <title>Windows Command Controller</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="backend-auth.js"></script>
+  <script src="format.js"></script>
 
   <link rel="stylesheet" href="setup.css">
   <style>
@@ -1437,7 +1439,7 @@
         if (!stream) { statusText.innerText = 'Stream Failed'; return; }
 
         currentStream = stream;
-        socket = new WebSocket('ws://127.0.0.1:5050/realtime');
+        socket = new WebSocket(window.backendWsUrl('/realtime'));
 
         socket.onopen = () => {
           console.log('WebSocket Connected');
@@ -1687,29 +1689,7 @@
           if (!fullResponse.trim()) throw new Error('Empty response from model');
 
           // Format the completed response (code blocks, inline code, bold)
-          let formattedResponse = fullResponse.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-          const codeBlocks = [], inlineCodeBlocks = [];
-
-          formattedResponse = formattedResponse.replace(/`{3,}\s*([a-zA-Z0-9_#\+\-]+)?\s*\n([\s\S]*?)\n?\s*`{3,}/g, (match, lang, code) => {
-            const language = lang || 'plaintext';
-            const trimmedCode = code.replace(/^\n+|\n+$/g, '');
-            const escapedCode = trimmedCode.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const placeholder = `___CODE_BLOCK_${codeBlocks.length}___`;
-            const copyBtnHtml = `<span class="copy-code-btn" onclick="copyCodeBlock(this)" style="position:absolute;top:8px;right:12px;color:rgba(255,255,255,0.4);font-size:11px;cursor:default;z-index:10;font-family:monospace;">[copy]</span>`;
-            codeBlocks.push(`<div style="position:relative;margin:8px 0;">${copyBtnHtml}<pre style="margin:0;padding-top:36px;"><code class="language-${language}">${escapedCode}</code></pre></div>`);
-            return placeholder;
-          });
-          formattedResponse = formattedResponse.replace(/`([^`]+)`/g, (match, code) => {
-            const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const placeholder = `___INLINE_CODE_${inlineCodeBlocks.length}___`;
-            inlineCodeBlocks.push(`<code>${escapedCode}</code>`);
-            return placeholder;
-          });
-          formattedResponse = formattedResponse.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-          formattedResponse = formattedResponse.replace(/^#{1,6}\s+/gm, '');
-          formattedResponse = formattedResponse.replace(/\n/g, '<br>');
-          codeBlocks.forEach((block, i) => { formattedResponse = formattedResponse.replace(`___CODE_BLOCK_${i}___`, block); });
-          inlineCodeBlocks.forEach((code, i) => { formattedResponse = formattedResponse.replace(`___INLINE_CODE_${i}___`, code); });
+          const formattedResponse = window.formatResponseText(fullResponse);  // escapes everything (format.js)
 
           responseArea.innerHTML = formattedResponse;
           responseArea.querySelectorAll('pre code').forEach(block => { hljs.highlightElement(block); });
@@ -1743,9 +1723,9 @@
             aiRow.style.cssText = 'display: flex; justify-content: flex-start; margin-bottom: 5px;';
             const aiBubble = document.createElement('div');
             aiBubble.style.cssText = 'max-width: 80%; background: rgba(30,40,35,0.7); border: 1px solid rgba(100,255,150,0.12); border-radius: 14px 14px 14px 3px; padding: 8px 12px; font-size: 11px; color: rgba(220,240,225,0.85); line-height: 1.5; word-break: break-word; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;';
-            const usedModelLabel = (usedModel || window.selectedModel || 'AI').toUpperCase();
+            const usedModelLabel = window.escapeHtml((usedModel || window.selectedModel || 'AI').toUpperCase());
             const cleanResponse = fullResponse.replace(/\n{3,}/g, '\n').trim();
-            const formattedConvo = window.formatConvoText ? window.formatConvoText(cleanResponse) : cleanResponse;
+            const formattedConvo = window.formatConvoText(cleanResponse);
 
             const aiHeader = document.createElement('div');
             aiHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
@@ -1782,7 +1762,7 @@
 
             ipcRenderer.send('convo-update', {
               question: saveToContext ? '📷 SCREEN + SAVE (context saved)' : '📷 SCREEN (one-shot, no context)',
-              response: formattedConvo,
+              response: cleanResponse,  // raw markdown — the convo window formats + escapes it
               model: usedModel || window.selectedModel || 'AI',
               timestamp: new Date().toISOString(),
               ttft: ttft,

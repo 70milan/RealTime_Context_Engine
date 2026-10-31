@@ -6,11 +6,16 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('public_key.pem', '.')],
-    hiddenimports=['tiktoken', 'tiktoken_ext', 'tiktoken_ext.openai_public', 'regex', 'cryptography', 'docx'],
+    hiddenimports=['cpuinfo', 'tiktoken', 'tiktoken_ext', 'tiktoken_ext.openai_public', 'regex', 'cryptography', 'docx'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # Keep the frozen backend lean: the global Python used to build it had the
+    # data-science stack installed, and PyInstaller was bundling all of it.
+    excludes=['numpy', 'pandas', 'scipy', 'matplotlib', 'IPython', 'jupyter_client',
+              'jupyter_core', 'ipykernel', 'notebook', 'PIL', 'torch', 'tensorflow',
+              'sklearn', 'pytest', '_pytest', 'tornado', 'zmq', 'tkinter', 'setuptools',
+              'pkg_resources', 'sqlalchemy', 'pyarrow', 'numba', 'llvmlite', 'sympy'],
     noarchive=False,
     optimize=0,
 )
@@ -26,7 +31,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # UPX adds per-launch decompression CPU and trips AV heuristics
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

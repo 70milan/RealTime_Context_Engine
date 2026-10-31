@@ -39,54 +39,7 @@ function colorByThreshold(value, low, high) {
             : 'rgba(220, 110, 110, 0.9)'; // red
 }
 
-// Global: Format text with code blocks for conversation entries
-window.formatConvoText = function (text) {
-    if (!text) return '';
-    let formatted = text;
-    const codeBlocks = [];
-    const inlineCodeBlocks = [];
-
-    // Normalize line endings
-    formatted = formatted.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-    // Fenced code blocks: ```lang\n...\n``` (lenient: handles variations)
-    formatted = formatted.replace(/`{3,}\s*([a-zA-Z0-9_#\+\-]+)?\s*\n([\s\S]*?)\n?\s*`{3,}/g, (match, lang, code) => {
-        const language = lang || 'plaintext';
-        const trimmedCode = code.replace(/^\n+|\n+$/g, '');
-        const escapedCode = trimmedCode.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const placeholder = `___CONVO_CODE_${codeBlocks.length}___`;
-        codeBlocks.push(`<pre style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:8px;margin:4px 0;overflow-x:auto;"><code class="language-${language}" style="font-size:10px;line-height:1.3;">${escapedCode}</code></pre>`);
-        return placeholder;
-    });
-
-    // Inline code: `code`
-    formatted = formatted.replace(/`([^`]+)`/g, (match, code) => {
-        const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const placeholder = `___CONVO_INLINE_${inlineCodeBlocks.length}___`;
-        inlineCodeBlocks.push(`<code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px;font-size:10px;">${escapedCode}</code>`);
-        return placeholder;
-    });
-
-    // Remove ** asterisks specifically for language labels before code blocks, or format as bold 
-    // We parse basic bold **text** to <strong>text</strong> so asterisks don't show
-    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-    // Remove markdown headings (e.g., ### Python: -> Python:)
-    formatted = formatted.replace(/^#{1,6}\s+/gm, '');
-
-    // Newlines to <br>
-    formatted = formatted.replace(/\n/g, '<br>');
-
-    // Restore placeholders
-    codeBlocks.forEach((block, i) => {
-        formatted = formatted.replace(`___CONVO_CODE_${i}___`, block);
-    });
-    inlineCodeBlocks.forEach((code, i) => {
-        formatted = formatted.replace(`___CONVO_INLINE_${i}___`, code);
-    });
-
-    return formatted;
-};
+// formatConvoText / formatResponseText / escapeHtml live in format.js
 
 function initializeStreamingAI() {
     console.log('[STREAM] Initializing streaming AI...');
@@ -272,48 +225,8 @@ function initializeStreamingAI() {
                 return;
             }
 
-            // Format complete response
-            let formattedResponse = fullResponse;
-            const codeBlocks = [];
-            const inlineCodeBlocks = [];
-
-            // Normalize ALL line endings to \n (GPT-5/reasoning models may use \r\n or \r)
-            formattedResponse = formattedResponse.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-            // Match fenced code blocks: 3+ backticks, optional language, content, closing backticks
-            // Lenient regex: handles languages with symbols (c++, c#) and whitespace variations
-            formattedResponse = formattedResponse.replace(/`{3,}\s*([a-zA-Z0-9_#\+\-]+)?\s*\n([\s\S]*?)\n?\s*`{3,}/g, (match, lang, code) => {
-                const language = lang || 'plaintext';
-                const trimmedCode = code.replace(/^\n+|\n+$/g, '');
-                const escapedCode = trimmedCode.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                const placeholder = `___CODE_BLOCK_${codeBlocks.length}___`;
-                const copyBtnHtml = `<span class="copy-code-btn" onclick="copyCodeBlock(this)" style="position: absolute; top: 8px; right: 12px; color: rgba(255,255,255,0.4); font-size: 11px; cursor: pointer; transition: all 0.2s; z-index: 10; font-family: monospace;" onmouseover="this.style.color='#fff';" onmouseout="this.style.color='rgba(255,255,255,0.4)';">[copy]</span>`;
-                codeBlocks.push(`<div style="position: relative; margin: 8px 0;">${copyBtnHtml}<pre style="margin: 0; padding-top: 36px;"><code class="language-${language}">${escapedCode}</code></pre></div>`);
-                return placeholder;
-            });
-
-            formattedResponse = formattedResponse.replace(/`([^`]+)`/g, (match, code) => {
-                const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                const placeholder = `___INLINE_CODE_${inlineCodeBlocks.length}___`;
-                inlineCodeBlocks.push(`<code>${escapedCode}</code>`);
-                return placeholder;
-            });
-
-            // Handle Markdown bold **text**
-            formattedResponse = formattedResponse.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-            // Remove markdown headings (e.g., ### Python: -> Python:)
-            formattedResponse = formattedResponse.replace(/^#{1,6}\s+/gm, '');
-
-            formattedResponse = formattedResponse.replace(/\n/g, '<br>');
-
-            codeBlocks.forEach((block, i) => {
-                formattedResponse = formattedResponse.replace(`___CODE_BLOCK_${i}___`, block);
-            });
-
-            inlineCodeBlocks.forEach((code, i) => {
-                formattedResponse = formattedResponse.replace(`___INLINE_CODE_${i}___`, code);
-            });
+            // Format complete response (escapes everything — see format.js)
+            const formattedResponse = window.formatResponseText(fullResponse);
 
             responseArea.innerHTML = formattedResponse;
 
@@ -322,7 +235,7 @@ function initializeStreamingAI() {
             if (usedModel) {
                 const modelBadge = document.createElement('div');
                 modelBadge.className = 'model-signature';
-                const displayModel = usedModel.replace(/\bgpt\b/gi, 'GPT').toUpperCase();
+                const displayModel = window.escapeHtml(usedModel.replace(/gpt/gi, 'GPT').toUpperCase());
                 let timeString = '';
                 if (ttft > 0 && totalTime > 0) {
                     timeString = ` (${ttft.toFixed(1)}s START / ${totalTime.toFixed(1)}s TOTAL)`;
@@ -368,11 +281,11 @@ function initializeStreamingAI() {
                 ].join('');
                 if (wasScreenshot) {
                     const labelText = transcript
-                        ? `<div style="margin-bottom:6px;">${window.formatConvoText ? window.formatConvoText(transcript) : transcript}</div>`
+                        ? `<div style="margin-bottom:6px;">${window.formatConvoText(transcript)}</div>`
                         : '';
                     userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:4px;letter-spacing:0.5px;">📷 SCREEN CAPTURE · ${entryTime}</div>${labelText}<img src="${wasScreenshot}" style="max-width:100%;border-radius:6px;border:1px solid rgba(255,255,255,0.12);display:block;">`;
                 } else {
-                    const formattedInput = window.formatConvoText ? window.formatConvoText(transcript) : transcript;
+                    const formattedInput = window.formatConvoText(transcript);
                     userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${entryTime}</div>${formattedInput}`;
                 }
                 userRow.appendChild(userBubble);
@@ -390,9 +303,9 @@ function initializeStreamingAI() {
                     'word-break: break-word; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;'
                 ].join('');
 
-                const modelLabel = usedModel ? usedModel.toUpperCase() : 'AI';
+                const modelLabel = window.escapeHtml(usedModel ? usedModel.toUpperCase() : 'AI');
                 const cleanResponse = fullResponse.replace(/\n{3,}/g, '\n').replace(/\[Model Used:.*\]/, '').trim();
-                const formattedConvo = window.formatConvoText ? window.formatConvoText(cleanResponse) : cleanResponse;
+                const formattedConvo = window.formatConvoText(cleanResponse);
 
                 // Header row: model · time  +  [copy] right-aligned
                 const aiHeader = document.createElement('div');
@@ -445,7 +358,7 @@ function initializeStreamingAI() {
                     question: wasScreenshot
                         ? ('📷 (screenshot)' + (transcript ? ' ' + transcript : ''))
                         : transcript,
-                    response: formattedConvo,
+                    response: cleanResponse,  // raw markdown — the convo window formats + escapes it
                     model: usedModel,
                     timestamp: new Date().toISOString(),
                     ttft: ttft,

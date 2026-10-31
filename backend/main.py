@@ -9,6 +9,7 @@ import sys
 import io
 
 import json
+import re
 import asyncio
 import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -178,6 +179,38 @@ app.add_middleware(
 async def health_check():
     return {"status": "ok"}
 
+# =============================================================================
+# LOCAL API AUTH
+# =============================================================================
+# Any web page open in the user's browser can send requests to 127.0.0.1:5050.
+# Electron generates a random per-launch secret and passes it in WINHOST_TOKEN;
+# every request must echo it back (X-App-Token header, or ?token= for the
+# WebSocket, which can't carry custom headers). A web page never learns it.
+# Unset (dev: `uvicorn main:app` run by hand) -> auth disabled with a warning.
+import hmac
+from fastapi.responses import JSONResponse
+
+APP_TOKEN = os.getenv("WINHOST_TOKEN", "")
+ALLOWED_HOSTS = {"127.0.0.1:5050", "localhost:5050"}  # blocks DNS-rebinding
+if not APP_TOKEN:
+    print("[SECURITY WARNING] WINHOST_TOKEN not set - local API auth DISABLED (dev mode)")
+
+def _token_ok(supplied: Optional[str]) -> bool:
+    if not APP_TOKEN:
+        return True
+    return bool(supplied) and hmac.compare_digest(supplied, APP_TOKEN)
+
+@app.middleware("http")
+async def require_app_token(request: Request, call_next):
+    # CORS preflights and the readiness probe carry no data and stay open
+    if request.method == "OPTIONS" or request.url.path == "/health":
+        return await call_next(request)
+    if request.headers.get("host", "") not in ALLOWED_HOSTS:
+        return JSONResponse({"error": "forbidden host"}, status_code=403)
+    if not _token_ok(request.headers.get("x-app-token")):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return await call_next(request)
+
 # Debug middleware to log raw requests
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -230,6 +263,10 @@ def get_api_key():
 
 @app.websocket("/realtime")
 async def realtime(ws: WebSocket):
+    # WebSockets bypass CORS and HTTP middleware entirely - check Host + token here
+    if ws.headers.get("host", "") not in ALLOWED_HOSTS or not _token_ok(ws.query_params.get("token")):
+        await ws.close(code=1008)
+        return
     await ws.accept()
     
     access_allowed = check_access_allowed()
@@ -394,33 +431,6 @@ async def get_available_models():
             "price_output": pricing.get("output", 0)
         })
     return {"models": models, "default": DEFAULT_TEXT_MODEL}
-
-
-@app.get("/debug/auth")
-async def debug_auth():
-    ak = get_api_key()
-    return {
-        "profile_key_prefix": ak[:10] if ak else "None",
-        "profile_key_suffix": ak[-5:] if ak else "None",
-        "profile_key_len": len(ak) if ak else 0,
-        "env_key_prefix": os.getenv("OPENAI_API_KEY")[:10] if os.getenv("OPENAI_API_KEY") else "None",
-        "env_org_id": os.getenv("OPENAI_ORG_ID"),
-        "env_project_id": os.getenv("OPENAI_PROJECT_ID"),
-        "profile_cache_type": str(type(profile_cache)),
-        "base_dir": str(BASE_DIR),
-        "profile_path_exists": (BASE_DIR / "user_profile.json").exists()
-    }
-
-# Debug endpoint to test raw requests
-@app.post("/ai/debug")
-async def debug_ai_request(request: Dict[str, Any]):
-    print(f"\n[DEBUG RAW] Received keys: {list(request.keys())}")
-    for k, v in request.items():
-        if k == 'screenshot':
-            print(f"  {k}: <{len(str(v))} chars>")
-        else:
-            print(f"  {k}: {v}")
-    return {"status": "ok", "received_keys": list(request.keys())}
 
 
 # Persistent profile support -------------------------------------------------
@@ -607,7 +617,8 @@ async def summarize_old_turns(turns_to_summarize: list, api_key: str) -> str:
 
 @app.get('/profile')
 async def get_profile():
-    return profile_cache
+    # Never return secrets over HTTP - the UI doesn't need them back
+    return {k: v for k, v in (profile_cache or {}).items() if k not in ('openai_api_key', 'license_key')}
 
 @app.post('/validate-api-key')
 async def validate_api_key(data: Dict[str, str]):
@@ -669,8 +680,13 @@ def get_hwid():
         # 1. CPU Serial/Info (same as original)
         cpu_info = ""
         try:
-            import cpuinfo
-            info = cpuinfo.get_cpu_info()
+            # py-cpuinfo's CPUID probe runs in a multiprocessing child with a
+            # busy-wait join; in the frozen exe that re-launches the whole backend.
+            # On Windows brand_raw comes from the registry before CPUID is tried,
+            # so skipping CPUID leaves the HWID unchanged (and takes ~80ms not ~3s).
+            from cpuinfo import cpuinfo as _ci
+            _ci.DataSource.can_cpuid = False
+            info = _ci._get_cpu_info_internal()
             cpu_info = f"{info.get('brand_raw', '')}_{info.get('arch', '')}"
         except (ImportError, Exception):
             cpu_info = platform.processor()
@@ -750,19 +766,6 @@ def check_saved_license():
 # function definitions below to avoid NameError in PyInstaller exe.
 
 import hashlib
-@app.get('/debug/key-info')
-async def debug_key_info():
-    """Return fingerprint of the current public key."""
-    try:
-        # Use the actual loader logic to see what the app sees
-        content = load_public_key()
-        if content:
-            fingerprint = hashlib.sha256(content).hexdigest()[:16]
-            return {"status": "ok", "fingerprint": fingerprint, "source": "See logs"}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-    return {"status": "error", "error": "Key not found"}
-
 def load_public_key():
     """Load public key from file (Prioritize Bundled)."""
     # 1. Try bundled key first (if frozen)
@@ -900,6 +903,31 @@ async def post_profile(data: Dict[str, Any]):
 SESSIONS_DIR = BASE_DIR / 'sessions'
 current_session_name = None
 
+from fastapi import HTTPException
+
+_BAD_NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+def safe_session_dir(session_name: str) -> Path:
+    """Map a client-supplied session name to its folder, refusing anything that
+    could escape SESSIONS_DIR ('..', separators, drive letters, absolute paths).
+    Without this, DELETE /session/delete/..%2F.. would rmtree outside the app."""
+    name = (session_name or '').strip()
+    if not name or name in ('.', '..') or _BAD_NAME_CHARS.search(name):
+        raise HTTPException(status_code=400, detail="Invalid session name")
+    root = SESSIONS_DIR.resolve()
+    target = (root / name).resolve()
+    if target.parent != root:
+        raise HTTPException(status_code=400, detail="Invalid session name")
+    return target
+
+def safe_upload_name(filename: str) -> str:
+    """Keep only the base name of an uploaded file, minus path tricks."""
+    name = Path((filename or '').replace(chr(92), '/')).name  # chr(92) = backslash
+    name = _BAD_NAME_CHARS.sub('_', name).strip(' .')
+    if not name or not name.lower().endswith('.docx'):
+        raise HTTPException(status_code=400, detail="Only .docx files supported")
+    return name
+
 def save_conversation_to_session(question: str, response: str, had_screenshot: bool = False, model: str = "", response_time: float = 0, total_time: float = 0, cost: float = 0, input_tokens: int = 0, output_tokens: int = 0):
     """Helper function to save a Q&A pair to the current session"""
     global current_session_name
@@ -907,7 +935,7 @@ def save_conversation_to_session(question: str, response: str, had_screenshot: b
     if not current_session_name:
         return
     
-    session_dir = SESSIONS_DIR / current_session_name
+    session_dir = safe_session_dir(current_session_name)
     conv_file = session_dir / 'conversation.json'
     
     try:
@@ -945,7 +973,7 @@ async def create_session(data: Dict[str, str]):
     if not session_name:
         return {"status": "error", "error": "Session name is required"}
     
-    session_dir = SESSIONS_DIR / session_name
+    session_dir = safe_session_dir(session_name)
     try:
         session_dir.mkdir(parents=True, exist_ok=True)
         current_session_name = session_name
@@ -961,11 +989,8 @@ async def upload_session_resume(file: UploadFile = File(...), session_name: str 
     global profile_cache, current_session_name
     
     try:
-        filename = file.filename
-        if not filename.lower().endswith('.docx'):
-            return {"status": "error", "error": "Only .docx files supported"}
-        
-        session_dir = SESSIONS_DIR / session_name
+        filename = safe_upload_name(file.filename)
+        session_dir = safe_session_dir(session_name)
         session_dir.mkdir(parents=True, exist_ok=True)
         
         # Save resume file to session folder
@@ -1002,7 +1027,7 @@ async def save_session_data(data: Dict[str, Any]):
     if not session_name:
         return {"status": "error", "error": "Session name is required"}
     
-    session_dir = SESSIONS_DIR / session_name
+    session_dir = safe_session_dir(session_name)
     session_dir.mkdir(parents=True, exist_ok=True)
     
     # Start/Reset demo timer if not licensed
@@ -1072,7 +1097,7 @@ async def save_conversation_entry(data: Dict[str, Any]):
     if not session_name:
         return {"status": "error", "error": "No active session"}
     
-    session_dir = SESSIONS_DIR / session_name
+    session_dir = safe_session_dir(session_name)
     conv_file = session_dir / 'conversation.json'
     
     try:
@@ -1110,7 +1135,7 @@ async def end_session(data: Dict[str, str]):
     if not session_name:
         return {"status": "ok", "message": "No session to end"}
     
-    session_dir = SESSIONS_DIR / session_name
+    session_dir = safe_session_dir(session_name)
     
     try:
         # Save final conversation history to session
@@ -1193,7 +1218,7 @@ async def load_session(session_name: str):
     """Load a previous session's data"""
     global current_session_name, profile_cache, session_usage, demo_session_start
     try:
-        session_dir = SESSIONS_DIR / session_name
+        session_dir = safe_session_dir(session_name)
         session_file = session_dir / 'session.json'
         
         if not session_file.exists():
@@ -1273,7 +1298,7 @@ async def delete_session(session_name: str):
     """Delete a session and all its contents"""
     try:
         import shutil
-        session_dir = SESSIONS_DIR / session_name
+        session_dir = safe_session_dir(session_name)
         
         if not session_dir.exists():
             return {"status": "error", "error": "Session not found"}
@@ -1326,9 +1351,7 @@ async def reset_usage():
 async def upload_resume(file: UploadFile = File(...)):
     global profile_cache
     try:
-        filename = file.filename
-        if not filename.lower().endswith('.docx'):
-            return {"status": "error", "error": "Only .docx files supported"}
+        filename = safe_upload_name(file.filename)
 
         resumes_dir = BASE_DIR / 'resumes'
         print(f"Creating resumes directory at: {resumes_dir}")
