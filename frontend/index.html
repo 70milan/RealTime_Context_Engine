@@ -1708,16 +1708,40 @@
     // What the interviewer actually asked, for the convo tab: the last interviewer turn,
     // plus your clarifying question and their original question when you asked one.
     // (The AI still gets the whole exchange, including you reading back earlier answers.)
+    function questionRange(turns) {
+      let end = turns.length - 1;
+      while (end >= 0 && turns[end].src !== 'system') end--;
+      if (end < 0) return null;
+      let start = end;
+      while (start >= 2 && turns[start - 1].src === 'mic' && looksLikeQuestion(turns[start - 1].text)) start -= 2;
+      return { start, end };
+    }
+    const labelTurns = (turns) => turns
+      .filter(t => t.src === 'mic' || !isAcknowledgement(t.text))
+      .map(t => `${SPEAKER_LABEL[t.src]}: ${t.text}`).join('\n');
+
     window.getSmartQuestionText = () => {
       const turns = exchangeTurns();
-      let i = turns.length - 1;
-      while (i >= 0 && turns[i].src !== 'system') i--;
-      if (i < 0) return '';
-      let start = i;
-      while (start >= 2 && turns[start - 1].src === 'mic' && looksLikeQuestion(turns[start - 1].text)) start -= 2;
-      return turns.slice(start, i + 1)
-        .filter(t => t.src === 'mic' || !isAcknowledgement(t.text))
-        .map(t => `${SPEAKER_LABEL[t.src]}: ${t.text}`).join('\n');
+      const r = questionRange(turns);
+      return r ? labelTurns(turns.slice(r.start, r.end + 1)) : '';
+    };
+
+    // What the AI gets: the question (with any clarification), plus the tail of what
+    // you said just before it so follow-ups like "what do you mean by X?" make sense.
+    // You reading back the previous answer is mostly a repeat of the answer already
+    // in the conversation history, so only its last ~300 characters are sent.
+    const PRIOR_ME_CHARS = 300;
+    window.getSmartPromptText = () => {
+      const turns = exchangeTurns();
+      const r = questionRange(turns);
+      if (!r) return window.getSmartExchangeText();
+      let prior = '';
+      const before = turns[r.start - 1];
+      if (before && before.src === 'mic') {
+        const t = before.text;
+        prior = `Me (just said): ${t.length > PRIOR_ME_CHARS ? '…' + t.slice(-PRIOR_ME_CHARS) : t}\n`;
+      }
+      return prior + labelTurns(turns.slice(r.start, r.end + 1));
     };
 
     // Speaker-labeled exchange for the AI ('' when there are no labeled lines)
@@ -1828,13 +1852,24 @@
       if (!changed) return;
       resetSmartState();
       console.log('[SMART] Smart Interview ' + (on ? 'ON' : 'OFF'));
-      // Switch capture layout if audio was running: both sources in Smart, system only in manual
+      // Switch capture layout if audio was running: both sources in Smart, system only in manual.
+      // Turning Smart on during a session starts listening even if nothing was running.
       if (channels.system || channels.mic) {
         stopCapture();
         setTimeout(() => startCapture('system'), 150);
+      } else if (on && window.isSessionActive) {
+        startCapture('system');
       }
     };
     window.toggleSmartMode = () => window.setSmartMode(!window.__smartMode);
+
+    // Session Start (Smart mode) begins listening; Pause / End / expiry stop it
+    window.startSmartListening = () => {
+      if (window.isSessionActive && !channels.system) startCapture('system');
+    };
+    window.stopListening = () => {
+      if (channels.system || channels.mic) stopCapture();
+    };
     window.toggleAutoMode = window.toggleSmartMode;  // old hotkey name
 
     try { window.setSmartMode(localStorage.getItem('smart_interview') === 'true'); } catch (e) { }

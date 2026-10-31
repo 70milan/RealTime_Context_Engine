@@ -62,7 +62,7 @@ function initializeStreamingAI() {
         if (!transcriptArea || !responseArea) return;
 
         // Smart Interview sends the speaker-labeled exchange instead of the raw text
-        const smartText = window.__smartMode && window.getSmartExchangeText ? window.getSmartExchangeText() : '';
+        const smartText = window.__smartMode && window.getSmartPromptText ? window.getSmartPromptText() : '';
         const transcript = smartText || transcriptArea.innerText.trim();
         // Convo tab shows the interviewer's question, not everything that was said
         const displayQuestion = (smartText && window.getSmartQuestionText && window.getSmartQuestionText()) || transcript;

@@ -203,6 +203,7 @@ async function showLicensePrompt() {
         // Reset session state
         sessionCreated = false;
         window.isSessionActive = false;
+        if (window.stopListening) window.stopListening();
     } else {
         // Return to setup screen
         const overlay = document.getElementById('setup-overlay');
@@ -211,6 +212,7 @@ async function showLicensePrompt() {
         }
         sessionCreated = false;
         window.isSessionActive = false;
+        if (window.stopListening) window.stopListening();
     }
 }
 
@@ -1721,6 +1723,7 @@ async function startSessionTimer() {
     if (endBtn) endBtn.classList.remove('ended');
     statusText.innerText = isLicensed ? 'Session Running' : 'Demo (12 mins)';
     if (statusDot) statusDot.className = 'dot connected';
+    if (window.__smartMode && window.startSmartListening) window.startSmartListening();
 
     timerInterval = setInterval(() => {
         const remaining = sessionEndTime - Date.now();
@@ -1787,6 +1790,7 @@ function stopSessionTimer() {
     const statusDot = document.getElementById('status-dot');
 
     window.isSessionActive = false;
+    if (window.stopListening) window.stopListening();
 
     if (timerInterval) {
         clearInterval(timerInterval);
@@ -1921,6 +1925,7 @@ function resetSessionUI() {
 
     // Reset session state variables
     window.isSessionActive = false;
+    if (window.stopListening) window.stopListening();
     sessionCreated = false;
     sessionTimerStarted = false;
     currentSessionName = null;

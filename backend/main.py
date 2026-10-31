@@ -1604,6 +1604,7 @@ SMART_INTERVIEW_INSTRUCTIONS = (
     "candidate's own clarifying questions. If the interviewer is clarifying or changing a "
     "question you already answered earlier in this conversation, give the revised answer. "
     "Transcripts may contain small speech-to-text errors; infer the intended words. "
+    "A 'Me (just said):' line is the end of what the candidate said right before; use it only as context. "
     "Reply with only what the candidate should say: never start with 'Me:' or any speaker label."
 )
 
