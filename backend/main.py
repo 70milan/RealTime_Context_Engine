@@ -313,16 +313,16 @@ def _openai_error_message(err: dict) -> str:
 
 
 def _transcription_session(model: str, source: str, role: str) -> dict:
+    # No transcription "prompt": gpt-4o-mini-transcribe repeats it back as a
+    # transcript when it hears silence or room noise.
     transcription = {"model": model}
-    if role and model != FALLBACK_TRANSCRIBE_MODEL:
-        # Biases spelling of technical terms toward the interview's domain
-        transcription["prompt"] = f"Live job interview for a {role} role. Technical vocabulary is common."
     audio_input = {
         "format": {"type": "audio/pcm", "rate": 24000},
         "transcription": transcription,
         "turn_detection": {
             "type": "server_vad",
-            "threshold": 0.45,
+            # The mic hears keyboard, breathing and speaker bleed: ask for clearer speech
+            "threshold": 0.6 if source == "mic" else 0.45,
             "prefix_padding_ms": 200,
             "silence_duration_ms": 350,
         },

@@ -1361,10 +1361,10 @@
         <div id="status-dot" class="dot"></div>
         <span id="status-text">Ready</span>
         <span id="auto-mode-indicator" title="Smart Interview: hears both sides and answers questions automatically (Ctrl+Alt+A)">Smart</span>
-        <span id="status-bar-hotkeys"
+        <span id="status-bar-hotkeys" class="sb-fit" data-fit-order="3"
           style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; cursor: default; white-space: nowrap;">Hotkeys</span>
         <!-- ── Log toggle button ── -->
-        <span id="btn-toggle-log"
+        <span id="btn-toggle-log" class="sb-fit" data-fit-order="4"
           style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; cursor: default; white-space: nowrap;"
           onclick="window.toggleLogDrawer()">log</span>
         <span id="btn-toggle-usage" title="API spend and estimated OpenAI balance"
@@ -1565,6 +1565,39 @@
       btn.classList.toggle('open', drawer.classList.contains('open'));
     };
 
+    // ── Status bar fit ───────────────────────────────────────────────────────
+    // When the bar runs out of room (narrow window, "Listening (Smart)..."),
+    // hide the least important items in data-fit-order instead of overlapping.
+    function fitStatusBar() {
+      const middle = document.getElementById('status-bar-middle');
+      const left = document.querySelector('#status-bar .status-indicator');
+      if (!middle || !left) return;
+      const items = [...document.querySelectorAll('#status-bar .sb-fit')]
+        .sort((a, b) => a.dataset.fitOrder - b.dataset.fitOrder);
+      items.forEach(el => {
+        if (el.dataset.fitDisplay === undefined) el.dataset.fitDisplay = el.style.display;
+        el.style.display = el.dataset.fitDisplay;
+      });
+      const crowded = () => {
+        const stats = middle.firstElementChild;
+        return middle.scrollWidth > middle.clientWidth + 1 ||
+          (stats && stats.getBoundingClientRect().left < left.getBoundingClientRect().right + 8);
+      };
+      for (const el of items) {
+        if (!crowded()) break;
+        el.style.display = 'none';
+      }
+    }
+    let fitQueued = false;
+    const queueFit = () => {
+      if (fitQueued) return;
+      fitQueued = true;
+      requestAnimationFrame(() => { fitQueued = false; fitStatusBar(); });
+    };
+    window.addEventListener('resize', queueFit);
+    new MutationObserver(queueFit).observe(document.getElementById('status-bar'), { subtree: true, childList: true, characterData: true });
+    setTimeout(queueFit, 500);
+
     // Keep the chip's balance current while a session runs
     setInterval(() => { if (window.isSessionActive) window.refreshUsage(); }, 5000);
     window.refreshUsage();
@@ -1631,15 +1664,20 @@
     const QUESTION_GRACE_MS = 150;       // VAD already waited 350 ms of silence
     const SPECULATIVE_WINDOW_MS = 4000;  // interviewer resumes within this → cancel and wait
     const PENDING_TIMEOUT_MS = 4000;     // forget an utterance whose transcript never came
-    const ECHO_WINDOW_MS = 10000;        // mic lines that repeat recent interviewer speech
-    const ECHO_OVERLAP = 0.6;            //   (speaker bleed into the mic) are dropped
+    const ECHO_WINDOW_MS = 15000;        // mic lines that repeat recent interviewer speech
+    const ECHO_OVERLAP = 0.5;            //   (speaker bleed into the mic) are dropped
+    const ECHO_OVERLAP_LOUD = 0.25;      //   ...lower bar when the interviewer was talking the whole time
+    const SIDETONE_LEAD_MS = 300;        // your voice echoed into system audio arrives after your mic
+    const ACTIVE_RMS = 0.01;             // audio level that counts as "someone is talking"
 
     const smart = {
       src: {
-        system: { speaking: false, pending: new Map() },
-        mic: { speaking: false, pending: new Map() }
+        system: { speaking: false, pending: new Map(), items: new Map() },
+        mic: { speaking: false, pending: new Map(), items: new Map() }
       },
       recentSystem: [],        // [{ words: Set, t }] for echo detection
+      recentMic: [],           // [{ words: Set, t, start }] for sidetone detection
+      energy: { system: [], mic: [] },  // [[time, rms]] for the last 30 s per channel
       deferredMic: new Set(),  // mic segs waiting for the interviewer's transcript to compare
       lastHandledId: null,     // last interviewer segment the trigger looked at
       lastQuestion: '',        // exchange text of the last auto-answer (context for the classifier)
@@ -1650,13 +1688,28 @@
     function resetSmartState() {
       clearTimeout(smart.fireTimer);
       smart.fireTimer = null;
-      for (const s of Object.values(smart.src)) { s.speaking = false; s.pending.clear(); }
+      for (const s of Object.values(smart.src)) { s.speaking = false; s.pending.clear(); s.items.clear(); s.startedAt = 0; s.stoppedAt = 0; }
       smart.recentSystem = [];
+      smart.recentMic = [];
       smart.deferredMic.clear();
       smart.lastHandledId = null;
     }
 
     const normWords = (text) => (text.toLowerCase().match(/[a-z0-9']+/g) || []);
+
+    // What transcription models produce from silence or noise rather than speech
+    const GHOST_TEXT = /^(the|a|you|uh+|um+|hmm+|bye|thank you|thanks for watching|subtitles by.*|\W*)[.!?]?$/i;
+    const isGhost = (text) => GHOST_TEXT.test(text.trim()) || /technical vocabulary is common|^live job interview for/i.test(text);
+
+    // Short things you say while getting ready to answer ("Sure", "Okay so", "Good question")
+    const isFiller = (text) => isAcknowledgement(text) || (normWords(text).length <= 4 && !looksLikeQuestion(text));
+
+    // You cutting in while the interviewer is still talking means you're asking something;
+    // starting to talk after they finished is you answering (or stalling), so don't wait.
+    function micInterrupting() {
+      const mic = smart.src.mic;
+      return isBusy('mic') && mic.startedAt > 0 && mic.startedAt < (smart.src.system.stoppedAt || 0);
+    }
 
     function isBusy(src) {
       const s = smart.src[src];
@@ -1669,23 +1722,71 @@
       return src === 'mic' && smart.deferredMic.size > 0;
     }
 
-    function isEcho(text) {
-      const words = normWords(text);
-      if (words.length < 2) return false;
+    const overlap = (words, set) => words.filter(w => set.has(w)).length / words.length;
+
+    // Echo matching compares meaningful words only: "you", "that", "the" are in everything
+    const STOP_WORDS = new Set(('a an the and or but so to of in on at for with by from as is are was were be been it its ' +
+      "this that these those i you he she we they me my your our their do does did can could would will should " +
+      "how what why when where which who if then than just like um uh okay ok yeah right well").split(' '));
+    const contentWords = (text) => normWords(text).filter(w => !STOP_WORDS.has(w));
+
+    // Share of the window in which a channel had audible sound
+    function activeFraction(src, from, to) {
+      const frames = smart.energy[src].filter(([t]) => t >= from && t <= to);
+      if (!frames.length) return 0;
+      return frames.filter(([, rms]) => rms >= ACTIVE_RMS).length / frames.length;
+    }
+
+    // Interviewer text to compare against: finished lines plus whatever is still streaming
+    function systemTexts() {
       const cutoff = Date.now() - ECHO_WINDOW_MS;
       smart.recentSystem = smart.recentSystem.filter(r => r.t >= cutoff);
-      return smart.recentSystem.some(r => {
-        const hits = words.filter(w => r.words.has(w)).length;
-        return hits / words.length >= ECHO_OVERLAP;
-      });
+      const live = [...transcriptArea.querySelectorAll('.seg.partial[data-src="system"] .seg-text')]
+        .map(el => new Set(contentWords(el.textContent)));
+      return smart.recentSystem.map(r => r.words).concat(live);
+    }
+
+    // A mic line is speaker bleed when its words match the interviewer's. If the
+    // interviewer was audibly talking through most of it, a looser match is enough.
+    function isEcho(text, itemId) {
+      const words = contentWords(text);
+      if (words.length < 2) return false;
+      const item = smart.src.mic.items.get(itemId) || {};
+      const to = item.stop || Date.now();
+      const from = (item.start || to - 3000) - 600;
+      const bar = activeFraction('system', from, to) >= 0.6 ? ECHO_OVERLAP_LOUD : ECHO_OVERLAP;
+      return systemTexts().some(set => overlap(words, set) >= bar);
+    }
+
+    // The reverse: your own voice played back into system audio (headset sidetone,
+    // Windows "Listen to this device"). It repeats a mic line that started clearly earlier.
+    function isSidetone(text, itemId) {
+      const words = contentWords(text);
+      if (words.length < 2) return false;
+      const start = (smart.src.system.items.get(itemId) || {}).start || Date.now();
+      const cutoff = Date.now() - ECHO_WINDOW_MS;
+      smart.recentMic = smart.recentMic.filter(r => r.t >= cutoff);
+      // Include mic lines still waiting on their own echo check
+      const pending = [...smart.deferredMic].map(seg => ({
+        words: new Set(contentWords(seg.querySelector('.seg-text').textContent)),
+        start: (smart.src.mic.items.get(seg.dataset.item) || {}).start
+      }));
+      return smart.recentMic.concat(pending)
+        .some(r => r.start && r.start <= start - SIDETONE_LEAD_MS && overlap(words, r.words) >= ECHO_OVERLAP);
     }
 
     // Decide deferred mic lines once the interviewer's matching transcript is in
     function resolveDeferredMic(force) {
       if (!force && isBusy('system')) return;
       for (const seg of smart.deferredMic) {
-        if (seg.isConnected && isEcho(seg.querySelector('.seg-text').textContent)) seg.remove();
-        else seg.classList.remove('partial');
+        const text = seg.querySelector('.seg-text').textContent;
+        if (seg.isConnected && isEcho(text, seg.dataset.item)) {
+          seg.remove();
+        } else {
+          seg.classList.remove('partial');
+          const item = smart.src.mic.items.get(seg.dataset.item) || {};
+          smart.recentMic.push({ words: new Set(contentWords(text)), t: Date.now(), start: item.start });
+        }
       }
       smart.deferredMic.clear();
     }
@@ -1770,7 +1871,7 @@
     }
 
     function stillIdle(id) {
-      return window.__smartMode && smart.lastHandledId === id && !isBusy('system') && !isBusy('mic');
+      return window.__smartMode && smart.lastHandledId === id && !isBusy('system') && !micInterrupting();
     }
 
     function fireSmart() {
@@ -1803,8 +1904,10 @@
     function smartEvaluate() {
       if (!window.__smartMode || !window.isSessionActive || !channels.system) return;
       resolveDeferredMic(false);
-      if (isBusy('system') || isBusy('mic')) return;
+      if (isBusy('system') || micInterrupting()) return;
       const turns = exchangeTurns();
+      // Your "Sure" / "Okay, so" after the question doesn't make it your turn
+      while (turns.length && turns[turns.length - 1].src === 'mic' && isFiller(turns[turns.length - 1].text)) turns.pop();
       const last = turns[turns.length - 1];
       if (!last || last.src !== 'system' || last.id === smart.lastHandledId) return;
       const id = last.id;
@@ -1822,8 +1925,12 @@
     }
 
     function smartOnSpeechStarted(src) {
-      clearTimeout(smart.fireTimer);
-      smart.fireTimer = null;
+      // Only the interviewer resuming cancels a pending answer; you starting to talk
+      // right after their question is you answering it
+      if (src === 'system') {
+        clearTimeout(smart.fireTimer);
+        smart.fireTimer = null;
+      }
       // The interviewer kept going right after we started answering: they weren't done.
       // Drop the early answer; the next pause re-evaluates with the full question.
       if (src === 'system' && window.__smartMode && window.__aiAbort &&
@@ -1916,6 +2023,12 @@
     function onAudioBatch(ch, pcm, rms) {
       if (!ch.socket || ch.socket.readyState !== WebSocket.OPEN) return;
       ch.rms = rms;
+      const hist = smart.energy[ch.name];
+      if (hist) {
+        const now = Date.now();
+        hist.push([now, rms]);
+        while (hist.length && hist[0][0] < now - 30000) hist.shift();
+      }
       let peak = 0;
       for (const c of Object.values(channels)) peak = Math.max(peak, c.rms || 0);
       const volumeBar = document.getElementById('volume-bar');
@@ -2044,12 +2157,17 @@
       switch (data.type) {
         case 'speech_started':
           st.speaking = true;
+          st.startedAt = Date.now();
+          if (data.item_id) st.items.set(data.item_id, { start: st.startedAt });
           if (data.item_id) st.pending.set(data.item_id, Date.now());
           smartOnSpeechStarted(src);
           break;
 
         case 'speech_stopped':
           st.speaking = false;
+          st.stoppedAt = Date.now();
+          if (data.item_id) st.items.set(data.item_id, { ...(st.items.get(data.item_id) || {}), stop: st.stoppedAt });
+          if (st.items.size > 200) st.items.delete(st.items.keys().next().value);
           if (data.item_id) st.pending.set(data.item_id, Date.now());
           smartEvaluate();
           break;
@@ -2065,13 +2183,15 @@
           st.pending.delete(data.item_id);
           const text = (data.text || '').trim();
           let seg = findSeg(data.item_id);
-          if (!text) {
+          if (!text || isGhost(text)) {
             if (seg) seg.remove();
           } else {
             seg = seg || segFor(src, data.item_id);
             seg.querySelector('.seg-text').textContent = text;
-            if (src === 'system') {
-              smart.recentSystem.push({ words: new Set(normWords(text)), t: Date.now() });
+            if (src === 'system' && window.__smartMode && channels.mic && isSidetone(text, data.item_id)) {
+              seg.remove();
+            } else if (src === 'system') {
+              smart.recentSystem.push({ words: new Set(contentWords(text)), t: Date.now() });
               seg.classList.remove('partial');
               resolveDeferredMic(false);
             } else if (window.__smartMode && channels.system) {
@@ -2112,7 +2232,7 @@
       const stream = src === 'system' ? await getSystemAudioStream() : await getMicAudioStream();
       if (!stream) { statusText.innerText = 'Stream Failed'; return false; }
 
-      const ch = { input: null, stream, socket: null, ctx: null, node: null, sink: null, rms: 0, retries: 0, stableTimer: null };
+      const ch = { name: src, input: null, stream, socket: null, ctx: null, node: null, sink: null, rms: 0, retries: 0, stableTimer: null };
       channels[src] = ch;
       connectChannel(src, ch);
       updateButtons();

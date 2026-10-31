@@ -2058,12 +2058,12 @@ updateHWIDDisplay();
             middleDiv.innerHTML = `
                 <!-- Unified Stats Group -->
                 <div style="display: flex; align-items: center; gap: 8px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.05); padding: 3px 10px; border-radius: 8px; font-family: 'Consolas', 'Courier New', monospace; font-size: 9px; white-space: nowrap; letter-spacing: 0.4px;">
-                    <span style="color: rgba(255,255,255,0.3);">TTFT</span>
+                    <span class="sb-fit" data-fit-order="2" style="display: contents;"><span style="color: rgba(255,255,255,0.3);">TTFT</span>
                     <span id="response-time-ttft" style="color: rgba(120,200,180,0.9); font-weight:500; min-width:24px;">--s</span>
-                    <span style="color:rgba(255,255,255,0.12);">|</span>
-                    <span style="color: rgba(255,255,255,0.3);">TT</span>
+                    <span style="color:rgba(255,255,255,0.12);">|</span></span>
+                    <span class="sb-fit" data-fit-order="1" style="display: contents;"><span style="color: rgba(255,255,255,0.3);">TT</span>
                     <span id="response-time-tt" style="color: rgba(120,200,180,0.9); font-weight:500; min-width:24px;">--s</span>
-                    <span style="color:rgba(255,255,255,0.12);">|</span>
+                    <span style="color:rgba(255,255,255,0.12);">|</span></span>
                     <!-- Token counts moved to the usage panel; kept hidden so existing updates still work -->
                     <span style="display: none;"><span style="color: rgba(255,255,255,0.3);">In</span>
                     <span id="api-usage-input" style="color:rgba(255,255,255,0.65); font-weight:500;">0</span>
