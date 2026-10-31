@@ -511,6 +511,9 @@ class AIRequest(BaseModel):
     text_model: Optional[str] = None
     # Smart Interview: transcript is a speaker-labeled exchange (Interviewer / Me)
     smart_mode: Optional[bool] = False
+    # What the session history should show as the question (Smart: just the
+    # interviewer's question, not the full prompt sent to the model)
+    display_question: Optional[str] = None
 
     model_config = {"extra": "ignore"}
 
@@ -1444,8 +1447,11 @@ async def load_session(session_name: str):
         session_usage = {
             "input_tokens": 0,
             "output_tokens": 0,
-            "total_cost": 0,
-            "request_count": 0
+            "total_cost": 0.0,
+            "request_count": 0,
+            "ai_cost": 0.0,
+            "transcription_seconds": 0.0,
+            "transcription_cost": 0.0
         }
 
         # Restore profile cache for AI context
@@ -1802,7 +1808,7 @@ async def stream_ai_response(req: AIRequest):
                 if current_session_name:
                     try:
                         _total_time_current = _time.time() - _start_time
-                        save_conversation_to_session(user_msg, full_response, bool(req.screenshot), model, response_time=_ttft, total_time=_total_time_current, cost=response_cost, input_tokens=input_tokens, output_tokens=output_tokens)
+                        save_conversation_to_session(req.display_question if (req.display_question and not req.screenshot) else user_msg, full_response, bool(req.screenshot), model, response_time=_ttft, total_time=_total_time_current, cost=response_cost, input_tokens=input_tokens, output_tokens=output_tokens)
                     except Exception as save_err:
                         print(f"[SESSION SAVE ERROR] {save_err}")
                 

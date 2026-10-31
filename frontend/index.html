@@ -1519,7 +1519,7 @@
       const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
       const ai = u.ai_cost != null ? u.ai_cost : Math.max(0, total - (u.transcription_cost || 0));
       set('ud-ai', money(ai));
-      set('ud-ai-sub', `${u.request_count || 0} answers · ${((u.input_tokens || 0) + (u.output_tokens || 0)).toLocaleString()} tokens`);
+      set('ud-ai-sub', `${u.request_count || 0} answer${u.request_count === 1 ? '' : 's'} · ${((u.input_tokens || 0) + (u.output_tokens || 0)).toLocaleString()} tokens`);
       set('ud-tr', money(u.transcription_cost));
       set('ud-tr-sub', `${((u.transcription_seconds || 0) / 60).toFixed(1)} min of audio (both sides count in Smart mode)`);
       set('ud-total', money(total));
@@ -1530,8 +1530,8 @@
       if (bal) {
         const left = Math.max(0, bal.amount - bal.spent);
         state = bal.outOfCredits || left <= 0.005 ? 'empty' : left < LOW_BALANCE ? 'low' : '';
-        set('ud-left', bal.outOfCredits ? 'Out of credits' : '≈ ' + money(left, 2) + ' left');
-        set('ud-left-note', `of ${money(bal.amount, 2)} set ${new Date(bal.setAt).toLocaleDateString()}`);
+        set('ud-left', bal.outOfCredits ? 'Out of credits' : '≈ ' + money(left, left < 10 ? 4 : 2) + ' left');
+        set('ud-left-note', `${money(bal.spent, 4)} used since you set ${money(bal.amount, 2)} on ${new Date(bal.setAt).toLocaleDateString()}`);
         if (chip) chip.textContent = bal.outOfCredits ? 'no credits' : money(left, 2);
       } else {
         set('ud-left', 'Not set');

@@ -92,7 +92,8 @@ function initializeStreamingAI() {
                 target_language: window.sessionTargetLanguage || '',
                 save_to_context: true,
                 text_model: window.selectedModel || 'gpt-3.5-turbo',
-                smart_mode: !!smartText
+                smart_mode: !!smartText,
+                display_question: smartText ? displayQuestion : undefined
             };
 
             if (capturedScreenshot) {
@@ -372,7 +373,7 @@ function initializeStreamingAI() {
                 ipcRenderer.send('convo-update', {
                     question: wasScreenshot
                         ? ('📷 (screenshot)' + (transcript ? ' ' + transcript : ''))
-                        : transcript,
+                        : displayQuestion,
                     response: cleanResponse,  // raw markdown — the convo window formats + escapes it
                     model: usedModel,
                     timestamp: new Date().toISOString(),
@@ -416,6 +417,7 @@ function initializeStreamingAI() {
                 if (btnScreenEl) btnScreenEl.style.backgroundColor = '#444';
             }
 
+            if (window.refreshUsage) window.refreshUsage();
             btnGenerate.innerText = 'Generate AI';
             btnGenerate.classList.remove('active');
             // Flag transcript to clear on next user input instead of flashing to empty immediately
