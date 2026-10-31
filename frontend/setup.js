@@ -571,9 +571,9 @@ function initSession() {
                              onmouseover="this.style.background='rgba(255,255,255,0.06)'" 
                              onmouseout="this.style.background='rgba(255,255,255,0.03)'">
                             <div style="flex: 1; cursor: pointer; min-width: 0; overflow: hidden;" onclick="window.openPastSession('${session.name.replace(/'/g, "\\'")}')"> 
-                                <div style="color: rgba(255,255,255,0.8); font-size: 13px; margin-bottom: 4px;">${session.name} ${session.target_role ? `<span style="font-size: 11px; color: rgba(255,255,255,0.4);">(${session.target_role})</span>` : ''}</div>
+                                <div style="color: rgba(255,255,255,0.8); font-size: 13px; margin-bottom: 4px;">${window.escapeHtml(session.name)} ${session.target_role ? `<span style="font-size: 11px; color: rgba(255,255,255,0.4);">(${window.escapeHtml(session.target_role)})</span>` : ''}</div>
                                 <div style="color: rgba(255,255,255,0.4); font-size: 10px;">${formattedDate}</div>
-                                <div style="color: rgba(255,255,255,0.3); font-size: 10px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${session.job_description_preview || ''}</div>
+                                <div style="color: rgba(255,255,255,0.3); font-size: 10px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${window.escapeHtml(session.job_description_preview || '')}</div>
                             </div>
                             <button onclick="event.stopPropagation(); window.deletePastSession('${session.name.replace(/'/g, "\\\\'")}')" 
                                     style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"
@@ -1090,8 +1090,8 @@ window.openPastSession = async function (sessionName) {
                     ].join('');
                     const isScreenEntry = entry.question.startsWith('[USER SHARED A SCREENSHOT]');
                     const displayQ = isScreenEntry
-                        ? entry.question.replace('[USER SHARED A SCREENSHOT] Question about the screenshot: ', '').trim() || '<em style="color:rgba(255,255,255,0.35);">screen only</em>'
-                        : (window.formatConvoText ? window.formatConvoText(entry.question) : entry.question);
+                        ? window.formatConvoText(entry.question.replace('[USER SHARED A SCREENSHOT] Question about the screenshot: ', '').trim()) || '<em style="color:rgba(255,255,255,0.35);">screen only</em>'
+                        : window.formatConvoText(entry.question);
                     const screenLabel = isScreenEntry ? '📷 SCREEN · ' : '';
                     userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${screenLabel}${entryTimeStr}</div>${displayQ}`;
                     userBubble.querySelectorAll('pre code').forEach(b => { if (typeof hljs !== 'undefined') hljs.highlightElement(b); });
@@ -1112,7 +1112,7 @@ window.openPastSession = async function (sessionName) {
                         'display: flex; flex-direction: column; gap: 6px;'
                     ].join('');
 
-                    const modelLabel = entry.model ? entry.model.toUpperCase() : 'AI';
+                    const modelLabel = window.escapeHtml(entry.model ? entry.model.toUpperCase() : 'AI');
 
                     // Header: model · time + [copy]
                     const aiHeader = document.createElement('div');
@@ -1129,7 +1129,7 @@ window.openPastSession = async function (sessionName) {
                     const aiBody = document.createElement('div');
                     aiBody.className = 'ai-body';
                     aiBody.style.cssText = 'flex: 1; min-height: 0;';
-                    aiBody.innerHTML = window.formatConvoText ? window.formatConvoText(entry.response) : entry.response;
+                    aiBody.innerHTML = window.formatConvoText(entry.response);
                     aiBody.querySelectorAll('pre code').forEach(b => { if (typeof hljs !== 'undefined') hljs.highlightElement(b); });
 
                     // Footer stats
