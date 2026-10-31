@@ -3,7 +3,6 @@ print("[STARTUP] Initializing Interview Assistant Backend...")
 from fastapi import FastAPI, WebSocket, Request
 
 from fastapi.responses import StreamingResponse
-from openai import OpenAI
 import os
 import sys
 import io
@@ -15,7 +14,10 @@ import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
-from typing import Optional, Dict, Any
+from datetime import datetime
+from typing import Optional, Dict, Any, TYPE_CHECKING
+if TYPE_CHECKING:
+    from openai import AsyncOpenAI
 
 # Token counting for cost estimation (Lazy Loaded)
 _encoding = None
@@ -54,7 +56,8 @@ PRICING = {
 # License State (Backend Enforcement)
 # Default to unlicensed until validation
 is_licensed_backend = False
-demo_session_start = None
+import threading
+_license_checked = threading.Event()  # set once check_saved_license() has run
 DEMO_LIMIT_MS = 12 * 60 * 1000
 DEMO_COOLDOWN_MS = 47 * 60 * 1000
 
@@ -261,6 +264,22 @@ def get_api_key():
         
     return None
 
+# One AsyncOpenAI client per API key: the sync client blocked the event loop for
+# the whole streamed answer, stalling live transcription and every other request.
+# openai is imported lazily: it is ~2.5 s of startup, and the warm-up thread
+# loads it in the background right after the server starts listening.
+_async_clients: Dict[str, "AsyncOpenAI"] = {}
+
+def get_async_client(api_key: Optional[str] = None) -> "AsyncOpenAI":
+    from openai import AsyncOpenAI
+    key = api_key or get_api_key()
+    client = _async_clients.get(key)
+    if client is None:
+        client = AsyncOpenAI(api_key=key)
+        _async_clients.clear()  # key changed - drop the old client
+        _async_clients[key] = client
+    return client
+
 @app.websocket("/realtime")
 async def realtime(ws: WebSocket):
     # WebSockets bypass CORS and HTTP middleware entirely - check Host + token here
@@ -395,11 +414,12 @@ async def realtime(ws: WebSocket):
 
 from pydantic import BaseModel
 from fastapi import File, UploadFile, Form
-try:
-    from docx import Document
-except ModuleNotFoundError:
-    Document = None
-    print("Warning: python-docx not installed — resume upload endpoint will be unavailable until installed.")
+def _docx_document():
+    try:
+        from docx import Document
+        return Document
+    except ModuleNotFoundError:
+        return None
 
 
 class AIRequest(BaseModel):
@@ -436,24 +456,75 @@ async def get_available_models():
 # Persistent profile support -------------------------------------------------
 PROFILE_PATH = BASE_DIR / "user_profile.json"
 
+# The OpenAI key is stored encrypted with Windows DPAPI (bound to this Windows
+# user account) instead of plain text. In memory it is always 'openai_api_key';
+# on disk it is 'openai_api_key_enc'. Old plain-text profiles are migrated on load.
+import base64
+
+def _dpapi(data: bytes, protect: bool) -> bytes:
+    import ctypes
+    from ctypes import wintypes
+
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    buf = ctypes.create_string_buffer(data, len(data))
+    blob_in = DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    blob_out = DATA_BLOB()
+    crypt32 = ctypes.windll.crypt32
+    fn = crypt32.CryptProtectData if protect else crypt32.CryptUnprotectData
+    CRYPTPROTECT_UI_FORBIDDEN = 0x1
+    if not fn(ctypes.byref(blob_in), None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, ctypes.byref(blob_out)):
+        raise OSError("DPAPI call failed")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+
+def encrypt_secret(value: str) -> str:
+    if sys.platform != 'win32':
+        return value
+    return base64.b64encode(_dpapi(value.encode('utf-8'), True)).decode('ascii')
+
+def decrypt_secret(value: str) -> str:
+    if sys.platform != 'win32':
+        return value
+    return _dpapi(base64.b64decode(value), False).decode('utf-8')
+
 def load_profile() -> Dict[str, Any]:
     if PROFILE_PATH.exists():
         try:
-            return json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+            data = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
         except Exception as e:
             print(f"Error loading profile: {e}")
             return {}
+        enc = data.pop('openai_api_key_enc', None)
+        if enc:
+            try:
+                data['openai_api_key'] = decrypt_secret(enc)
+            except Exception as e:
+                print(f"[PROFILE] Could not decrypt API key (different Windows user?): {e}")
+        elif data.get('openai_api_key'):
+            try:
+                save_profile(data)  # legacy plain-text key -> rewrite encrypted
+                print("[PROFILE] Migrated plain-text API key to encrypted storage")
+            except Exception:
+                pass
+        return data
     return {}
 
 def save_profile(data: Dict[str, Any]):
     try:
+        data = dict(data)
+        key = data.pop('openai_api_key', None)
+        if key:
+            data['openai_api_key_enc'] = encrypt_secret(key)
         json_str = json.dumps(data, indent=2, ensure_ascii=False)
         PROFILE_PATH.write_text(json_str, encoding="utf-8")
         print(f"[SAVE_PROFILE] Successfully wrote {len(json_str)} bytes to {PROFILE_PATH}")
     except Exception as e:
         print(f"[SAVE_PROFILE ERROR] Failed to save: {e}")
         raise  # Re-raise so caller knows it failed
-        print(f"Error saving profile: {e}")
 
 profile_cache = load_profile()
 
@@ -466,6 +537,35 @@ conversation_history = []
 # Injected as a [CONTEXT NOTE] system message on every request so the AI always has full session memory.
 conversation_summary = ""
 
+# Bumped whenever the conversation is reset, so a background summary that
+# finishes after the session ended can't leak into the next session.
+_context_epoch = 0
+_background_tasks = set()
+
+def reset_conversation_context():
+    global conversation_history, conversation_summary, _context_epoch
+    conversation_history = []
+    conversation_summary = ""
+    _context_epoch += 1
+
+async def _summarize_in_background(turns: list, api_key: str, epoch: int):
+    global conversation_summary
+    new_chunk = await summarize_old_turns(turns, api_key)
+    if new_chunk and epoch == _context_epoch:
+        conversation_summary = (conversation_summary + "\n" + new_chunk).strip() if conversation_summary else new_chunk
+
+def evict_old_turns():
+    """Rolling summary: keep the 3 most recent turns (6 msgs) verbatim; summarize
+    anything older in the background so the client gets 'done' immediately."""
+    global conversation_history
+    if len(conversation_history) <= 6:
+        return
+    turns_to_evict = conversation_history[:-6]
+    conversation_history = conversation_history[-6:]
+    task = asyncio.create_task(_summarize_in_background(turns_to_evict, get_api_key(), _context_epoch))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
 # ============ CACHED SYSTEM CONTEXT ============
 # The system prompt containing the full resume + job description is VERY expensive
 # (~5000 tokens) if rebuilt and resent on every single request.
@@ -477,8 +577,9 @@ _cached_context_hash = None     # Hash of inputs that produced the cache — use
 
 def _build_context_hash(role: str, language: str, resume_text: str, job_description: str) -> str:
     import hashlib
-    raw = f"{role}|{language}|{len(resume_text or '')}|{len(job_description or '')}"
-    return hashlib.md5(raw.encode()).hexdigest()
+    # Hash the full text, not just lengths: a new resume of the same length must rebuild the cache
+    raw = "\x1f".join([role or '', language or '', resume_text or '', job_description or ''])
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 def _compress_context(resume_text: str, job_description: str, max_resume_chars: int = 2400, max_jd_chars: int = 1200) -> str:
     """Trim resume and JD to a token-efficient size while preserving the most important parts.
@@ -584,9 +685,7 @@ async def summarize_old_turns(turns_to_summarize: list, api_key: str) -> str:
         qa_text += f"{role_label}: {msg['content'][:800]}\n\n"  # Cap per-message length
     
     try:
-        import openai as _openai
-        mini_client = _openai.OpenAI(api_key=api_key)
-        resp = mini_client.chat.completions.create(
+        resp = await get_async_client(api_key).chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
@@ -633,8 +732,8 @@ async def validate_api_key(data: Dict[str, str]):
         return {"valid": False, "error": "Invalid API key format"}
     
     try:
-        client = OpenAI(api_key=api_key)
-        client.models.list()
+        from openai import AsyncOpenAI
+        await AsyncOpenAI(api_key=api_key).models.list()
         # Store key immediately on successful validation
         if not isinstance(profile_cache, dict):
             profile_cache = {}
@@ -862,22 +961,66 @@ async def validate_license(data: Dict[str, str]):
     
     return {"valid": False, "status": "invalid"}
 
+# Demo state lives in the profile (demo_started_at / last_demo_end_time, epoch ms)
+# so restarting the backend no longer resets the 12-minute limit or the cooldown.
+import time
+import math
+
+def _now_ms() -> float:
+    return time.time() * 1000
+
+def _profile() -> Dict[str, Any]:
+    global profile_cache
+    if not isinstance(profile_cache, dict):
+        profile_cache = {}
+    return profile_cache
+
+def demo_cooldown_remaining_ms() -> float:
+    p = _profile()
+    started = p.get('demo_started_at')
+    if started:
+        if _now_ms() - started < DEMO_LIMIT_MS:
+            return 0  # a demo is still running
+        last_end = started + DEMO_LIMIT_MS  # ran out without a clean end
+    else:
+        last_end = p.get('last_demo_end_time') or 0
+    return max(0, last_end + DEMO_COOLDOWN_MS - _now_ms())
+
+def start_demo() -> Optional[str]:
+    """Start (or resume) a demo window. Returns an error message if in cooldown."""
+    _license_checked.wait(10)
+    if is_licensed_backend:
+        return None
+    p = _profile()
+    started = p.get('demo_started_at')
+    if started and _now_ms() - started < DEMO_LIMIT_MS:
+        return None  # resume the running demo; the clock does not restart
+    remaining = demo_cooldown_remaining_ms()
+    if remaining > 0:
+        return f"Demo cooldown active. Try again in {math.ceil(remaining / 60000)} min."
+    p['demo_started_at'] = _now_ms()
+    p.pop('last_demo_end_time', None)
+    save_profile(p)
+    print(f"[SECURITY] Demo session started at {p['demo_started_at']}")
+    return None
+
+def end_demo():
+    p = _profile()
+    started = p.pop('demo_started_at', None)
+    if started:
+        p['last_demo_end_time'] = min(_now_ms(), started + DEMO_LIMIT_MS)
+        save_profile(p)
+        print("[SECURITY] Demo session ended. Cooldown started.")
+
 def check_access_allowed() -> bool:
     """Enforce hardware-locked licensing and trial limits."""
+    _license_checked.wait(10)
     if is_licensed_backend:
         return True
-    
-    global demo_session_start
-    if demo_session_start is None:
-        # If not started yet, allow it (will be started on first request or save/load)
-        return True
-        
-    import time
-    elapsed = (time.time() * 1000) - demo_session_start
-    if elapsed > DEMO_LIMIT_MS:
-        return False
-        
-    return True
+    started = _profile().get('demo_started_at')
+    if not started:
+        return False  # no demo running - one must be started via /session/save or /session/load
+    return _now_ms() - started <= DEMO_LIMIT_MS
 
 
 
@@ -885,8 +1028,14 @@ def check_access_allowed() -> bool:
 async def post_profile(data: Dict[str, Any]):
     global profile_cache
     try:
-        save_profile(data)
-        profile_cache = data
+        # Keys the client must not be able to overwrite or wipe
+        protected = ('openai_api_key', 'license_key', 'demo_started_at', 'last_demo_end_time')
+        merged = {k: v for k, v in data.items() if k not in protected}
+        for k in protected:
+            if k in _profile():
+                merged[k] = _profile()[k]
+        save_profile(merged)
+        profile_cache = merged
         invalidate_context_cache()  # Role/JD may have changed, rebuild system context next time
         return {"status": "ok"}
     except Exception as e:
@@ -1030,13 +1179,9 @@ async def save_session_data(data: Dict[str, Any]):
     session_dir = safe_session_dir(session_name)
     session_dir.mkdir(parents=True, exist_ok=True)
     
-    # Start/Reset demo timer if not licensed
-    if not is_licensed_backend:
-        global demo_session_start
-        if demo_session_start is None:
-            import time
-            demo_session_start = time.time() * 1000
-            print(f"[SECURITY] Demo session started at {demo_session_start}")
+    demo_error = start_demo()
+    if demo_error:
+        return {"status": "error", "error": demo_error}
 
     session_file = session_dir / 'session.json'
     
@@ -1051,9 +1196,9 @@ async def save_session_data(data: Dict[str, Any]):
             'is_esl': data.get('is_esl', False),
             'short_responses': data.get('short_responses', False),
             'created_at': data.get('created_at', ''),
-            'updated_at': str(Path('').resolve()),  # Will be updated on each save
+            'updated_at': datetime.now().isoformat(),
             'text_model': data.get('text_model', DEFAULT_TEXT_MODEL),
-            'openai_api_key': data.get('openai_api_key', '')  # Persisted for session restore
+            # API key is NOT stored per session - the global (encrypted) profile key is used
         }
         
         session_file.write_text(json.dumps(session_data, indent=2), encoding='utf-8')
@@ -1129,55 +1274,21 @@ async def save_conversation_entry(data: Dict[str, Any]):
 @app.post('/session/end')
 async def end_session(data: Dict[str, str]):
     """Finalize and close a session"""
-    global current_session_name, conversation_history
-    
+    global current_session_name
+
     session_name = data.get('session_name') or current_session_name
     if not session_name:
         return {"status": "ok", "message": "No session to end"}
-    
-    session_dir = safe_session_dir(session_name)
-    
-    try:
-        # Save final conversation history to session
-        if conversation_history:
-            conv_file = session_dir / 'conversation.json'
-            if conv_file.exists():
-                existing = json.loads(conv_file.read_text(encoding='utf-8'))
-            else:
-                existing = []
-            
-            # Add any remaining history
-            for i in range(0, len(conversation_history), 2):
-                if i + 1 < len(conversation_history):
-                    entry = {
-                        'timestamp': '',
-                        'question': conversation_history[i].get('content', ''),
-                        'response': conversation_history[i + 1].get('content', ''),
-                        'had_screenshot': False
-                    }
-                    existing.append(entry)
-            
-            conv_file.write_text(json.dumps(existing, indent=2), encoding='utf-8')
-        
-        # Record demo end time for cooldown enforcement
-        if not is_licensed_backend:
-            import time
-            end_time = time.time() * 1000
-            if profile_cache is None:
-                profile_cache = {}
-            profile_cache['last_demo_end_time'] = end_time
-            save_profile(profile_cache)
-            global demo_session_start
-            demo_session_start = None
-            print(f"[SECURITY] Demo session ended. Cooldown started.")
 
-        # Clear current session and all in-memory context
+    try:
+        # Q&A pairs are already written to conversation.json as each answer
+        # completes, so there is nothing left to append here.
+        if not is_licensed_backend:
+            end_demo()
+
         current_session_name = None
-        conversation_history = []
-        conversation_summary = ""   # Reset rolling summary for the new session
-        print("[SESSION] Cleared conversation history and rolling summary")
-        
-        print(f"[SESSION] Ended session: {session_name}")
+        reset_conversation_context()
+        print(f"[SESSION] Ended session: {session_name} (history and rolling summary cleared)")
         return {"status": "ok", "message": f"Session '{session_name}' ended"}
 
     except Exception as e:
@@ -1216,7 +1327,7 @@ async def list_sessions():
 @app.get('/session/load/{session_name}')
 async def load_session(session_name: str):
     """Load a previous session's data"""
-    global current_session_name, profile_cache, session_usage, demo_session_start
+    global current_session_name, profile_cache, session_usage
     try:
         session_dir = safe_session_dir(session_name)
         session_file = session_dir / 'session.json'
@@ -1225,12 +1336,14 @@ async def load_session(session_name: str):
             return {"status": "error", "error": "Session not found"}
         
         data = json.loads(session_file.read_text(encoding='utf-8'))
-        
-        # Start demo timer if not licensed and not already started
-        if not is_licensed_backend and demo_session_start is None:
-            import time
-            demo_session_start = time.time() * 1000
-            print(f"[SECURITY] Demo session started on load at {demo_session_start}")
+        session_key = (data.pop('openai_api_key', '') or '').strip()
+        if session_key:
+            # Older versions saved the key in plain text per session - remove it
+            session_file.write_text(json.dumps(data, indent=2), encoding='utf-8')
+
+        demo_error = start_demo()
+        if demo_error:
+            return {"status": "error", "error": demo_error}
         
         # Load conversation history
         conv_file = session_dir / 'conversation.json'
@@ -1265,7 +1378,6 @@ async def load_session(session_name: str):
         profile_cache['target_language'] = data.get('target_language', '')
         
         # 2. Restore API key: Prefer the currently validated global key
-        session_key = data.get('openai_api_key', '').strip()
         if current_valid_key:
             profile_cache['openai_api_key'] = current_valid_key
             print(f"[SESSION] Using current global API key (Session key was ignored)")
@@ -1317,9 +1429,8 @@ async def delete_session(session_name: str):
 @app.post('/conversation/clear')
 async def clear_conversation():
     """Clear conversation history to start a fresh session"""
-    global conversation_history
-    conversation_history = []
-    print("[CONVERSATION] History cleared - starting fresh session")
+    reset_conversation_context()
+    print("[CONVERSATION] History and rolling summary cleared - starting fresh session")
     return {"status": "ok", "message": "Conversation history cleared"}
 
 
@@ -1362,6 +1473,7 @@ async def upload_resume(file: UploadFile = File(...)):
         out_path.write_bytes(content)
 
         # Extract text using python-docx (if available)
+        Document = _docx_document()
         if Document is None:
             return {"status": "error", "error": "python-docx is not installed on the server. Install with: pip install python-docx"}
 
@@ -1409,7 +1521,7 @@ async def stream_ai_response(req: AIRequest):
             return
 
         try:
-            client = OpenAI(api_key=get_api_key())
+            client = get_async_client()
             
             current_profile = load_profile()
             resume_text = ""
@@ -1483,7 +1595,7 @@ async def stream_ai_response(req: AIRequest):
             
             # Create completion - catch errors separately so they always reach the client
             try:
-                completion = client.chat.completions.create(
+                completion = await client.chat.completions.create(
                     model=model,
                     messages=messages,
                     stream=True,
@@ -1500,7 +1612,7 @@ async def stream_ai_response(req: AIRequest):
             
             # Yield chunks as they arrive - wrap in try/except for iteration errors
             try:
-                for chunk in completion:
+                async for chunk in completion:
                     if chunk.choices and chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
                         if not full_response:  # First token
@@ -1551,15 +1663,7 @@ async def stream_ai_response(req: AIRequest):
                     except Exception as save_err:
                         print(f"[SESSION SAVE ERROR] {save_err}")
                 
-                # Rolling summary: when history exceeds 3 turns (6 msgs), summarize the oldest turn
-                # then evict it. This preserves context indefinitely at near-zero token cost.
-                if len(conversation_history) > 6:
-                    turns_to_evict = conversation_history[:-6]  # Everything older than the 3 most recent turns
-                    api_key_for_summary = get_api_key()
-                    new_chunk = await summarize_old_turns(turns_to_evict, api_key_for_summary)
-                    if new_chunk:
-                        conversation_summary = (conversation_summary + "\n" + new_chunk).strip() if conversation_summary else new_chunk
-                    conversation_history = conversation_history[-6:]
+                evict_old_turns()
                 
                 print(f"[STREAM] Conversation history: {len(conversation_history)} msgs | Summary: {len(conversation_summary)} chars")
             else:
@@ -1587,7 +1691,7 @@ async def generate_ai_response(req: AIRequest):
     global conversation_history, conversation_summary
     print(f"\n[DEBUG] /ai called with: transcript={req.transcript[:50] if req.transcript else None}..., role={req.role}, screenshot={'YES' if req.screenshot else 'NO'}, save_to_context={req.save_to_context}")
     try:
-        client = OpenAI(api_key=get_api_key())
+        client = get_async_client()
         
         current_profile = load_profile()
         
@@ -1647,7 +1751,7 @@ async def generate_ai_response(req: AIRequest):
         import time as _time
         _start_time = _time.time()
         
-        completion = client.chat.completions.create(
+        completion = await client.chat.completions.create(
             model=model,
             messages=messages,
             stream=True,
@@ -1656,8 +1760,8 @@ async def generate_ai_response(req: AIRequest):
         
         full_response = ""
         _ttft = 0
-        for chunk in completion:
-            if chunk.choices[0].delta.content:
+        async for chunk in completion:
+            if chunk.choices and chunk.choices[0].delta.content:
                 if not full_response:  # First token
                     _ttft = _time.time() - _start_time
                 full_response += chunk.choices[0].delta.content
@@ -1668,7 +1772,9 @@ async def generate_ai_response(req: AIRequest):
         input_text = "\n".join([m.get('content', '') if isinstance(m.get('content'), str) else str(m.get('content', '')) for m in messages])
         _input_tokens = count_tokens(input_text)
         _output_tokens = count_tokens(full_response)
-        _response_cost = calculate_cost(_input_tokens, _output_tokens, model)
+        _image_tokens = estimate_image_tokens(req.screenshot, model) if req.screenshot else 0
+        _response_cost = calculate_cost(_input_tokens, _output_tokens, model, _image_tokens)
+        update_usage(_input_tokens, _output_tokens, model, _image_tokens)
         
         # Save to conversation history only if save_to_context is True
         # (skip for one-shot LeetCode problems, save for scenarios needing follow-up)
@@ -1688,14 +1794,7 @@ async def generate_ai_response(req: AIRequest):
                 except Exception as save_err:
                     print(f"[SESSION SAVE ERROR] {save_err}")
             
-            # Rolling summary: when history exceeds 3 turns (6 msgs), summarize the oldest turn then evict it.
-            if len(conversation_history) > 6:
-                turns_to_evict = conversation_history[:-6]
-                api_key_for_summary = get_api_key()
-                new_chunk = await summarize_old_turns(turns_to_evict, api_key_for_summary)
-                if new_chunk:
-                    conversation_summary = (conversation_summary + "\n" + new_chunk).strip() if conversation_summary else new_chunk
-                conversation_history = conversation_history[-6:]
+            evict_old_turns()
             
             print(f"[AI] Conversation history: {len(conversation_history)} msgs | Summary: {len(conversation_summary)} chars")
         else:
@@ -1722,7 +1821,26 @@ async def generate_ai_response(req: AIRequest):
 #   1. initialize_keys  — copies/generates public key so verify can find it
 #   2. check_saved_license — reads profile and verifies RSA signature
 initialize_keys()
-check_saved_license()
+
+def _warm_up():
+    """Runs in the background so /health answers as soon as FastAPI is up:
+    restores the saved license (HWID takes ~1 s), then loads openai, tiktoken
+    and the client so the first answer doesn't stall the server."""
+    try:
+        check_saved_license()
+    finally:
+        _license_checked.set()
+    try:
+        from openai import AsyncOpenAI
+        # Touching .chat.completions triggers the SDK's lazy ~1.3 s resource import
+        AsyncOpenAI(api_key="sk-warmup").chat.completions
+        get_encoding()
+        if get_api_key():
+            get_async_client().chat.completions
+    except Exception as e:
+        print(f"[STARTUP] Warm-up skipped: {e}")
+
+threading.Thread(target=_warm_up, daemon=True, name="warm-up").start()
 
 
 if __name__ == "__main__":

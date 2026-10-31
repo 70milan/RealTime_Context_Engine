@@ -29,11 +29,37 @@ if sys.platform == 'win32':
     except (AttributeError, Exception):
         pass
 
+def watch_parent():
+    """Exit when the Electron process that launched us dies (crash, kill, Task
+    Manager). Otherwise the orphaned backend keeps port 5050 and the next launch
+    fails. Electron passes its PID in WINHOST_PARENT_PID; we block on its handle."""
+    pid = os.getenv("WINHOST_PARENT_PID")
+    if not pid or sys.platform != 'win32':
+        return
+    import ctypes
+    import threading
+
+    SYNCHRONIZE = 0x00100000
+    INFINITE = 0xFFFFFFFF
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(SYNCHRONIZE, False, int(pid))
+    if not handle:
+        print(f"[WinHostSvc] Parent {pid} not found - exiting")
+        os._exit(0)
+
+    def wait():
+        kernel32.WaitForSingleObject(handle, INFINITE)
+        print("[WinHostSvc] Parent process exited - shutting down backend")
+        os._exit(0)
+
+    threading.Thread(target=wait, daemon=True, name="parent-watchdog").start()
+
 print("[WinHostSvc] Importing backend app...")
 
 from main import app
 
 if __name__ == '__main__':
+    watch_parent()
     print("[WinHostSvc] Starting uvicorn on http://127.0.0.1:5050")
     uvicorn.run(
         app,
