@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, screen, ipc
 const path = require('path');
 const fs = require('fs');
 const { spawn, execSync, exec } = require('child_process');
+const { verifyUpdateSignature } = require('./update-signature');
 let autoUpdater = null;
 
 let tray = null;
@@ -99,9 +100,12 @@ function initAutoUpdater() {
       }
     };
 
+    // Only install updates signed by our pinned certificate (see update-signature.js)
     autoUpdater.verifyUpdateCodeSignature = async (publisherName, installPath) => {
-      console.log('[UPDATE] Bypassing code signature verification for', publisherName);
-      return null;
+      const error = await verifyUpdateSignature(installPath);
+      if (error) updateLogger.error(error);
+      else updateLogger.info('Update signature verified');
+      return error;
     };
 
     autoUpdater.logger = updateLogger;
