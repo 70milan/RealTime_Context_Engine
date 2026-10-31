@@ -58,7 +58,10 @@
         }
       ],
       "certificateFile": "../windows-runtime-host.pfx",
-      "publisherName": "mjulez70"
+      "publisherName": "mjulez70",
+      "signingHashAlgorithms": [
+        "sha256"
+      ]
     },
     "nsis": {
       "oneClick": true,
