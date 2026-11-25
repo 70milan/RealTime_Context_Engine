@@ -501,6 +501,32 @@ def _docx_document():
         return None
 
 
+def _docx_text(content: bytes) -> str:
+    """Text of a .docx in document order, including tables (resumes often keep skills in one)."""
+    from io import BytesIO
+    from docx import Document
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+    doc = Document(BytesIO(content))
+    lines = []
+    for child in doc.element.body.iterchildren():
+        tag = child.tag.rsplit('}', 1)[-1]
+        if tag == 'p':
+            text = Paragraph(child, doc).text.strip()
+            if text:
+                lines.append(text)
+        elif tag == 'tbl':
+            for row in Table(child, doc).rows:
+                cells = []
+                for cell in row.cells:
+                    text = cell.text.strip()
+                    if text and text not in cells:  # merged cells repeat their text
+                        cells.append(text)
+                if cells:
+                    lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
 class AIRequest(BaseModel):
     transcript: str = ""
     role: str = ""
@@ -665,32 +691,29 @@ def _build_context_hash(role: str, language: str, resume_text: str, job_descript
     raw = "\x1f".join([role or '', language or '', resume_text or '', job_description or ''])
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
-def _compress_context(resume_text: str, job_description: str, max_resume_chars: int = 2400, max_jd_chars: int = 1200) -> str:
-    """Trim resume and JD to a token-efficient size while preserving the most important parts.
-    
-    Resume: keep the first ~2400 chars (covers summary, skills, most recent 1-2 roles).
-    JD: keep the first ~1200 chars (covers title, requirements, key responsibilities).
-    Combined this stays well under ~1000 tokens for context, vs 4000+ for a full document.
+def _compress_context(resume_text: str, job_description: str, talking_points: str = "") -> str:
+    """Build the resume + JD block for the system prompt.
+
+    When the session has talking points (a brief of the resume tailored to this
+    JD, generated at setup and edited by the user), they replace the full resume:
+    about a third of the tokens, and only the experience that matters for the job.
+    Without them the full resume is sent; cutting it dropped the work history.
     """
     context_block = ""
-    if resume_text and resume_text.strip():
-        trimmed = resume_text.strip()
-        if len(trimmed) > max_resume_chars:
-            trimmed = trimmed[:max_resume_chars] + "\n[...resume truncated for brevity...]"
-        context_block += f"\n\n--- CANDIDATE RESUME ---\n{trimmed}\n"
+    if talking_points and talking_points.strip():
+        context_block += f"\n\n--- CANDIDATE BRIEF (YOUR resume, tailored to this job, plus how to answer) ---\n{talking_points.strip()}\n"
+    elif resume_text and resume_text.strip():
+        context_block += f"\n\n--- CANDIDATE RESUME ---\n{resume_text.strip()}\n"
     if job_description and job_description.strip():
-        trimmed_jd = job_description.strip()
-        if len(trimmed_jd) > max_jd_chars:
-            trimmed_jd = trimmed_jd[:max_jd_chars] + "\n[...JD truncated for brevity...]"
-        context_block += f"\n\n--- JOB DESCRIPTION ---\n{trimmed_jd}\n"
+        context_block += f"\n\n--- JOB DESCRIPTION ---\n{job_description.strip()}\n"
     return context_block
 
-def get_system_context(role: str, language: str, resume_text: str, job_description: str, for_vision: bool = False, is_esl: bool = False, short_responses: bool = False) -> str:
+def get_system_context(role: str, language: str, resume_text: str, job_description: str, for_vision: bool = False, is_esl: bool = False, short_responses: bool = False, talking_points: str = "") -> str:
     """Return a cached system prompt. Only rebuilds when role/language/resume/JD/modifiers changes."""
     global _cached_system_context, _cached_context_hash
 
     # Include modifiers in hash to rebuild cache if they change
-    new_hash = _build_context_hash(role, language, resume_text, job_description) + f"|{is_esl}|{short_responses}"
+    new_hash = _build_context_hash(role, language, resume_text, job_description + "\x1f" + (talking_points or '')) + f"|{is_esl}|{short_responses}"
 
     if _cached_system_context is not None and _cached_context_hash == new_hash and not for_vision:
         print("[CONTEXT CACHE] Hit — reusing cached system context (0 extra resume tokens)")
@@ -698,8 +721,7 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
 
     print(f"[CONTEXT CACHE] {'Miss' if _cached_system_context else 'Cold start'} — building system context")
 
-    # Use compressed context to keep input tokens low (~800 tokens vs 4000+ raw)
-    context_block = _compress_context(resume_text, job_description)
+    context_block = _compress_context(resume_text, job_description, talking_points)
 
     # Add Modifiers - Make them extremely strict
     modifier_block = ""
@@ -1232,11 +1254,7 @@ async def upload_session_resume(file: UploadFile = File(...), session_name: str 
         resume_path.write_bytes(content)
         print(f"[SESSION] Resume saved to: {resume_path}")
         
-        # Extract text from docx
-        from docx import Document
-        from io import BytesIO
-        doc = Document(BytesIO(content))
-        text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+        text = _docx_text(content)
         
         current_session_name = session_name
         
@@ -1248,6 +1266,59 @@ async def upload_session_resume(file: UploadFile = File(...), session_name: str 
         return {"status": "ok", "resume_text": text, "resume_path": str(resume_path)}
     except Exception as e:
         print(f"[SESSION RESUME ERROR] {e}")
+        return {"status": "error", "error": str(e)}
+
+
+BRIEF_INSTRUCTIONS = (
+    "You prepare a job candidate for an interview. From their resume and the job description, write a brief "
+    "that an interview assistant will use instead of the full resume. Plain text, no markdown headings or bold.\n\n"
+    "RELEVANT EXPERIENCE\n"
+    "For each employer that matters for this job: one line with role, company, dates, domain; then short bullets "
+    "with the specifics that match the job description: tools, platforms, data types, volumes, numbers, and "
+    "what the candidate personally owned. Keep every number and named technology that is relevant. Drop "
+    "anything unrelated to this job.\n\n"
+    "TALKING POINTS\n"
+    "5-10 short bullets: which experience to lead with for this job's main requirements, the exact terms to use, "
+    "and for each requirement the resume does not cover, how to answer honestly from adjacent experience.\n\n"
+    "Each bullet must be concrete: what was built, with which tools, for which data, at what scale or result. "
+    "Generic bullets like 'collaborated with stakeholders' are useless to the assistant; leave them out. "
+    "Use only facts from the resume. Never invent employers, tools, numbers or projects. "
+    "Aim for 4000-6000 characters; never exceed 6000."
+)
+
+
+@app.post('/session/brief')
+async def generate_session_brief(file: UploadFile = File(...), job_description: str = Form(...),
+                                 target_role: str = Form(''), api_key: str = Form('')):
+    """Draft the talking points for the setup screen: the resume condensed to what this JD needs, plus how to answer"""
+    try:
+        resume_text = _docx_text(await file.read())
+        if not resume_text.strip():
+            return {"status": "error", "error": "No text found in the resume"}
+        if not job_description.strip():
+            return {"status": "error", "error": "Paste the job description first"}
+
+        model = DEFAULT_TEXT_MODEL
+        completion = await get_async_client(api_key.strip() or None).chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": BRIEF_INSTRUCTIONS},
+                {"role": "user", "content": (
+                    f"TARGET ROLE: {target_role.strip() or 'see job description'}\n\n"
+                    f"--- JOB DESCRIPTION ---\n{job_description.strip()}\n\n"
+                    f"--- RESUME ---\n{resume_text.strip()}"
+                )},
+            ],
+            max_tokens=2000,
+            temperature=0.2,
+        )
+        brief = (completion.choices[0].message.content or "").strip()
+        if completion.usage:
+            update_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model)
+        print(f"[BRIEF] Generated {len(brief)} chars from a {len(resume_text)}-char resume")
+        return {"status": "ok", "talking_points": brief}
+    except Exception as e:
+        print(f"[BRIEF ERROR] {e}")
         return {"status": "error", "error": str(e)}
 
 
@@ -1280,6 +1351,7 @@ async def save_session_data(data: Dict[str, Any]):
             'is_esl': data.get('is_esl', False),
             'short_responses': data.get('short_responses', False),
             'smart_interview': data.get('smart_interview', False),
+            'talking_points': data.get('talking_points', ''),
             'created_at': data.get('created_at', ''),
             'updated_at': datetime.now().isoformat(),
             'text_model': data.get('text_model', DEFAULT_TEXT_MODEL),
@@ -1294,6 +1366,12 @@ async def save_session_data(data: Dict[str, Any]):
         if not conv_file.exists():
             conv_file.write_text('[]', encoding='utf-8')
         
+        # Always replace the previous session's talking points, even when the key below is skipped
+        if profile_cache is None:
+            profile_cache = {}
+        profile_cache['talking_points'] = data.get('talking_points', '')
+        save_profile(profile_cache)
+
         # Update profile cache for AI ONLY if the key provided is valid
         new_key = data.get('openai_api_key', '').strip()
         if new_key.startswith("sk-") and not new_key.endswith("KiwA"):
@@ -1462,6 +1540,7 @@ async def load_session(session_name: str):
             profile_cache = {}
         profile_cache['job_description'] = data.get('job_description', '')
         profile_cache['resume_text'] = data.get('resume_text', '')
+        profile_cache['talking_points'] = data.get('talking_points', '')
         profile_cache['target_role'] = data.get('target_role', '')
         profile_cache['target_language'] = data.get('target_language', '')
         
@@ -1483,6 +1562,7 @@ async def load_session(session_name: str):
             "session_name": session_name,
             "resume_text": data.get('resume_text', ''),
             "job_description": data.get('job_description', ''),
+            "talking_points": data.get('talking_points', ''),
             "target_role": data.get('target_role', ''),
             "target_language": data.get('target_language', ''),
             "created_at": data.get('created_at', ''),
@@ -1691,7 +1771,8 @@ async def stream_ai_response(req: AIRequest):
                 resume_text, job_description,
                 for_vision=bool(req.screenshot),
                 is_esl=is_esl,
-                short_responses=short_responses
+                short_responses=short_responses,
+                talking_points=(current_profile or {}).get('talking_points') or ""
             )
             messages = [{"role": "system", "content": system_content}]
             if req.smart_mode:
@@ -1865,7 +1946,8 @@ async def generate_ai_response(req: AIRequest):
             resume_text, job_description,
             for_vision=bool(req.screenshot),
             is_esl=is_esl,
-            short_responses=short_responses
+            short_responses=short_responses,
+            talking_points=(current_profile or {}).get('talking_points') or ""
         )
         messages = [{"role": "system", "content": system_content}]
 

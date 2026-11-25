@@ -676,3 +676,30 @@
     font-size: 18px;
   }
 }
+/* Talking points title with its Generate button */
+.setup-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.setup-title-btn {
+  padding: 2px 8px;
+  font-size: 9px;
+}
+
+.setup-title-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Talking points take whatever height is left, so they never spill into the console */
+#setup-talking-points {
+  min-height: 0;
+}
+
+/* Console sits under the talking points at a fixed height */
+.backend-terminal {
+  flex: none;
+  height: 64px;
+}

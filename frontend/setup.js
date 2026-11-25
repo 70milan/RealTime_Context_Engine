@@ -426,6 +426,9 @@ function initSession() {
         jdInput.addEventListener('input', checkAllInputs);
     }
 
+    const generatePointsBtn = document.getElementById('btn-generate-points');
+    if (generatePointsBtn) generatePointsBtn.onclick = handleGenerateTalkingPoints;
+
     // New Modifiers: ESL and Short Responses
     const eslCheckbox = document.getElementById('setup-esl');
     if (eslCheckbox) {
@@ -1343,6 +1346,51 @@ window.deletePastSession = async function (sessionName) {
     }
 };
 
+// Talking points: one model call condenses the resume to what this JD needs.
+// Only runs on click, so notes the user already wrote are never replaced silently.
+async function handleGenerateTalkingPoints() {
+    const btn = document.getElementById('btn-generate-points');
+    const pointsInput = document.getElementById('setup-talking-points');
+    const fileInput = document.getElementById('setup-resume');
+    const jdInput = document.getElementById('setup-jobdesc');
+    const apiKeyInput = document.getElementById('setup-apikey');
+    const roleInput = document.getElementById('setup-role');
+    const status = document.getElementById('setup-status');
+
+    function fail(msg) {
+        if (status) {
+            status.innerText = msg;
+            status.style.color = 'rgba(255, 107, 107, 0.7)';
+        }
+    }
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) return fail('Choose a resume first');
+    if (!jdInput || !jdInput.value.trim()) return fail('Paste the job description first');
+    if (pointsInput.value.trim() && !confirm('Replace the current talking points?')) return;
+
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('job_description', jdInput.value.trim());
+    fd.append('target_role', roleInput ? roleInput.value.trim() : '');
+    fd.append('api_key', apiKeyInput ? apiKeyInput.value.trim() : '');
+
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    if (status) status.innerText = '';
+    try {
+        const res = await fetch('http://127.0.0.1:5050/session/brief', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (json.status !== 'ok') throw new Error(json.error || 'Generate failed');
+        pointsInput.value = json.talking_points;
+        pointsInput.scrollTop = 0;
+    } catch (e) {
+        fail('Talking points: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate';
+    }
+}
+
 async function handleCreateSession() {
     console.log('[DEBUG] Start Session button clicked!');
     const sessionNameInput = document.getElementById('setup-session-name');
@@ -1578,6 +1626,7 @@ async function handleCreateSession() {
             is_esl: eslCheckbox ? eslCheckbox.checked : false,
             short_responses: shortRespCheckbox ? shortRespCheckbox.checked : false,
             smart_interview: !!window.__smartMode,
+            talking_points: (document.getElementById('setup-talking-points')?.value || '').trim(),
             created_at: new Date().toISOString()
         };
 
@@ -1866,6 +1915,8 @@ function resetSessionUI() {
         apiKeyInput.value = savedKey || '';
     }
     if (jdInput) jdInput.value = '';
+    const pointsInput = document.getElementById('setup-talking-points');
+    if (pointsInput) pointsInput.value = '';
     if (status) {
         status.innerText = '';
         status.style.color = '#aaa';
