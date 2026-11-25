@@ -931,6 +931,16 @@ function initSession() {
         createHoverTooltip('checks-info-btn', eslHoverContent);
     }
 
+    // Talking points info
+    if (document.getElementById('points-info-btn')) {
+        const pointsHoverContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Talking Points</strong> &mdash; a short brief of your resume tailored to this job, plus notes on how to answer.<br><br>' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Generate</strong> &mdash; reads your resume and the job description and drafts it for you: the experience that matches the job (tools, data, numbers) and what to lead with. Uses your API key, about half a cent.<br><br>' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Edit it</strong> &mdash; fix anything overstated and add your own rules, e.g. &ldquo;say watermark, not CDC&rdquo;. Every answer follows them for the whole session.<br><br>' +
+            '<em style="opacity: 0.7;">When filled, answers use this instead of the full resume (about a third of the tokens). Leave it empty to use the full resume. Saved with the session.</em></div>';
+        createHoverTooltip('points-info-btn', pointsHoverContent);
+    }
+
     // License info toggle
     const licenseInfo = document.getElementById('license-info');
     if (licenseInfo) {
