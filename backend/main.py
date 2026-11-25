@@ -708,6 +708,14 @@ def _compress_context(resume_text: str, job_description: str, talking_points: st
         context_block += f"\n\n--- JOB DESCRIPTION ---\n{job_description.strip()}\n"
     return context_block
 
+# Answers that put a tool at the wrong job fall apart on the first follow-up question
+TRUTHFULNESS_RULES = (
+    "Only say you used a tool, platform or architecture at an employer if YOUR resume or brief lists it for that employer. "
+    "If asked about something you used at a different job, say where (e.g. 'At Blue Cross I...'). "
+    "If you have not used it, say so in one short sentence, then explain how you would approach it using related experience. "
+    "Never invent layers, architectures, tools or numbers for any company: the interviewer will ask follow-ups about them. "
+)
+
 def get_system_context(role: str, language: str, resume_text: str, job_description: str, for_vision: bool = False, is_esl: bool = False, short_responses: bool = False, talking_points: str = "") -> str:
     """Return a cached system prompt. Only rebuilds when role/language/resume/JD/modifiers changes."""
     global _cached_system_context, _cached_context_hash
@@ -728,14 +736,19 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
     if is_esl:
         modifier_block += "\n\nCRITICAL CONSTRAINT: The user speaks English as a second language. Use short simple sentences. One idea per sentence. Avoid idioms and figures of speech (e.g. 'hit the ground running', 'boiling the ocean'). Keep technical terms but explain them briefly when first used. Never use compound or multi-clause sentences."
     if short_responses:
-        modifier_block += "\n\nCRITICAL CONSTRAINT: Maximum 3 sentences or 5 bullet points total. No filler openers. Stop after answering the question. Do not elaborate."
+        # Cue mode (the "short_responses" setting): notes to glance at, not a script to read out
+        modifier_block += ("\n\nCRITICAL CONSTRAINT - CUE MODE: The candidate answers in their own words and only glances at your reply. "
+                           "Reply with 3-5 bullet cues and nothing else. Each bullet is at most 8 words: keywords, tool names, numbers, the employer. "
+                           "The first bullet is the direct answer. No full sentences, no intro, no closing line. "
+                           "For coding tasks, give the code, then 2-3 cue bullets. This overrides any instruction to write out what the candidate should say.")
 
     if for_vision:
         # Vision requests need the context inline — do NOT cache these
         return (
             f"CRITICAL: You ARE the job candidate in this interview for a {role} position. "
-            "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience'. "
+            "You are NOT an AI assistant. NEVER say 'I am an AI'. "
             "The resume below is YOUR real work history. When asked about past jobs, refer to YOUR resume. "
+            f"{TRUTHFULNESS_RULES}"
             "Speak in FIRST PERSON as yourself - a real human professional. "
             "When you see a coding problem, SOLVE IT with working code and clear explanation. "
             "Use simple words. Short sentences. One idea per sentence. "
@@ -749,9 +762,10 @@ def get_system_context(role: str, language: str, resume_text: str, job_descripti
 
     system_prompt = (
         f"CRITICAL: You ARE the job candidate in this interview for a {role} position. "
-        "You are NOT an AI assistant. NEVER say 'I am an AI' or 'I don't have experience' or 'I cannot'. "
+        "You are NOT an AI assistant. NEVER say 'I am an AI'. "
         "The resume below is YOUR real work history. You ARE this person with this background. "
         "When asked about previous jobs, projects, or experience - use details from YOUR resume. "
+        f"{TRUTHFULNESS_RULES}"
         "Speak in FIRST PERSON as yourself - a real human professional. "
         "Use simple words. Short sentences. One idea per sentence. "
         "Be confident but humble. Keep answers to 4-5 sentences. Give specific examples from YOUR resume. "
@@ -1283,6 +1297,8 @@ BRIEF_INSTRUCTIONS = (
     "Each bullet must be concrete: what was built, with which tools, for which data, at what scale or result. "
     "Generic bullets like 'collaborated with stakeholders' are useless to the assistant; leave them out. "
     "Use only facts from the resume. Never invent employers, tools, numbers or projects. "
+    "Attribute each tool and platform only to the employer whose resume section names it: if ADF appears under one job "
+    "and not another, never list ADF under the other. Keep personal and certification projects labeled as such. "
     "Aim for 4000-6000 characters; never exceed 6000."
 )
 
@@ -1309,7 +1325,7 @@ async def generate_session_brief(file: UploadFile = File(...), job_description: 
                     f"--- RESUME ---\n{resume_text.strip()}"
                 )},
             ],
-            max_tokens=2000,
+            max_tokens=3000,
             temperature=0.2,
         )
         brief = (completion.choices[0].message.content or "").strip()
@@ -1431,6 +1447,91 @@ async def save_conversation_entry(data: Dict[str, Any]):
         return {"status": "ok", "entry_count": len(conversation)}
     except Exception as e:
         print(f"[SESSION CONVERSATION ERROR] {e}")
+        return {"status": "error", "error": str(e)}
+
+
+@app.post('/session/said')
+async def save_said(data: Dict[str, Any]):
+    """Answer Review: attach what the candidate actually said to the last saved answer"""
+    session_name = data.get('session_name') or current_session_name
+    said = (data.get('said') or '').strip()
+    if not session_name or not said:
+        return {"status": "ok"}
+    conv_file = safe_session_dir(session_name) / 'conversation.json'
+    try:
+        conversation = json.loads(conv_file.read_text(encoding='utf-8')) if conv_file.exists() else []
+        if not conversation:
+            return {"status": "ok"}
+        last = conversation[-1]
+        last['said'] = (last.get('said', '') + ' ' + said).strip()
+        conv_file.write_text(json.dumps(conversation, indent=2), encoding='utf-8')
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"[SESSION SAID ERROR] {e}")
+        return {"status": "error", "error": str(e)}
+
+
+CRITIQUE_INSTRUCTIONS = (
+    "You are an interview coach reviewing a mock or real interview. For each question you get what the "
+    "interviewer asked, the answer an assistant suggested, and what the candidate actually said (speech-to-text, "
+    "may have small errors). The suggestions were written by an assistant and are often wrong about which job "
+    "used which tool. The RESUME is the only source of truth: a tool or architecture counts for a job only if "
+    "that job's own section of the resume names it (the skills list does not count).\n\n"
+    "Write plain text, no markdown headings or bold. For each question:\n"
+    "Q<n>: <the question in a few words>\n"
+    "- Suggestion check: each claim in the suggestion that the resume does not support for that job, "
+    "e.g. 'ADF at AmeriBen - not in the AmeriBen section'. Write 'ok' if there are none.\n"
+    "- Verdict: Strong / OK / Weak, with a one-line reason.\n"
+    "- Covered: the key points the candidate actually made.\n"
+    "- Missed: points the candidate left out that the resume supports and the interviewer wanted. "
+    "Never list anything from the Suggestion check.\n"
+    "- Say next time: the exact one or two sentences to say, in first person, using only resume facts for that "
+    "same job (tools, data, numbers). Not advice like 'I will elaborate'.\n"
+    "If nothing was captured for a question, write only 'Q<n>: <question> - not captured' on one line. "
+    "End with OVERALL: the 3 most important things to practise before the next interview."
+)
+
+
+@app.post('/session/critique/{session_name}')
+async def critique_session(session_name: str):
+    """Answer Review: compare what was suggested with what the candidate said, per question.
+    Runs only when the user clicks Critique; the result is saved as review.txt in the session."""
+    session_dir = safe_session_dir(session_name)
+    try:
+        session_file = session_dir / 'session.json'
+        conv_file = session_dir / 'conversation.json'
+        data = json.loads(session_file.read_text(encoding='utf-8')) if session_file.exists() else {}
+        conversation = json.loads(conv_file.read_text(encoding='utf-8')) if conv_file.exists() else []
+        if not any(e.get('said') for e in conversation):
+            return {"status": "error", "error": "No recorded answers in this session. Your answers are saved in Smart mode from this version on."}
+
+        parts = []
+        for n, e in enumerate((e for e in conversation if e.get('question')), 1):
+            parts.append(f"Q{n} INTERVIEWER: {e['question'][:1500]}\n"
+                         f"SUGGESTED: {(e.get('response') or '')[:2000]}\n"
+                         f"CANDIDATE SAID: {e.get('said') or '(not captured)'}")
+        # The resume, not the generated brief: the brief can carry the same mistakes as the suggestions
+        background = (data.get('resume_text') or data.get('talking_points') or '').strip()[:30000]
+        user = (f"ROLE: {data.get('target_role', '')}\n\n--- CANDIDATE RESUME ---\n{background}\n\n"
+                f"--- INTERVIEW ---\n" + "\n\n".join(parts))[-60000:]
+        user += "\n\nReminder: check every suggestion against the job's own resume section before judging."
+
+        # One call per click, so the stronger model is worth it (a few cents)
+        model = "gpt-4o"
+        completion = await get_async_client().chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": CRITIQUE_INSTRUCTIONS}, {"role": "user", "content": user}],
+            max_tokens=4000,
+            temperature=0.3,
+        )
+        review = (completion.choices[0].message.content or "").strip()
+        if completion.usage:
+            update_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model)
+        (session_dir / 'review.txt').write_text(review, encoding='utf-8')
+        print(f"[REVIEW] Critique for '{session_name}': {len(review)} chars")
+        return {"status": "ok", "review": review}
+    except Exception as e:
+        print(f"[REVIEW ERROR] {e}")
         return {"status": "error", "error": str(e)}
 
 
@@ -1563,6 +1664,7 @@ async def load_session(session_name: str):
             "resume_text": data.get('resume_text', ''),
             "job_description": data.get('job_description', ''),
             "talking_points": data.get('talking_points', ''),
+            "review": (session_dir / 'review.txt').read_text(encoding='utf-8') if (session_dir / 'review.txt').exists() else '',
             "target_role": data.get('target_role', ''),
             "target_language": data.get('target_language', ''),
             "created_at": data.get('created_at', ''),
@@ -1712,7 +1814,8 @@ async def smart_classify(req: SmartClassifyRequest):
         "You watch a live job interview transcript. Decide whether the interviewer has just "
         "finished a question, task, or clarification that the candidate should respond to now. "
         "Answer NO for small talk, acknowledgements, an unfinished sentence, or the interviewer "
-        "still explaining before asking. Reply with exactly YES or NO."
+        "still explaining before asking. Question marks come from speech-to-text and are often wrong: "
+        "judge from the words, not the punctuation. Reply with exactly YES or NO."
     )
     user = req.exchange.strip()[-2000:]
     if req.previous_question.strip():

@@ -897,8 +897,8 @@
               <div class="setup-checks">
                 <div class="setup-check-row">
                   <label class="setup-check"><input type="checkbox" id="setup-esl" /><span>ESL Mode</span></label>
-                  <label class="setup-check"><input type="checkbox" id="setup-short-responses" /><span>Short
-                      Responses</span></label>
+                  <label class="setup-check"><input type="checkbox" id="setup-short-responses" /><span>Cue
+                      Mode</span></label>
                   <label class="setup-check"><input type="checkbox" id="setup-smart" /><span>Smart
                       Interview</span></label>
                   <button type="button" id="checks-info-btn" class="setup-info-link"
@@ -1037,6 +1037,10 @@
           onmouseover="this.style.color='rgba(100,255,150,0.95)'; this.style.borderColor='rgba(100,255,150,0.4)'; this.style.background='rgba(100,255,150,0.12)';"
           onmouseout="this.style.color='rgba(100,255,150,0.7)'; this.style.borderColor='rgba(100,255,150,0.2)'; this.style.background='rgba(100,255,150,0.08)';">Resume
           Session</button>
+        <button id="btn-critique-session" type="button"
+          style="flex: 1; padding: 10px 0; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; font-weight: 500; transition: all 0.2s;"
+          onmouseover="this.style.color='rgba(255,255,255,0.7)'; this.style.borderColor='rgba(255,255,255,0.2)';"
+          onmouseout="this.style.color='rgba(255,255,255,0.5)'; this.style.borderColor='rgba(255,255,255,0.1)';">Critique</button>
         <button id="btn-close-history" type="button"
           style="flex: 1; padding: 10px 0; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; font-weight: 500; transition: all 0.2s;"
           onmouseover="this.style.color='rgba(255,255,255,0.7)'; this.style.borderColor='rgba(255,255,255,0.2)';"
@@ -1670,11 +1674,11 @@
 
     const SPEAKER_LABEL = { system: 'Interviewer', mic: 'Me' };
     const QUESTION_GRACE_MS = 150;       // VAD already waited 350 ms of silence
-    const SPECULATIVE_WINDOW_MS = 4000;  // interviewer resumes within this → cancel and wait
     const PENDING_TIMEOUT_MS = 4000;     // forget an utterance whose transcript never came
     const ECHO_WINDOW_MS = 15000;        // mic lines that repeat recent interviewer speech
     const ECHO_OVERLAP = 0.5;            //   (speaker bleed into the mic) are dropped
     const ECHO_OVERLAP_LOUD = 0.25;      //   ...lower bar when the interviewer was talking the whole time
+    const ECHO_MIN_ACTIVE = 0.2;         //   ...and only when the interviewer was audible during the line
     const SIDETONE_LEAD_MS = 300;        // your voice echoed into system audio arrives after your mic
     const ACTIVE_RMS = 0.01;             // audio level that counts as "someone is talking"
 
@@ -1690,7 +1694,20 @@
       lastHandledId: null,     // last interviewer segment the trigger looked at
       lastQuestion: '',        // exchange text of the last auto-answer (context for the classifier)
       fireTimer: null,
-      firedAt: 0
+      said: []                 // what you said since the last answer, for the session review
+    };
+
+    // Attach what you said to the last saved answer (Answer Review). Runs when the next
+    // answer starts, on Pause, and on End; the transcript area itself gets cleared.
+    window.flushSaid = (sessionName) => {
+      const said = smart.said.join(' ').trim();
+      smart.said = [];
+      if (!said) return Promise.resolve();
+      return fetch('http://127.0.0.1:5050/session/said', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_name: sessionName || '', said })
+      }).catch(() => { });
     };
 
     function resetSmartState() {
@@ -1762,7 +1779,11 @@
       const item = smart.src.mic.items.get(itemId) || {};
       const to = item.stop || Date.now();
       const from = (item.start || to - 3000) - 600;
-      const bar = activeFraction('system', from, to) >= 0.6 ? ECHO_OVERLAP_LOUD : ECHO_OVERLAP;
+      // Bleed only exists while the interviewer is audible. You answering in silence
+      // reuses the question's words but is never an echo.
+      const active = activeFraction('system', from, to);
+      if (active < ECHO_MIN_ACTIVE) return false;
+      const bar = active >= 0.6 ? ECHO_OVERLAP_LOUD : ECHO_OVERLAP;
       return systemTexts().some(set => overlap(words, set) >= bar);
     }
 
@@ -1794,6 +1815,7 @@
           seg.classList.remove('partial');
           const item = smart.src.mic.items.get(seg.dataset.item) || {};
           smart.recentMic.push({ words: new Set(contentWords(text)), t: Date.now(), start: item.start });
+          if (!isFiller(text)) smart.said.push(text);
         }
       }
       smart.deferredMic.clear();
@@ -1808,8 +1830,9 @@
         if (!text) return;
         const src = seg.dataset.src;
         const last = turns[turns.length - 1];
-        if (last && last.src === src) { last.text += ' ' + text; last.id = seg.dataset.item; }
-        else turns.push({ src, text, id: seg.dataset.item });
+        // seg = the newest line alone, so a trailing "oh" can be told apart from the question
+        if (last && last.src === src) { last.text += ' ' + text; last.id = seg.dataset.item; last.seg = text; }
+        else turns.push({ src, text, id: seg.dataset.item, seg: text });
       });
       return turns;
     }
@@ -1861,9 +1884,10 @@
     const Q_START = /^(what|what's|whats|why|how|how's|when|where|which|who|whose|can|could|would|will|do|does|did|is|are|was|were|have|has|should|shall|may|tell|walk|explain|describe|write|implement|design|build|create|give|show|talk|share|define|compare|imagine|suppose|let's|lets|say|code|solve|find)\b/i;
     const Q_PHRASE = /\b(tell me|walk me through|can you|could you|would you|will you|how would you|how do you|how did you|what would you|what is|what are|what's the|explain|describe|difference between|how does|why did|why do|have you|give me an example|write (a|an|me|some|the)|implement|design (a|an)|go ahead and|i'?d like you to|i would like you to|i want you to|your approach|time complexity)\b/i;
 
+    // Judged from the words only: speech-to-text adds "?" to plain statements, so a
+    // "?" alone is not trusted (those turns go to the classifier instead)
     function looksLikeQuestion(turn) {
       const t = turn.trim();
-      if (t.endsWith('?')) return true;
       const sentences = t.split(/(?<=[.!?])\s+/).filter(Boolean);
       const tail = sentences.slice(-2).join(' ');
       const lastSentence = (sentences[sentences.length - 1] || '').replace(FILLER, '');
@@ -1872,7 +1896,8 @@
 
     const ACK_WORDS = new Set(['ok', 'okay', 'great', 'good', 'nice', 'perfect', 'cool', 'alright', 'all', 'right',
       'sure', 'yeah', 'yes', 'yep', 'got', 'it', 'i', 'see', 'makes', 'sense', 'sounds', 'awesome', 'excellent',
-      'thanks', 'thank', 'you', 'mm', 'mhm', 'hmm', 'uh', 'huh', 'interesting', "that's", 'thats', 'very', 'so', 'well', 'fine']);
+      'thanks', 'thank', 'you', 'mm', 'mhm', 'hmm', 'hm', 'uh', 'huh', 'um', 'umm', 'oh', 'ah', 'eh', 'er', 'ja', 'ya',
+      'interesting', "that's", 'thats', 'very', 'so', 'well', 'fine']);
     function isAcknowledgement(turn) {
       const words = normWords(turn);
       return words.length > 0 && words.length <= 6 && words.every(w => ACK_WORDS.has(w));
@@ -1884,7 +1909,6 @@
 
     function fireSmart() {
       if (window.__aiRequestInFlight && !window.__aiAbort) return;  // a screenshot request is running
-      smart.firedAt = Date.now();
       smart.lastQuestion = window.getSmartExchangeText();
       console.log('[SMART] Answering');
       window.generateAIOnly();
@@ -1923,6 +1947,11 @@
 
       const followsMe = turns.length > 1;  // interviewer is replying to something I said
       if (isAcknowledgement(last.text)) return;
+      // "Oh" / "okay" / "hm" right after a question merges into the question's turn;
+      // the question was already handled, so it must not trigger the same answer again
+      if (last.seg !== last.text && isAcknowledgement(last.seg)) return;
+      // One or two stray words ("Visital?", "Hm?") are not a new question
+      if (normWords(last.text).length <= 2 && !Q_START.test(last.text.trim().replace(FILLER, ''))) return;
       if (looksLikeQuestion(last.text)) {
         clearTimeout(smart.fireTimer);
         smart.fireTimer = setTimeout(() => { if (stillIdle(id)) fireSmart(); }, QUESTION_GRACE_MS);
@@ -1939,14 +1968,9 @@
         clearTimeout(smart.fireTimer);
         smart.fireTimer = null;
       }
-      // The interviewer kept going right after we started answering: they weren't done.
-      // Drop the early answer; the next pause re-evaluates with the full question.
-      if (src === 'system' && window.__smartMode && window.__aiAbort &&
-          Date.now() - smart.firedAt < SPECULATIVE_WINDOW_MS) {
-        console.log('[SMART] Interviewer resumed — cancelling early answer');
-        window.cancelAIRequest && window.cancelAIRequest();
-        smart.lastHandledId = null;
-      }
+      // An answer already on screen stays there: a sound alone ("oh", "uh") says nothing.
+      // smartEvaluate decides once the transcript lands, and a real follow-up replaces
+      // the answer only when its own answer starts arriving.
     }
 
     function updateSmartIndicator() {

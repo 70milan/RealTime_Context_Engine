@@ -73,13 +73,18 @@ function initializeStreamingAI() {
             return;
         }
 
+        // What you said after the previous answer belongs to that answer, not this one
+        if (smartText && window.flushSaid) window.flushSaid();
+
         // Newest request wins: a Smart re-answer replaces one still streaming
         if (window.__aiAbort) window.__aiAbort.abort();
         const controller = new AbortController();
         window.__aiAbort = controller;
 
         btnGenerate.classList.add('active');
-        responseArea.innerText = 'Generating...';
+        // Smart re-answers keep the current answer readable until the new one's first words arrive
+        const keepCurrent = smartText && responseArea.innerText.trim() && responseArea.innerText.trim() !== 'Generating...';
+        if (!keepCurrent) responseArea.innerText = 'Generating...';
         const startTime = Date.now();
         const ttftEl = document.getElementById('response-time-ttft');
         const ttEl = document.getElementById('response-time-tt');
@@ -441,18 +446,6 @@ function initializeStreamingAI() {
         }
     };
 
-    // Smart Interview calls this when the interviewer keeps talking right after an
-    // early answer started: drop it and wait for the full question.
-    window.cancelAIRequest = () => {
-        const controller = window.__aiAbort;
-        if (!controller) return;
-        window.__aiAbort = null;
-        window.__aiRequestInFlight = false;
-        controller.abort();
-        btnGenerate.classList.remove('active');
-        const responseArea = document.getElementById('response-area');
-        if (responseArea) responseArea.innerText = '';
-    };
 
 
 

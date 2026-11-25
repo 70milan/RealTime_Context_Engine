@@ -429,7 +429,7 @@ function initSession() {
     const generatePointsBtn = document.getElementById('btn-generate-points');
     if (generatePointsBtn) generatePointsBtn.onclick = handleGenerateTalkingPoints;
 
-    // New Modifiers: ESL and Short Responses
+    // New Modifiers: ESL and Cue Mode (stored as short_responses)
     const eslCheckbox = document.getElementById('setup-esl');
     if (eslCheckbox) {
         const savedEsl = localStorage.getItem('is_esl') === 'true';
@@ -919,12 +919,12 @@ function initSession() {
         }, true);
     })();
 
-    // ESL / Short Responses info toggle
+    // ESL / Cue Mode info toggle
     const checksBtn = document.getElementById('checks-info-btn');
     if (checksBtn) {
         const eslHoverContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
             '<strong style="color: rgba(100, 255, 150, 0.9);">ESL Mode</strong> &mdash; simplifies vocabulary and uses shorter sentences so answers are easier to follow.<br><br>' +
-            '<strong style="color: rgba(100, 255, 150, 0.9);">Short Responses</strong> &mdash; keeps AI answers 30&ndash;50% shorter, cuts filler, and prefers bullet points.<br><br>' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Cue Mode</strong> &mdash; instead of a script, shows 3&ndash;5 short bullet cues (keywords, tools, numbers) to glance at while you answer in your own words.<br><br>' +
             '<strong style="color: rgba(100, 255, 150, 0.9);">Smart Interview</strong> &mdash; listens to the interviewer (system audio) and you (mic) at the same time, labels who said what, and answers automatically when a question is finished. If you ask a clarifying question, it waits for their reply first. Use headphones for best results. Toggle anytime with Ctrl+Alt+A.<br><br>' +
             '<em style="opacity: 0.7;">Turn on any combination.</em></div>';
         createHoverTooltip('checks-info-btn', eslHoverContent);
@@ -1178,6 +1178,17 @@ window.openPastSession = async function (sessionName) {
                     pairDiv.appendChild(aiRow);
                 }
 
+                // ── WHAT YOU SAID (Answer Review, Smart mode) ──
+                if (entry.said) {
+                    const saidRow = document.createElement('div');
+                    saidRow.style.cssText = 'display: flex; justify-content: flex-end; margin-top: 4px;';
+                    const saidBubble = document.createElement('div');
+                    saidBubble.style.cssText = 'max-width: 80%; background: rgba(40,50,80,0.6); border: 1px solid rgba(120,160,255,0.15); border-radius: 14px 14px 3px 14px; padding: 8px 12px; font-size: 11px; color: rgba(215,225,255,0.85); line-height: 1.5; word-break: break-word;';
+                    saidBubble.innerHTML = '<div style="font-size:9px;color:rgba(140,170,255,0.6);margin-bottom:3px;letter-spacing:0.5px;">YOU SAID</div>' + window.escapeHtml(entry.said);
+                    saidRow.appendChild(saidBubble);
+                    pairDiv.appendChild(saidRow);
+                }
+
                 historyList.appendChild(pairDiv);
             });
         } else {
@@ -1185,6 +1196,42 @@ window.openPastSession = async function (sessionName) {
             emptyDiv.style.cssText = 'color: rgba(255,255,255,0.3); font-size: 12px; text-align: center; padding: 30px;';
             emptyDiv.textContent = 'No conversation history for this session.';
             historyList.appendChild(emptyDiv);
+        }
+
+        // Saved critique, shown above the history
+        const showReview = (text) => {
+            let box = document.getElementById('session-review-box');
+            if (!box) {
+                box = document.createElement('div');
+                box.id = 'session-review-box';
+                box.style.cssText = 'background: rgba(40,50,80,0.35); border: 1px solid rgba(120,160,255,0.18); border-radius: 12px; padding: 10px 12px; font-size: 11px; color: rgba(225,232,255,0.85); line-height: 1.55; white-space: pre-wrap; word-break: break-word; margin-bottom: 6px;';
+            }
+            box.innerHTML = '<div style="font-size:9px;color:rgba(140,170,255,0.7);margin-bottom:6px;letter-spacing:1px;font-weight:600;">ANSWER REVIEW</div>' + window.escapeHtml(text);
+            historyList.prepend(box);
+            historyList.scrollTop = 0;
+        };
+        if (sessionData.review) showReview(sessionData.review);
+
+        // Critique: compare what was suggested with what you said (runs only on click)
+        const critiqueBtn = document.getElementById('btn-critique-session');
+        if (critiqueBtn) {
+            critiqueBtn.disabled = false;
+            critiqueBtn.textContent = sessionData.review ? 'Re-critique' : 'Critique';
+            critiqueBtn.onclick = async () => {
+                critiqueBtn.disabled = true;
+                critiqueBtn.textContent = 'Reviewing...';
+                try {
+                    const res = await fetch(`http://127.0.0.1:5050/session/critique/${encodeURIComponent(sessionName)}`, { method: 'POST' });
+                    const json = await res.json();
+                    showReview(json.status === 'ok' ? json.review : (json.error || 'Critique failed'));
+                    critiqueBtn.textContent = json.status === 'ok' ? 'Re-critique' : 'Critique';
+                } catch (e) {
+                    showReview('Critique failed: ' + e.message);
+                    critiqueBtn.textContent = 'Critique';
+                } finally {
+                    critiqueBtn.disabled = false;
+                }
+            };
         }
 
         // Show the modal
@@ -1848,6 +1895,7 @@ function stopSessionTimer() {
     const statusDot = document.getElementById('status-dot');
 
     window.isSessionActive = false;
+    if (window.flushSaid) window.flushSaid(currentSessionName);
     if (window.stopListening) window.stopListening();
 
     if (timerInterval) {
@@ -1863,16 +1911,20 @@ function stopSessionTimer() {
 }
 
 function resetSessionUI() {
+    // Save your last answer for the review before the backend forgets the session
+    const saidSaved = window.flushSaid ? window.flushSaid(currentSessionName) : Promise.resolve();
+
     // Reset usage for next session
     fetch('http://127.0.0.1:5050/usage/reset', { method: 'POST' }).catch(() => { });
 
     // End the session on the backend: clears history + rolling summary and, in
     // demo mode, records the end time so the backend enforces the cooldown
-    fetch('http://127.0.0.1:5050/session/end', {
+    const endName = currentSessionName || '';
+    saidSaved.then(() => fetch('http://127.0.0.1:5050/session/end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_name: currentSessionName || '' })
-    }).catch(() => { });
+        body: JSON.stringify({ session_name: endName })
+    })).catch(() => { });
     fetch('http://127.0.0.1:5050/conversation/clear', { method: 'POST' }).catch(() => { });
 
     // Clear and hide floating conversation window when session ends
