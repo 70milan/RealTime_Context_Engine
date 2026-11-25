@@ -593,8 +593,7 @@ function initSession() {
                             <button onclick="event.stopPropagation(); window.deletePastSession('${session.name.replace(/'/g, "\\\\'")}')" 
                                     style="background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; cursor: pointer; padding: 4px 8px; margin-left: 8px; transition: all 0.2s; font-size: 9px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; flex-shrink: 0;"
                                     onmouseover="this.style.color='#ff5555'; this.style.borderColor='rgba(255,68,68,0.3)'; this.style.background='rgba(255,68,68,0.08)';"
-                                    onmouseout="this.style.color='rgba(255,255,255,0.3)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.background='none';"
-                                    title="Delete session">TRASH</button>
+                                    onmouseout="this.style.color='rgba(255,255,255,0.3)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.background='none';">TRASH</button>
                         </div>
                     `;
                     }).join('');

@@ -429,7 +429,7 @@ function createWindow() {
     transparent: true,
     backgroundColor: '#00000000',
     opacity: 0.95,
-    resizable: true,
+    resizable: false, // edges are resized by the app itself, see edge-resize-start
     webPreferences: {
       // Pages get no Node access; preload.js exposes a whitelisted window.ipcRenderer
       preload: path.join(__dirname, 'preload.js'),
@@ -504,6 +504,7 @@ function createConvoWindow() {
   convoWin = new BrowserWindow({
     width: 450,
     height: 600,
+    resizable: false, // edges are resized by the app itself, see edge-resize-start
     show: false,
     frame: false,
     alwaysOnTop: true,
@@ -795,7 +796,7 @@ app.whenReady().then(() => {
 
       win.setOpacity(0.95);
       win.setBackgroundColor('#00000000');
-      win.setResizable(true);
+      win.setResizable(false);
 
       if (win.lastNormalBounds) {
         win.setBounds(win.lastNormalBounds);
@@ -903,6 +904,42 @@ app.whenReady().then(() => {
     return { success: false };
   });
 
+  /* ---- IPC: Edge resizing ----
+   * The windows are not OS-resizable, because Windows would then show its resize
+   * arrows at the edges. preload.js puts invisible strips on the edges instead; a
+   * press on one starts this loop, which follows the mouse until the button is let go. */
+  const EDGE_MIN_SIZE = { main: [380, 280], convo: [250, 200] };
+  let edgeResize = null;
+  const stopEdgeResize = () => {
+    if (edgeResize) { clearInterval(edgeResize); edgeResize = null; }
+  };
+  ipcMain.on('edge-resize-start', (event, edge) => {
+    const w = BrowserWindow.fromWebContents(event.sender);
+    if (!w || w.isDestroyed()) return;
+    if (w === win && isMiniMode) return;
+    if (!['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].includes(edge)) return;
+    stopEdgeResize();
+    const start = w.getBounds();
+    const p0 = screen.getCursorScreenPoint();
+    const [minW, minH] = w === win ? EDGE_MIN_SIZE.main : EDGE_MIN_SIZE.convo;
+    let last = '';
+    edgeResize = setInterval(() => {
+      if (w.isDestroyed()) return stopEdgeResize();
+      const p = screen.getCursorScreenPoint();
+      const dx = p.x - p0.x, dy = p.y - p0.y;
+      let { x, y, width, height } = start;
+      if (edge.includes('e')) width = Math.max(minW, start.width + dx);
+      if (edge.includes('s')) height = Math.max(minH, start.height + dy);
+      if (edge.includes('w')) { width = Math.max(minW, start.width - dx); x = start.x + start.width - width; }
+      if (edge.includes('n')) { height = Math.max(minH, start.height - dy); y = start.y + start.height - height; }
+      const key = [x, y, width, height].join(',');
+      if (key === last) return;
+      last = key;
+      w.setBounds({ x, y, width, height });
+    }, 16);
+  });
+  ipcMain.on('edge-resize-end', stopEdgeResize);
+
   /* ---- IPC: Expand from Mini Mode ---- */
   ipcMain.on('expand-from-mini', () => {
     if (!win || !isMiniMode) return;
@@ -910,7 +947,7 @@ app.whenReady().then(() => {
     lastMiniPosition = { x: mx, y: my };
     win.setOpacity(0.95);
     win.setBackgroundColor('#00000000');
-    win.setResizable(true);
+    win.setResizable(false);
     const bounds = centerTop(800, 600);
     win.setBounds(bounds);
     win.webContents.setZoomFactor(1.0);

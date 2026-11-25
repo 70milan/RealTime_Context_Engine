@@ -782,7 +782,7 @@
 
   <div id="setup-overlay">
     <div class="setup-top-bar">
-      <div id="close-btn" title="Close App">
+      <div id="close-btn">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
           stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -802,8 +802,7 @@
             <button id="btn-past-sessions" type="button" class="setup-action-btn">Past Sessions</button>
             <button id="btn-guide" type="button" class="setup-action-btn">Guide</button>
             <button id="btn-hotkeys-setup" type="button" class="setup-action-btn">Hotkeys</button>
-            <button id="btn-reset-app" type="button" class="setup-action-btn" style="color: rgba(255, 107, 107, 0.5);"
-              title="Clear all saved settings and user-profile, and reset the app">Reset App</button>
+            <button id="btn-reset-app" type="button" class="setup-action-btn" style="color: rgba(255, 107, 107, 0.5);">Reset App</button>
           </div>
         </div>
 
@@ -892,8 +891,7 @@
                   <button type="button" id="resume-btn" class="setup-file-btn"
                     onclick="document.getElementById('setup-resume').click()">Choose File</button>
                   <span id="resume-filename" class="setup-file-name">No file selected</span>
-                  <button type="button" id="resume-detach-btn" class="setup-icon-btn" style="display: none;"
-                    title="Remove resume">&times;</button>
+                  <button type="button" id="resume-detach-btn" class="setup-icon-btn" style="display: none;">&times;</button>
                 </div>
               </div>
               <div class="setup-checks">
@@ -923,23 +921,21 @@
               <div class="setup-group-title">Credentials</div>
               <div class="setup-field">
                 <label class="setup-label" for="setup-apikey">
-                  OpenAI API Key <span class="setup-req">*</span> <span id="apikey-info" class="setup-info-link"
-                    title="API Key Info">(?)</span>
+                  OpenAI API Key <span class="setup-req">*</span> <span id="apikey-info" class="setup-info-link">(?)</span>
                 </label>
                 <input type="password" id="setup-apikey" class="setup-input" placeholder="sk-..."
                   autocomplete="new-password" />
               </div>
               <div class="setup-field">
                 <label class="setup-label" for="setup-license">
-                  License Key <span id="license-info" class="setup-info-link" title="Get a license">(?)</span><span
-                    id="license-lock-icon" style="display:none; margin-left:5px; cursor:not-allowed;"
-                    title="License locked to this installation"></span>
+                  License Key <span id="license-info" class="setup-info-link">(?)</span><span
+                    id="license-lock-icon" style="display:none; margin-left:5px; cursor:not-allowed;"></span>
                 </label>
                 <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)"
                   autocomplete="off" />
                 <div id="hwid-setup-display" class="setup-hwid" style="display: none;">HWID: <span
                     style="color: rgba(100, 255, 150, 0.4);">Fetching...</span> <button id="hwid-copy-btn"
-                    class="hwid-copy-btn" title="Copy HWID" type="button"><svg width="11" height="11"
+                    class="hwid-copy-btn" type="button"><svg width="11" height="11"
                       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                       stroke-linejoin="round">
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -952,8 +948,7 @@
               <div class="setup-group-title setup-title-row">
                 <span>Talking Points <button type="button" id="points-info-btn" class="setup-info-link"
                     style="background:none;border:none;padding:0;font:inherit;cursor:pointer;color:rgba(100,255,150,0.65);font-size:10px;font-weight:500;">(?)</button></span>
-                <button type="button" id="btn-generate-points" class="setup-file-btn setup-title-btn"
-                  title="Condense the resume to what this job needs, plus how to answer">Generate</button>
+                <button type="button" id="btn-generate-points" class="setup-file-btn setup-title-btn">Generate</button>
               </div>
               <div class="setup-field setup-field-grow">
                 <textarea id="setup-talking-points" class="setup-textarea" autocomplete="off"
@@ -1373,14 +1368,14 @@
       <div class="status-indicator" style="flex-shrink: 0; min-width: 0;">
         <div id="status-dot" class="dot"></div>
         <span id="status-text">Ready</span>
-        <span id="auto-mode-indicator" title="Smart Interview: hears both sides and answers questions automatically (Ctrl+Alt+A)">Smart</span>
+        <span id="auto-mode-indicator">Smart</span>
         <span id="status-bar-hotkeys" class="sb-fit" data-fit-order="3"
           style="margin-left: 10px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; cursor: default; white-space: nowrap;">Hotkeys</span>
         <!-- ── Log toggle button ── -->
         <span id="btn-toggle-log" class="sb-fit" data-fit-order="4"
           style="margin-left: 6px; color: rgba(255,255,255,0.25); font-size: 9px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; cursor: default; white-space: nowrap;"
           onclick="window.toggleLogDrawer()">log</span>
-        <span id="btn-toggle-usage" title="API spend and estimated OpenAI balance"
+        <span id="btn-toggle-usage"
           onclick="window.toggleUsageDrawer()">usage</span>
       </div>
       <!-- Middle container injected by setup.js will go here -->
@@ -2689,7 +2684,7 @@
           updateBtn.textContent = 'You are on the latest version';
           updateBtn.style.color = 'rgba(100, 255, 150, 0.4)';
         } else if (status === 'error') {
-          updateBtn.innerHTML = `Update Error ${(msg ? `<span title="${msg.replace(/"/g, '&quot;')}">(?)</span>` : '')}`;
+          updateBtn.innerHTML = `Update Error`;
           updateBtn.style.color = 'rgba(255, 107, 107, 0.5)';
         } else if (status === 'available') {
           updateBtn.textContent = 'Update Available';
