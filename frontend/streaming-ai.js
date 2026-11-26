@@ -96,9 +96,10 @@ function initializeStreamingAI() {
                 role: window.sessionTargetRole || '',
                 target_language: window.sessionTargetLanguage || '',
                 save_to_context: true,
-                text_model: window.selectedModel || 'gpt-3.5-turbo',
+                text_model: window.selectedModel || 'gpt-4o-mini',
                 smart_mode: !!smartText,
-                display_question: smartText ? displayQuestion : undefined
+                // What the conversation memory and the session history keep as the question
+                display_question: displayQuestion
             };
 
             if (capturedScreenshot) {

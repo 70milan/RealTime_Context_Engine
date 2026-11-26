@@ -2463,8 +2463,15 @@
 
         try {
           window.__aiRequestInFlight = true;
+          // Smart mode: the speaker-labeled question, not the raw transcript text with its labels run together
+          const smartText = (window.__smartMode && window.getSmartPromptText && window.getSmartPromptText()) || '';
+          if (smartText && window.flushSaid) window.flushSaid();  // what you said belongs to the previous answer
           const requestBody = {
-            transcript: transcriptArea.innerText || 'Answer the questions or solve the problems shown in this screenshot. Provide direct solutions, not analysis.',
+            transcript: smartText || transcriptArea.innerText.trim()
+              || 'Answer the questions or solve the problems shown in this screenshot. Provide direct solutions, not analysis.',
+            smart_mode: !!smartText,
+            display_question: (smartText && window.getSmartQuestionText && window.getSmartQuestionText())
+              || transcriptArea.innerText.trim() || 'Screenshot',
             role: window.sessionTargetRole || '',
             target_language: window.sessionTargetLanguage || '',
             save_to_context: saveToContext,

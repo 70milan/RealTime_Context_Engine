@@ -162,9 +162,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 'padding: 8px 12px; font-size: 11px; color: rgba(255,255,255,0.75); line-height: 1.5; word-break: break-word;'
             ].join('');
 
-            const isScreen = entry.question.startsWith('[USER SHARED A SCREENSHOT]');
+            // Screenshot answers: '[Screenshot] ...' now, '[USER SHARED A SCREENSHOT] ...' in older sessions
+            const isScreen = /^\[(Screenshot|USER SHARED A SCREENSHOT)\]/.test(entry.question);
             const displayQ = isScreen
-                ? (window.formatConvoText(entry.question.replace('[USER SHARED A SCREENSHOT] Question about the screenshot: ', '').trim()) || '<em style="color:rgba(255,255,255,0.35);">screen only</em>')
+                ? (window.formatConvoText(entry.question.replace(/^\[(Screenshot|USER SHARED A SCREENSHOT)\]( Question about the screenshot:)?\s*/, '').replace(/^Screenshot$/, '').trim()) || '<em style="color:rgba(255,255,255,0.35);">screen only</em>')
                 : window.formatConvoText(entry.question);
             const screenLabel = isScreen ? '📷 SCREEN · ' : '';
             userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${screenLabel}${entryTimeStr}</div>${displayQ}`;

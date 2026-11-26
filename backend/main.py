@@ -46,15 +46,15 @@ session_usage = {
     "transcription_cost": 0.0
 }
 
-# GPT pricing (per 1M tokens) - Updated December 2025
+# OpenAI prices per 1M tokens (platform.openai.com/docs/pricing, checked Nov 2026).
+# "cached" is the rate for prompt tokens OpenAI served from its prompt cache.
 PRICING = {
-    "gpt-3.5-turbo": {"input": 0.50, "output": 1.50},
-    "gpt-4o-mini": {"input": 0.60, "output": 2.40},
-    "gpt-4o": {"input": 2.50, "output": 10.00},
-    "gpt-5-nano": {"input": 0.15, "output": 0.60},
-    "gpt-5-mini": {"input": 0.50, "output": 1.50}
+    "gpt-3.5-turbo": {"input": 0.50, "cached": 0.50, "output": 1.50},
+    "gpt-4o-mini": {"input": 0.15, "cached": 0.075, "output": 0.60},
+    "gpt-4o": {"input": 2.50, "cached": 1.25, "output": 10.00},
+    "gpt-5-nano": {"input": 0.05, "cached": 0.005, "output": 0.40},
+    "gpt-5-mini": {"input": 0.25, "cached": 0.025, "output": 2.00},
 }
-
 
 # License State (Backend Enforcement)
 # Default to unlicensed until validation
@@ -76,7 +76,6 @@ AVAILABLE_TEXT_MODELS = {
 }
 
 DEFAULT_TEXT_MODEL = "gpt-4o-mini"
-DEFAULT_SCREENSHOT_MODEL = "gpt-4o-mini"
 
 def count_tokens(text: str) -> int:
     """Count tokens in text"""
@@ -119,24 +118,31 @@ def estimate_image_tokens(base64_data: str, model: str = "gpt-4o") -> int:
         print(f"[IMAGE TOKENS] Error estimating: {e}, using default 500")
         return 500  # Safe default for a medium image
 
-def calculate_cost(input_tokens: int, output_tokens: int, model: str = "gpt-4o", image_tokens: int = 0) -> float:
-    """Calculate cost in dollars"""
+def calculate_cost(input_tokens: int, output_tokens: int, model: str = "gpt-4o", image_tokens: int = 0, cached_tokens: int = 0) -> float:
+    """Cost in dollars. input_tokens includes cached_tokens, the way OpenAI reports usage."""
     pricing = PRICING.get(model, PRICING["gpt-4o"])
-    total_input = input_tokens + image_tokens
-    input_cost = (total_input / 1_000_000) * pricing["input"]
-    output_cost = (output_tokens / 1_000_000) * pricing["output"]
-    return (input_cost + output_cost) * 1.10  # 10% buffer
+    fresh = max(0, input_tokens + image_tokens - cached_tokens)
+    return (fresh * pricing["input"] + cached_tokens * pricing["cached"] + output_tokens * pricing["output"]) / 1_000_000
 
-def update_usage(input_tokens: int, output_tokens: int, model: str = "gpt-3.5-turbo", image_tokens: int = 0):
-    """Update session usage stats"""
+def update_usage(input_tokens: int, output_tokens: int, model: str = "gpt-4o-mini", image_tokens: int = 0, cached_tokens: int = 0) -> float:
+    """Add one model call to the session totals; returns that call's cost"""
     global session_usage
     session_usage["input_tokens"] += input_tokens + image_tokens
     session_usage["output_tokens"] += output_tokens
-    cost = calculate_cost(input_tokens, output_tokens, model, image_tokens)
+    cost = calculate_cost(input_tokens, output_tokens, model, image_tokens, cached_tokens)
     session_usage["total_cost"] += cost
     session_usage["ai_cost"] = session_usage.get("ai_cost", 0.0) + cost
     session_usage["request_count"] += 1
-    print(f"[USAGE] Total: ${session_usage['total_cost']:.4f} ({session_usage['request_count']} requests, {image_tokens} image tokens)")
+    print(f"[USAGE] +${cost:.5f} {model} ({input_tokens} in, {cached_tokens} cached, {output_tokens} out) | session ${session_usage['total_cost']:.4f}")
+    return cost
+
+def track_completion_usage(usage, model: str) -> float:
+    """update_usage from an OpenAI usage object (non-streamed calls)"""
+    if not usage:
+        return 0.0
+    details = getattr(usage, 'prompt_tokens_details', None)
+    cached = (getattr(details, 'cached_tokens', 0) or 0) if details else 0
+    return update_usage(usage.prompt_tokens, usage.completion_tokens, model, cached_tokens=cached)
 
 # Fix Unicode encoding for Windows console (prevents charmap errors with special characters)
 # if sys.platform == 'win32':
@@ -638,199 +644,210 @@ def save_profile(data: Dict[str, Any]):
 
 profile_cache = load_profile()
 
-# Conversation history for session context
-# Stores list of {"role": "user"/"assistant", "content": "..."} messages
-conversation_history = []
+# ============ CONVERSATION MEMORY ============
+# Besides the session prompt, each answer carries:
+#   - the last HISTORY_TURNS questions and answers verbatim (a follow-up like "optimize it" needs the code)
+#   - one line per older question (what was asked, what you claimed), capped at MAX_NOTES, so later
+#     answers stay consistent without the prompt growing for the whole interview
+HISTORY_TURNS = 2
+MAX_NOTES = 12
+conversation_history = []   # [{"role": "user" | "assistant", "content": str}], at most HISTORY_TURNS pairs
+conversation_notes = []     # ["Q: ... -> A: ..."], oldest first
 
-# Rolling summary — compressed memory of turns that have been evicted from conversation_history.
-# Built incrementally: each time a turn ages out, gpt-4o-mini summarizes it and appends to this string.
-# Injected as a [CONTEXT NOTE] system message on every request so the AI always has full session memory.
-conversation_summary = ""
-
-# Bumped whenever the conversation is reset, so a background summary that
-# finishes after the session ended can't leak into the next session.
+# Bumped whenever the conversation is reset, so a note that finishes after the
+# session ended can't leak into the next session.
 _context_epoch = 0
 _background_tasks = set()
 
 def reset_conversation_context():
-    global conversation_history, conversation_summary, _context_epoch
+    global conversation_history, conversation_notes, _context_epoch
     conversation_history = []
-    conversation_summary = ""
+    conversation_notes = []
     _context_epoch += 1
 
-async def _summarize_in_background(turns: list, api_key: str, epoch: int):
-    global conversation_summary
-    new_chunk = await summarize_old_turns(turns, api_key)
-    if new_chunk and epoch == _context_epoch:
-        conversation_summary = (conversation_summary + "\n" + new_chunk).strip() if conversation_summary else new_chunk
-
-def evict_old_turns():
-    """Rolling summary: keep the 3 most recent turns (6 msgs) verbatim; summarize
-    anything older in the background so the client gets 'done' immediately."""
+def record_turn(question: str, answer: str):
+    """Remember a finished answer. The pair that ages out becomes a note in the background,
+    so the client gets 'done' without waiting."""
     global conversation_history
-    if len(conversation_history) <= 6:
-        return
-    turns_to_evict = conversation_history[:-6]
-    conversation_history = conversation_history[-6:]
-    task = asyncio.create_task(_summarize_in_background(turns_to_evict, get_api_key(), _context_epoch))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    conversation_history = conversation_history + [{"role": "user", "content": question},
+                                                   {"role": "assistant", "content": answer}]
+    keep = HISTORY_TURNS * 2
+    if len(conversation_history) > keep:
+        evicted, conversation_history = conversation_history[:-keep], conversation_history[-keep:]
+        task = asyncio.create_task(_note_in_background(evicted, _context_epoch))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
-# ============ CACHED SYSTEM CONTEXT ============
-# The system prompt containing the full resume + job description is VERY expensive
-# (~5000 tokens) if rebuilt and resent on every single request.
-# We build it ONCE when the session starts (or when the profile changes) and cache it.
-# Subsequent questions only send the slim role-instruction system prompt + conversation tail.
+async def _note_in_background(turns: list, epoch: int):
+    note = await note_for_turns(turns)
+    if note and epoch == _context_epoch:
+        conversation_notes.append(note)
+        del conversation_notes[:-MAX_NOTES]
 
-_cached_system_context = None   # Full system prompt string (with resume & JD)
-_cached_context_hash = None     # Hash of inputs that produced the cache — used to detect profile changes
+NOTE_INSTRUCTIONS = (
+    "Write ONE line, at most 35 words, recording this interview exchange for the candidate's memory: "
+    "'Q: <what was asked> -> A: <the specific facts the candidate stated: employer, tools, numbers, decisions; "
+    "or the approach for a coding task>'. No other text."
+)
 
-def _build_context_hash(role: str, language: str, resume_text: str, job_description: str) -> str:
-    import hashlib
-    # Hash the full text, not just lengths: a new resume of the same length must rebuild the cache
-    raw = "\x1f".join([role or '', language or '', resume_text or '', job_description or ''])
-    return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+async def note_for_turns(turns: list) -> str:
+    """One-line note for evicted question/answer pairs (gpt-4o-mini, ~$0.0001)"""
+    if not turns or not get_api_key():
+        return ""
+    text = "\n\n".join(f"{'QUESTION' if m['role'] == 'user' else 'CANDIDATE ANSWER'}: {m['content'][:1500]}" for m in turns)
+    try:
+        resp = await get_async_client().chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": NOTE_INSTRUCTIONS}, {"role": "user", "content": text}],
+            max_tokens=90,
+            temperature=0.0,
+        )
+        track_completion_usage(resp.usage, "gpt-4o-mini")
+        return " ".join((resp.choices[0].message.content or "").split())
+    except Exception as e:
+        print(f"[NOTES ERROR] {e}")
+        return ""  # Non-fatal: this turn just isn't remembered
 
-def _compress_context(resume_text: str, job_description: str, talking_points: str = "") -> str:
-    """Build the resume + JD block for the system prompt.
+# ============ ACTIVE SESSION CONTEXT ============
+# Everything an answer is built from, set when a session is created (/session/save) or
+# resumed (/session/activate). Kept in memory: answers never read the profile from disk,
+# and only the active session's resume, JD, brief and modes can reach the prompt.
+CONTEXT_FIELDS = {
+    'target_role': '', 'target_language': '', 'resume_text': '', 'job_description': '',
+    'talking_points': '', 'is_esl': False, 'short_responses': False,  # short_responses = Cue Mode
+}
+active_context: Dict[str, Any] = {}
 
-    When the session has talking points (a brief of the resume tailored to this
-    JD, generated at setup and edited by the user), they replace the full resume:
-    about a third of the tokens, and only the experience that matters for the job.
-    Without them the full resume is sent; cutting it dropped the work history.
-    """
-    context_block = ""
-    if talking_points and talking_points.strip():
-        context_block += f"\n\n--- CANDIDATE BRIEF (YOUR resume, tailored to this job, plus how to answer) ---\n{talking_points.strip()}\n"
-    elif resume_text and resume_text.strip():
-        context_block += f"\n\n--- CANDIDATE RESUME ---\n{resume_text.strip()}\n"
-    if job_description and job_description.strip():
-        context_block += f"\n\n--- JOB DESCRIPTION ---\n{job_description.strip()}\n"
-    return context_block
+def set_active_context(session_name: str, data: Dict[str, Any], remember: bool = True):
+    """Make a session the one answers are built from, with a fresh conversation memory"""
+    global active_context, current_session_name
+    active_context = {k: (data.get(k) or default) for k, default in CONTEXT_FIELDS.items()}
+    current_session_name = session_name
+    reset_conversation_context()
+    invalidate_context_cache()
+    if remember:
+        # The profile only remembers WHICH session is active (to recover after a backend
+        # restart); older versions copied the resume/JD/modes into it, which went stale
+        p = _profile()
+        for k in CONTEXT_FIELDS:
+            p.pop(k, None)
+        p['active_session'] = session_name
+        save_profile(p)
+    print(f"[CONTEXT] Active session '{session_name}': role={active_context['target_role']!r}, "
+          f"brief={len(active_context['talking_points'])} chars, resume={len(active_context['resume_text'])} chars, "
+          f"jd={len(active_context['job_description'])} chars, esl={active_context['is_esl']}, cue={active_context['short_responses']}")
+
+def clear_active_context():
+    global active_context, current_session_name
+    active_context = {}
+    current_session_name = None
+    reset_conversation_context()
+    invalidate_context_cache()
+    p = _profile()
+    if p.pop('active_session', None) is not None:
+        save_profile(p)
+
+def get_active_context() -> Dict[str, Any]:
+    """The active session's context. If the backend restarted mid-session, recover it
+    from the session it was serving."""
+    if not active_context:
+        name = _profile().get('active_session')
+        if name:
+            try:
+                data = json.loads((safe_session_dir(name) / 'session.json').read_text(encoding='utf-8'))
+                set_active_context(name, data, remember=False)
+                print(f"[CONTEXT] Recovered active session '{name}' after restart")
+            except Exception as e:
+                print(f"[CONTEXT] Could not recover session '{name}': {e}")
+    return active_context
 
 # Answers that put a tool at the wrong job fall apart on the first follow-up question
 TRUTHFULNESS_RULES = (
-    "Only say you used a tool, platform or architecture at an employer if YOUR resume or brief lists it for that employer. "
+    "Only say you used a tool, platform or architecture at an employer if YOUR brief or resume lists it for that employer. "
     "If asked about something you used at a different job, say where (e.g. 'At Blue Cross I...'). "
     "If you have not used it, say so in one short sentence, then explain how you would approach it using related experience. "
-    "Never invent layers, architectures, tools or numbers for any company: the interviewer will ask follow-ups about them. "
+    "Never invent layers, architectures, tools or numbers for any company: the interviewer will ask follow-ups about them."
 )
 
-def get_system_context(role: str, language: str, resume_text: str, job_description: str, for_vision: bool = False, is_esl: bool = False, short_responses: bool = False, talking_points: str = "") -> str:
-    """Return a cached system prompt. Only rebuilds when role/language/resume/JD/modifiers changes."""
-    global _cached_system_context, _cached_context_hash
+ESL_RULES = (
+    "ESL MODE: the candidate speaks English as a second language. One idea per sentence, short simple sentences, "
+    "no idioms or figures of speech, no multi-clause sentences. Keep technical terms, with a few plain words of "
+    "explanation the first time."
+)
 
-    # Include modifiers in hash to rebuild cache if they change
-    new_hash = _build_context_hash(role, language, resume_text, job_description + "\x1f" + (talking_points or '')) + f"|{is_esl}|{short_responses}"
+CUE_RULES = (
+    "CUE MODE: the candidate speaks in their own words and only glances at your reply. Your ENTIRE reply is 3-5 lines, "
+    "each starting with '- ' and at most 8 words: keywords, tools, numbers, employer. The first line is the direct "
+    "answer. Nothing before the first line or after the last: no sentence, no paragraph, no intro, no closing. "
+    "Coding tasks: the code first, then 2-3 cue lines. This overrides every other length or style instruction, "
+    "and the style of earlier answers."
+)
 
-    if _cached_system_context is not None and _cached_context_hash == new_hash and not for_vision:
-        print("[CONTEXT CACHE] Hit — reusing cached system context (0 extra resume tokens)")
-        return _cached_system_context
+_cached_system_prompt = None
+_cached_prompt_key = None
 
-    print(f"[CONTEXT CACHE] {'Miss' if _cached_system_context else 'Cold start'} — building system context")
+def _context_block(ctx: Dict[str, Any]) -> str:
+    """The brief replaces the full resume when the session has one: about a third of the tokens,
+    and only the experience that matters for this job. Without it the whole resume goes."""
+    block = ""
+    if ctx['talking_points'].strip():
+        block += f"\n\n--- CANDIDATE BRIEF (YOUR experience, tailored to this job, plus how to answer) ---\n{ctx['talking_points'].strip()}"
+    elif ctx['resume_text'].strip():
+        block += f"\n\n--- CANDIDATE RESUME (YOUR experience) ---\n{ctx['resume_text'].strip()}"
+    if ctx['job_description'].strip():
+        block += f"\n\n--- JOB DESCRIPTION ---\n{ctx['job_description'].strip()}"
+    return block
 
-    context_block = _compress_context(resume_text, job_description, talking_points)
-
-    # Add Modifiers - Make them extremely strict
-    modifier_block = ""
-    if is_esl:
-        modifier_block += "\n\nCRITICAL CONSTRAINT: The user speaks English as a second language. Use short simple sentences. One idea per sentence. Avoid idioms and figures of speech (e.g. 'hit the ground running', 'boiling the ocean'). Keep technical terms but explain them briefly when first used. Never use compound or multi-clause sentences."
-    if short_responses:
-        # Cue mode (the "short_responses" setting): notes to glance at, not a script to read out
-        modifier_block += ("\n\nCRITICAL CONSTRAINT - CUE MODE: The candidate answers in their own words and only glances at your reply. "
-                           "Reply with 3-5 bullet cues and nothing else. Each bullet is at most 8 words: keywords, tool names, numbers, the employer. "
-                           "The first bullet is the direct answer. No full sentences, no intro, no closing line. "
-                           "For coding tasks, give the code, then 2-3 cue bullets. This overrides any instruction to write out what the candidate should say.")
-
-    if for_vision:
-        # Vision requests need the context inline — do NOT cache these
-        return (
-            f"CRITICAL: You ARE the job candidate in this interview for a {role} position. "
-            "You are NOT an AI assistant. NEVER say 'I am an AI'. "
-            "The resume below is YOUR real work history. When asked about past jobs, refer to YOUR resume. "
-            f"{TRUTHFULNESS_RULES}"
-            "Speak in FIRST PERSON as yourself - a real human professional. "
-            "When you see a coding problem, SOLVE IT with working code and clear explanation. "
-            "Use simple words. Short sentences. One idea per sentence. "
-            "Explain your approach in 6-8 sentences maximum. Write clean code with comments, then explain simply. "
-            "Draw from YOUR resume for all experience-related questions. "
-            f"Prefer {language or 'Python'} for all coding and technical explanations. "
-            "Remember what was discussed earlier."
-            f"{modifier_block}"
-            f"{context_block}"
-        )
-
-    system_prompt = (
-        f"CRITICAL: You ARE the job candidate in this interview for a {role} position. "
-        "You are NOT an AI assistant. NEVER say 'I am an AI'. "
-        "The resume below is YOUR real work history. You ARE this person with this background. "
-        "When asked about previous jobs, projects, or experience - use details from YOUR resume. "
-        f"{TRUTHFULNESS_RULES}"
-        "Speak in FIRST PERSON as yourself - a real human professional. "
-        "Use simple words. Short sentences. One idea per sentence. "
-        "Be confident but humble. Keep answers to 4-5 sentences. Give specific examples from YOUR resume. "
-        "Remember what was discussed earlier in this conversation. "
-        f"Prefer {language or 'Python'} for all coding and technical explanations. "
-        "If you write ANY code, you MUST wrap it strictly inside standard Markdown content blocks specifying the exact language (e.g. ```python ... ```)."
-        f"{modifier_block}"
-        f"{context_block}"
-    )
-
-    _cached_system_context = system_prompt
-    _cached_context_hash = new_hash
-    tok_estimate = len(system_prompt) // 4
-    print(f"[CONTEXT CACHE] Cached. System prompt ~{tok_estimate} tokens (compressed from raw docs).")
-    return system_prompt
+def get_system_prompt(ctx: Dict[str, Any]) -> str:
+    """The session prompt: persona, rules, modes, brief or resume, JD. It is identical for every
+    answer in a session, so it is built once and OpenAI's prompt cache bills it at the cached
+    rate after the first answer."""
+    global _cached_system_prompt, _cached_prompt_key
+    import hashlib
+    key = hashlib.sha256(json.dumps(ctx, sort_keys=True).encode('utf-8')).hexdigest()
+    if _cached_system_prompt is not None and key == _cached_prompt_key:
+        return _cached_system_prompt
+    role = ctx['target_role'].strip() or 'the advertised'
+    language = ctx['target_language'].strip() or 'Python'
+    cue = bool(ctx['short_responses'])
+    parts = [
+        f"You are the candidate in a live job interview for a {role} position. Answer as yourself, in first person, "
+        "as a real professional. Never say or hint that you are an AI.",
+        "YOUR experience is the candidate brief or resume below. " + TRUTHFULNESS_RULES,
+        "Use simple words and short sentences. Be confident but humble. Ground every answer in specifics from YOUR "
+        "experience: tools, data, numbers.",
+        "" if cue else "Keep spoken answers to 4-5 sentences unless the question clearly needs more.",
+        f"Coding tasks: complete, working code in a fenced block tagged with its language (default {language}), then "
+        "the approach and time/space complexity in 3-5 short sentences.",
+        ESL_RULES if ctx['is_esl'] else "",
+        CUE_RULES if cue else "",
+    ]
+    prompt = "\n\n".join(part for part in parts if part) + _context_block(ctx)
+    _cached_system_prompt, _cached_prompt_key = prompt, key
+    print(f"[CONTEXT] Session prompt built: ~{len(prompt) // 4} tokens")
+    return prompt
 
 def invalidate_context_cache():
-    """Call this when the profile/resume is updated so the cache is rebuilt on next request."""
-    global _cached_system_context, _cached_context_hash
-    _cached_system_context = None
-    _cached_context_hash = None
-    print("[CONTEXT CACHE] Invalidated. Will rebuild on next request.")
+    global _cached_system_prompt, _cached_prompt_key
+    _cached_system_prompt = None
+    _cached_prompt_key = None
 
+def final_answer_rules(ctx: Dict[str, Any], screenshot: bool = False) -> dict:
+    """Last system message before the question. The model follows what it read last, so the rules
+    that got ignored at the top of a long prompt are repeated here."""
+    rules = ["Before you answer: name a tool, platform or architecture at an employer only if YOUR brief or resume "
+             "lists it under that employer. If the question assumes otherwise (e.g. 'with ADF at your current job'), "
+             "correct it in a few words and say where you did use it. Use a number (%, volume, count, time saved) "
+             "only if it appears in YOUR brief or resume."]
+    if screenshot:
+        rules.append("A screenshot of the candidate's screen is attached: answer or solve exactly what it shows. "
+                     "For a coding problem, give complete working code.")
+    if ctx.get('is_esl'):
+        rules.append(ESL_RULES)
+    if ctx.get('short_responses'):
+        rules.append(CUE_RULES)
+    return {"role": "system", "content": "\n\n".join(rules)}
 
-async def summarize_old_turns(turns_to_summarize: list, api_key: str) -> str:
-    """Summarize a list of evicted conversation turns into a compact context note.
-    Uses gpt-4o-mini (cheapest model) — typically costs ~$0.0001 per call.
-    Returns a short paragraph describing what was discussed and any key decisions/code.
-    """
-    if not turns_to_summarize or not api_key:
-        return ""
-    
-    # Format turns into readable Q&A text
-    qa_text = ""
-    for msg in turns_to_summarize:
-        role_label = "User" if msg["role"] == "user" else "Assistant"
-        qa_text += f"{role_label}: {msg['content'][:800]}\n\n"  # Cap per-message length
-    
-    try:
-        resp = await get_async_client(api_key).chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a compact note-taker. Summarize the following Q&A exchange in 2-3 sentences. "
-                        "Focus on: what was asked/discussed, key technical decisions or code produced, and any "
-                        "important context needed to answer follow-up questions. Be concise but technically precise."
-                    )
-                },
-                {"role": "user", "content": qa_text}
-            ],
-            max_tokens=200,
-            temperature=0.0
-        )
-        summary_text = resp.choices[0].message.content.strip()
-        in_tok = resp.usage.prompt_tokens
-        out_tok = resp.usage.completion_tokens
-        summary_cost = calculate_cost(in_tok, out_tok, "gpt-4o-mini")
-        print(f"[SUMMARY] Summarized {len(turns_to_summarize)} msgs → {len(summary_text)} chars | "
-              f"{in_tok} in / {out_tok} out tokens | cost ${summary_cost:.6f}")
-        return summary_text
-    except Exception as e:
-        print(f"[SUMMARY ERROR] Failed to summarize old turns: {e}")
-        return ""  # Non-fatal — just lose the summary for this turn
 
 # Auto-reset disabled - resume will persist between restarts
 
@@ -1144,24 +1161,6 @@ def check_access_allowed() -> bool:
 
 
 
-@app.post('/profile')
-async def post_profile(data: Dict[str, Any]):
-    global profile_cache
-    try:
-        # Keys the client must not be able to overwrite or wipe
-        protected = ('openai_api_key', 'license_key', 'demo_started_at', 'last_demo_end_time')
-        merged = {k: v for k, v in data.items() if k not in protected}
-        for k in protected:
-            if k in _profile():
-                merged[k] = _profile()[k]
-        save_profile(merged)
-        profile_cache = merged
-        invalidate_context_cache()  # Role/JD may have changed, rebuild system context next time
-        return {"status": "ok"}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-
 # ============ SESSION MANAGEMENT ============
 # Sessions are stored in: BASE_DIR/sessions/<session_name>/
 # Each session folder contains:
@@ -1199,7 +1198,6 @@ def safe_upload_name(filename: str) -> str:
 
 def save_conversation_to_session(question: str, response: str, had_screenshot: bool = False, model: str = "", response_time: float = 0, total_time: float = 0, cost: float = 0, input_tokens: int = 0, output_tokens: int = 0):
     """Helper function to save a Q&A pair to the current session"""
-    global current_session_name
     
     if not current_session_name:
         return
@@ -1235,8 +1233,7 @@ def save_conversation_to_session(question: str, response: str, had_screenshot: b
 
 @app.post('/session/create')
 async def create_session(data: Dict[str, str]):
-    """Create a new session folder"""
-    global current_session_name
+    """Create a new session folder (it becomes active in /session/save)"""
     
     session_name = data.get('session_name', '').strip()
     if not session_name:
@@ -1245,7 +1242,6 @@ async def create_session(data: Dict[str, str]):
     session_dir = safe_session_dir(session_name)
     try:
         session_dir.mkdir(parents=True, exist_ok=True)
-        current_session_name = session_name
         print(f"[SESSION] Created session folder: {session_dir}")
         return {"status": "ok", "session_path": str(session_dir)}
     except Exception as e:
@@ -1254,30 +1250,16 @@ async def create_session(data: Dict[str, str]):
 
 @app.post('/session/resume')
 async def upload_session_resume(file: UploadFile = File(...), session_name: str = Form(...)):
-    """Upload resume to a specific session folder"""
-    global profile_cache, current_session_name
-    
+    """Store the resume in the session folder and return its text (used by /session/save)"""
     try:
         filename = safe_upload_name(file.filename)
         session_dir = safe_session_dir(session_name)
         session_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save resume file to session folder
-        resume_path = session_dir / filename
         content = await file.read()
-        resume_path.write_bytes(content)
-        print(f"[SESSION] Resume saved to: {resume_path}")
-        
+        (session_dir / filename).write_bytes(content)
         text = _docx_text(content)
-        
-        current_session_name = session_name
-        
-        # Also update profile cache for AI responses
-        if profile_cache is None:
-            profile_cache = {}
-        profile_cache['resume_text'] = text
-        
-        return {"status": "ok", "resume_text": text, "resume_path": str(resume_path)}
+        print(f"[SESSION] Resume saved to {session_dir / filename} ({len(text)} chars of text)")
+        return {"status": "ok", "resume_text": text, "resume_path": str(session_dir / filename)}
     except Exception as e:
         print(f"[SESSION RESUME ERROR] {e}")
         return {"status": "error", "error": str(e)}
@@ -1314,7 +1296,9 @@ async def generate_session_brief(file: UploadFile = File(...), job_description: 
         if not job_description.strip():
             return {"status": "error", "error": "Paste the job description first"}
 
-        model = DEFAULT_TEXT_MODEL
+        # Once per session, and every answer builds on it: gpt-4o-mini kept moving tools
+        # between employers here, so the stronger model is worth a few cents
+        model = "gpt-4o"
         completion = await get_async_client(api_key.strip() or None).chat.completions.create(
             model=model,
             messages=[
@@ -1329,8 +1313,7 @@ async def generate_session_brief(file: UploadFile = File(...), job_description: 
             temperature=0.2,
         )
         brief = (completion.choices[0].message.content or "").strip()
-        if completion.usage:
-            update_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model)
+        track_completion_usage(completion.usage, model)
         print(f"[BRIEF] Generated {len(brief)} chars from a {len(resume_text)}-char resume")
         return {"status": "ok", "talking_points": brief}
     except Exception as e:
@@ -1340,8 +1323,7 @@ async def generate_session_brief(file: UploadFile = File(...), job_description: 
 
 @app.post('/session/save')
 async def save_session_data(data: Dict[str, Any]):
-    """Save session metadata (job description, API key, etc.)"""
-    global profile_cache, current_session_name
+    """Save a new session's settings and make it the active session"""
     
     session_name = data.get('session_name', '').strip()
     if not session_name:
@@ -1382,30 +1364,14 @@ async def save_session_data(data: Dict[str, Any]):
         if not conv_file.exists():
             conv_file.write_text('[]', encoding='utf-8')
         
-        # Always replace the previous session's talking points, even when the key below is skipped
-        if profile_cache is None:
-            profile_cache = {}
-        profile_cache['talking_points'] = data.get('talking_points', '')
-        save_profile(profile_cache)
-
-        # Update profile cache for AI ONLY if the key provided is valid
+        # A newly typed key is remembered (encrypted) in the profile; the session itself never stores it
         new_key = data.get('openai_api_key', '').strip()
-        if new_key.startswith("sk-") and not new_key.endswith("KiwA"):
-            if profile_cache is None:
-                profile_cache = {}
-            profile_cache['openai_api_key'] = new_key
-            profile_cache['job_description'] = data.get('job_description', '')
-            profile_cache['resume_text'] = data.get('resume_text', '')
-            profile_cache['is_esl'] = data.get('is_esl', False)
-            profile_cache['short_responses'] = data.get('short_responses', False)
-            
-            # Also save to profile for persistence
-            save_profile(profile_cache)
-        else:
-            print(f"[SESSION] Skipping global API key update (provided key is empty or placeholder)")
-        
-        current_session_name = session_name
-        
+        if new_key.startswith("sk-") and not new_key.endswith("KiwA") and _profile().get('openai_api_key') != new_key:
+            _profile()['openai_api_key'] = new_key
+            save_profile(_profile())
+
+        set_active_context(session_name, session_data)
+
         return {"status": "ok", "session_path": str(session_dir)}
     except Exception as e:
         print(f"[SESSION SAVE ERROR] {e}")
@@ -1415,7 +1381,6 @@ async def save_session_data(data: Dict[str, Any]):
 @app.post('/session/conversation')
 async def save_conversation_entry(data: Dict[str, Any]):
     """Save a conversation entry (question + response) to the session"""
-    global current_session_name
     
     session_name = data.get('session_name') or current_session_name
     if not session_name:
@@ -1525,8 +1490,7 @@ async def critique_session(session_name: str):
             temperature=0.3,
         )
         review = (completion.choices[0].message.content or "").strip()
-        if completion.usage:
-            update_usage(completion.usage.prompt_tokens, completion.usage.completion_tokens, model)
+        track_completion_usage(completion.usage, model)
         (session_dir / 'review.txt').write_text(review, encoding='utf-8')
         print(f"[REVIEW] Critique for '{session_name}': {len(review)} chars")
         return {"status": "ok", "review": review}
@@ -1538,7 +1502,6 @@ async def critique_session(session_name: str):
 @app.post('/session/end')
 async def end_session(data: Dict[str, str]):
     """Finalize and close a session"""
-    global current_session_name
 
     session_name = data.get('session_name') or current_session_name
     if not session_name:
@@ -1550,9 +1513,8 @@ async def end_session(data: Dict[str, str]):
         if not is_licensed_backend:
             end_demo()
 
-        current_session_name = None
-        reset_conversation_context()
-        print(f"[SESSION] Ended session: {session_name} (history and rolling summary cleared)")
+        clear_active_context()
+        print(f"[SESSION] Ended session: {session_name} (context and conversation memory cleared)")
         return {"status": "ok", "message": f"Session '{session_name}' ended"}
 
     except Exception as e:
@@ -1590,73 +1552,25 @@ async def list_sessions():
 
 @app.get('/session/load/{session_name}')
 async def load_session(session_name: str):
-    """Load a previous session's data"""
-    global current_session_name, profile_cache, session_usage
+    """Read a saved session for the Past Sessions view. Read-only: viewing a session does not
+    activate it (that is /session/activate, on Resume)."""
     try:
         session_dir = safe_session_dir(session_name)
         session_file = session_dir / 'session.json'
-        
         if not session_file.exists():
             return {"status": "error", "error": "Session not found"}
-        
+
         data = json.loads(session_file.read_text(encoding='utf-8'))
-        session_key = (data.pop('openai_api_key', '') or '').strip()
-        if session_key:
+        if data.pop('openai_api_key', None):
             # Older versions saved the key in plain text per session - remove it
             session_file.write_text(json.dumps(data, indent=2), encoding='utf-8')
 
-        demo_error = start_demo()
-        if demo_error:
-            return {"status": "error", "error": demo_error}
-        
-        # Load conversation history
         conv_file = session_dir / 'conversation.json'
-        history = []
-        if conv_file.exists():
-            try:
-                history = json.loads(conv_file.read_text(encoding='utf-8'))
-            except:
-                history = []
-
-        # Set current session so new conversations are saved here
-        current_session_name = session_name
-        print(f"[SESSION] Set active session to: {session_name}")
-
-        # Reset session usage so API cost starts at $0 for this run
-        session_usage = {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_cost": 0.0,
-            "request_count": 0,
-            "ai_cost": 0.0,
-            "transcription_seconds": 0.0,
-            "transcription_cost": 0.0
-        }
-
-        # Restore profile cache for AI context
-        # 1. Start with the currently validated global key
-        current_valid_key = (profile_cache or {}).get('openai_api_key') or load_profile().get('openai_api_key', '')
-        
-        if profile_cache is None:
-            profile_cache = {}
-        profile_cache['job_description'] = data.get('job_description', '')
-        profile_cache['resume_text'] = data.get('resume_text', '')
-        profile_cache['talking_points'] = data.get('talking_points', '')
-        profile_cache['target_role'] = data.get('target_role', '')
-        profile_cache['target_language'] = data.get('target_language', '')
-        
-        # 2. Restore API key: Prefer the currently validated global key
-        if current_valid_key:
-            profile_cache['openai_api_key'] = current_valid_key
-            print(f"[SESSION] Using current global API key (Session key was ignored)")
-        elif session_key.startswith("sk-") and not session_key.endswith("KiwA"):
-            profile_cache['openai_api_key'] = session_key
-            print(f"[SESSION] API key restored from session '{session_name}'")
-        else:
-            print(f"[SESSION] WARNING: No API key available - user must re-enter key")
-        
-        # PERSIST: Ensure the AI endpoints (which reload from disk) see this restored context
-        save_profile(profile_cache)
+        try:
+            history = json.loads(conv_file.read_text(encoding='utf-8')) if conv_file.exists() else []
+        except Exception:
+            history = []
+        review_file = session_dir / 'review.txt'
 
         return {
             "status": "ok",
@@ -1664,13 +1578,37 @@ async def load_session(session_name: str):
             "resume_text": data.get('resume_text', ''),
             "job_description": data.get('job_description', ''),
             "talking_points": data.get('talking_points', ''),
-            "review": (session_dir / 'review.txt').read_text(encoding='utf-8') if (session_dir / 'review.txt').exists() else '',
             "target_role": data.get('target_role', ''),
             "target_language": data.get('target_language', ''),
+            "is_esl": bool(data.get('is_esl', False)),
+            "short_responses": bool(data.get('short_responses', False)),
+            "smart_interview": bool(data.get('smart_interview', False)),
             "created_at": data.get('created_at', ''),
             "text_model": data.get('text_model', DEFAULT_TEXT_MODEL),
+            "review": review_file.read_text(encoding='utf-8') if review_file.exists() else '',
             "history": history
         }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post('/session/activate')
+async def activate_session(data: Dict[str, str]):
+    """Resume a saved session: its resume/brief/JD/modes become the answer context, with a fresh
+    conversation memory (earlier answers stay in the session file, not in the prompt)"""
+    global session_usage
+    try:
+        session_name = (data.get('session_name') or '').strip()
+        session_file = safe_session_dir(session_name) / 'session.json'
+        if not session_file.exists():
+            return {"status": "error", "error": "Session not found"}
+        demo_error = start_demo()
+        if demo_error:
+            return {"status": "error", "error": demo_error}
+        set_active_context(session_name, json.loads(session_file.read_text(encoding='utf-8')))
+        session_usage = {"input_tokens": 0, "output_tokens": 0, "total_cost": 0.0, "request_count": 0,
+                         "ai_cost": 0.0, "transcription_seconds": 0.0, "transcription_cost": 0.0}
+        return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -1700,14 +1638,14 @@ async def delete_session(session_name: str):
 async def clear_conversation():
     """Clear conversation history to start a fresh session"""
     reset_conversation_context()
-    print("[CONVERSATION] History and rolling summary cleared - starting fresh session")
+    print("[CONVERSATION] Conversation memory cleared")
     return {"status": "ok", "message": "Conversation history cleared"}
 
 
 @app.get('/conversation/history')
 async def get_conversation_history():
     """Get current conversation history (for debugging)"""
-    return {"history": conversation_history, "count": len(conversation_history)}
+    return {"history": conversation_history, "notes": conversation_notes, "count": len(conversation_history)}
 
 
 @app.get('/usage')
@@ -1731,69 +1669,17 @@ async def reset_usage():
     }
     return {"status": "ok", "message": "Usage reset"}
 
-@app.post('/profile/resume')
-async def upload_resume(file: UploadFile = File(...)):
-    global profile_cache
-    try:
-        filename = safe_upload_name(file.filename)
-
-        resumes_dir = BASE_DIR / 'resumes'
-        print(f"Creating resumes directory at: {resumes_dir}")
-        resumes_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Directory created: {resumes_dir.exists()}")
-        out_path = resumes_dir / filename
-        content = await file.read()
-        out_path.write_bytes(content)
-
-        # Extract text using python-docx (if available)
-        Document = _docx_document()
-        if Document is None:
-            return {"status": "error", "error": "python-docx is not installed on the server. Install with: pip install python-docx"}
-
-        try:
-            doc = Document(out_path)
-            text = "\n\n".join([p.text for p in doc.paragraphs if p.text and p.text.strip()])
-        except Exception as e:
-            return {"status": "error", "error": f"docx parse failed: {e}"}
-
-        # Save extracted resume text into profile
-        if not isinstance(profile_cache, dict):
-            profile_cache = {}
-        profile_cache['resume_text'] = text
-        
-        try:
-            save_profile(profile_cache)
-            # Invalidate the cached system context so the new resume is picked up
-            invalidate_context_cache()
-            print(f"\n{'='*60}")
-            print(f"[RESUME UPLOAD SUCCESS]")
-            print(f"File: {filename}")
-            print(f"Text extracted: {len(text)} characters")
-            print(f"Saved to profile! Context cache invalidated.")
-            print(f"{'='*60}\n")
-        except Exception as save_error:
-            print(f"\n[RESUME SAVE FAILED]: {save_error}\n")
-            return {"status": "error", "error": f"Failed to save resume: {save_error}"}
-
-        return {"status": "ok", "resume_snippet": text[:800]}
-    except Exception as e:
-        print(f"\n[RESUME UPLOAD ERROR]: {e}\n")
-        return {"status": "error", "error": str(e)}
-
 # ----------------------------------------------------------------------------
 
 # ============ SMART INTERVIEW ============
 SMART_INTERVIEW_INSTRUCTIONS = (
-    "SMART INTERVIEW MODE: the user message is a live exchange transcribed from a call, "
-    "labeled by speaker. 'Interviewer:' lines come from the interviewer; 'Me:' lines are "
-    "the candidate you are helping. Write what the candidate should say next in answer to "
-    "the interviewer's latest question or task. If the candidate asked a clarifying question "
-    "and the interviewer answered it, follow that clarification exactly. Never answer the "
-    "candidate's own clarifying questions. If the interviewer is clarifying or changing a "
-    "question you already answered earlier in this conversation, give the revised answer. "
-    "Transcripts may contain small speech-to-text errors; infer the intended words. "
-    "A 'Me (just said):' line is the end of what the candidate said right before; use it only as context. "
-    "Reply with only what the candidate should say: never start with 'Me:' or any speaker label."
+    "SMART INTERVIEW MODE: the user message is a live exchange transcribed from a call, labeled by speaker: "
+    "'Interviewer:' lines are the interviewer, 'Me:' lines are you, the candidate. Answer the interviewer's latest "
+    "question or task. If you asked a clarifying question and the interviewer answered it, follow that clarification "
+    "exactly; never answer your own clarifying questions. If the interviewer is clarifying or changing a question "
+    "answered earlier, give the revised answer. A 'Me (just said):' line is the end of what you said right before; "
+    "use it only as context. Transcripts contain speech-to-text errors; infer the intended words. "
+    "Never start your reply with a speaker label."
 )
 
 
@@ -1828,6 +1714,7 @@ async def smart_classify(req: SmartClassifyRequest):
             max_tokens=1,
             temperature=0,
         )
+        track_completion_usage(res.usage, "gpt-4o-mini")
         verdict = (res.choices[0].message.content or "").strip().upper()
         print(f"[SMART] classify -> {verdict}")
         return {"answer_now": verdict.startswith("Y")}
@@ -1838,99 +1725,64 @@ async def smart_classify(req: SmartClassifyRequest):
 
 @app.post("/ai/stream")
 async def stream_ai_response(req: AIRequest):
-    """Streaming endpoint for real-time AI responses using Server-Sent Events"""
-    global conversation_history
-    
+    """Stream one answer as Server-Sent Events.
+
+    What the model gets, in this order (fixed parts first, so OpenAI's prompt cache covers them):
+      1. the session prompt: persona, rules, modes, brief or resume, JD     (get_system_prompt)
+      2. Smart Interview instructions, when the question comes from Smart mode
+      3. one line per older question, at most MAX_NOTES                    (conversation_notes)
+      4. the last HISTORY_TURNS questions and answers verbatim             (conversation_history)
+      5. final rules: truthfulness, screenshot, ESL/Cue format - read last, so they win
+      6. the question (Smart: the labeled exchange), plus the screenshot
+    """
     async def generate_stream():
-        global conversation_history, conversation_summary
         if not check_access_allowed():
             yield f"data: {json.dumps({'error': 'Demo expired. Please purchase a license to continue.'})}\n\n"
             return
+        ctx = get_active_context()
+        if not ctx:
+            yield f"data: {json.dumps({'error': 'No active session. Create or resume a session first.'})}\n\n"
+            return
 
+        import time as _time
         try:
             client = get_async_client()
-            
-            current_profile = load_profile()
-            resume_text = ""
-            job_description = ""
-            profile_metadata = None
-            if current_profile and isinstance(current_profile, dict):
-                resume_text = current_profile.get('resume_text') or ""
-                job_description = current_profile.get('job_description') or ""
-                profile_metadata = {k: v for k, v in current_profile.items() if k not in ['resume_text', 'job_description']}
-            
-            has_resume = bool(resume_text.strip())
-            print(f"[STREAM] Has resume: {has_resume}, history len: {len(conversation_history)}")
-
-            # Use cached system context (resume + JD baked in)
-            is_esl = False
-            short_responses = False
-            if profile_metadata:
-                is_esl = profile_metadata.get('is_esl', False)
-                short_responses = profile_metadata.get('short_responses', False)
-
-            system_content = get_system_context(
-                req.role, req.target_language or 'Python',
-                resume_text, job_description,
-                for_vision=bool(req.screenshot),
-                is_esl=is_esl,
-                short_responses=short_responses,
-                talking_points=(current_profile or {}).get('talking_points') or ""
-            )
-            messages = [{"role": "system", "content": system_content}]
+            messages = [{"role": "system", "content": get_system_prompt(ctx)}]
             if req.smart_mode:
                 messages.append({"role": "system", "content": SMART_INTERVIEW_INSTRUCTIONS})
-
-            # Inject rolling summary if available — compressed memory of evicted turns
-            if conversation_summary:
-                messages.append({
-                    "role": "system",
-                    "content": f"[CONTEXT FROM EARLIER IN THIS SESSION]:\n{conversation_summary}"
-                })
-
-            # Send last 3 raw turns (6 messages) for full-fidelity recent context
-            messages.extend(conversation_history[-6:])
-
+            if conversation_notes:
+                messages.append({"role": "system", "content": "Earlier in this interview (one line per question; "
+                                 "stay consistent with what you said):\n" + "\n".join(conversation_notes)})
+            messages.extend(conversation_history)
+            messages.append(final_answer_rules(ctx, screenshot=bool(req.screenshot)))
             if req.screenshot:
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": req.transcript},
-                        {"type": "image_url", "image_url": {"url": req.screenshot}}
-                    ]
-                })
-                model = DEFAULT_SCREENSHOT_MODEL
-                print(f"[STREAM] Using model: {model} (vision)")
+                messages.append({"role": "user", "content": [
+                    {"type": "text", "text": req.transcript},
+                    {"type": "image_url", "image_url": {"url": req.screenshot}},
+                ]})
             else:
                 messages.append({"role": "user", "content": req.transcript})
-                model = req.text_model if req.text_model and req.text_model in AVAILABLE_TEXT_MODELS else DEFAULT_TEXT_MODEL
-                print(f"[STREAM] Using model: {model} (text-only, user selected: {req.text_model})")
 
-
-            # GPT-5+ models are reasoning models: they use tokens for internal thinking
-            # before producing output so they need a much higher token limit.
-            # Do NOT pass temperature or max_tokens to reasoning models - unsupported params.
-            token_param = {}
+            # Screenshots use the selected model too: all of them read images, and coding
+            # problems are where the stronger model matters most
+            model = req.text_model if req.text_model in AVAILABLE_TEXT_MODELS else DEFAULT_TEXT_MODEL
             if model.startswith("gpt-5"):
-                token_param["max_completion_tokens"] = 16384  # reasoning needs headroom for thinking tokens
+                # Reasoning models: thinking tokens need headroom; temperature is unsupported
+                token_param = {"max_completion_tokens": 16384}
             else:
-                token_param["max_tokens"] = 2048
-                token_param["temperature"] = 0.7
-            
-            # Send heartbeat to establish SSE connection
+                token_param = {"max_tokens": 2048, "temperature": 0.7}
+            print(f"[STREAM] {model} | smart={req.smart_mode} screenshot={bool(req.screenshot)} | "
+                  f"notes={len(conversation_notes)} history={len(conversation_history) // 2} turns")
+
             yield f"data: {json.dumps({'heartbeat': True})}\n\n"
-            
-            import time as _time
             _start_time = _time.time()
-            
-            # Create completion - catch errors separately so they always reach the client
             try:
+                # prompt_cache_key routes every answer of this session to the same OpenAI cache,
+                # so the fixed session prompt is billed at the cached rate after the first answer
                 completion = await client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    stream=True,
-                    **token_param
-                )
+                    model=model, messages=messages, stream=True,
+                    stream_options={"include_usage": True},
+                    prompt_cache_key=f"session-{_cached_prompt_key[:24]}", **token_param)
             except Exception as create_err:
                 print(f"[STREAM] OpenAI create() error: {create_err}")
                 err_text = str(create_err)
@@ -1938,214 +1790,65 @@ async def stream_ai_response(req: AIRequest):
                     err_text = "OUT_OF_CREDITS: Your OpenAI account is out of credits."
                 yield f"data: {json.dumps({'error': err_text})}\n\n"
                 return
-            
-            # Collect full response for history
+
             full_response = ""
-            _ttft = 0  # time to first token
-            
-            # Yield chunks as they arrive - wrap in try/except for iteration errors
+            _ttft = 0
+            usage = None
             try:
                 async for chunk in completion:
+                    if chunk.usage:
+                        usage = chunk.usage  # last chunk: real token counts, incl. cached
                     if chunk.choices and chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
-                        if not full_response:  # First token
+                        if not full_response:
                             _ttft = _time.time() - _start_time
                         full_response += content
-                        # Send as Server-Sent Event format
                         yield f"data: {json.dumps({'chunk': content})}\n\n"
             except Exception as iter_err:
-                err_msg = str(iter_err)[:200]
                 print(f"[STREAM] Iteration error: {iter_err}")
-                yield f"data: {json.dumps({'error': err_msg})}\n\n"
+                yield f"data: {json.dumps({'error': str(iter_err)[:200]})}\n\n"
                 return
-            
-            # Check for empty response
+
             if not full_response.strip():
                 print(f"[STREAM] WARNING: Model {model} returned empty response")
                 yield f"data: {json.dumps({'error': f'Model {model} returned an empty response. The model may not support this request format.'})}\n\n"
                 return
 
-            # Calculate usage and per-response cost BEFORE saving
-            input_text = "\n".join([m.get('content', '') if isinstance(m.get('content'), str) else str(m.get('content', '')) for m in messages])
-            input_tokens = count_tokens(input_text)
-            output_tokens = count_tokens(full_response)
-            
-            # Estimate image tokens if screenshot was used
-            image_tokens = 0
-            if req.screenshot:
-                image_tokens = estimate_image_tokens(req.screenshot, model)
-            
-            response_cost = calculate_cost(input_tokens, output_tokens, model, image_tokens)
-
-            # Save to conversation history only if save_to_context is True
-            # (skip for one-shot LeetCode problems, save for scenarios needing follow-up)
-            save_to_context = req.save_to_context is not False
-            if save_to_context:
-                if req.screenshot:
-                    user_msg = f"[USER SHARED A SCREENSHOT] Question about the screenshot: {req.transcript}"
-                else:
-                    user_msg = req.transcript
-                conversation_history.append({"role": "user", "content": user_msg})
-                conversation_history.append({"role": "assistant", "content": full_response})
-                
-                # Save to session folder if active
-                if current_session_name:
-                    try:
-                        _total_time_current = _time.time() - _start_time
-                        save_conversation_to_session(req.display_question if (req.display_question and not req.screenshot) else user_msg, full_response, bool(req.screenshot), model, response_time=_ttft, total_time=_total_time_current, cost=response_cost, input_tokens=input_tokens, output_tokens=output_tokens)
-                    except Exception as save_err:
-                        print(f"[SESSION SAVE ERROR] {save_err}")
-                
-                evict_old_turns()
-                
-                print(f"[STREAM] Conversation history: {len(conversation_history)} msgs | Summary: {len(conversation_summary)} chars")
+            # Cost from OpenAI's own counts; a local estimate only if they're missing
+            if usage:
+                details = getattr(usage, 'prompt_tokens_details', None)
+                cached_tokens = (getattr(details, 'cached_tokens', 0) or 0) if details else 0
+                input_tokens, output_tokens, image_tokens = usage.prompt_tokens, usage.completion_tokens, 0
             else:
-                print(f"[STREAM] Skipped saving to history (save_to_context=False)")
-            
-            update_usage(input_tokens, output_tokens, model, image_tokens)
-            
+                input_tokens = count_tokens("\n".join(m['content'] if isinstance(m['content'], str) else req.transcript for m in messages))
+                output_tokens = count_tokens(full_response)
+                image_tokens = estimate_image_tokens(req.screenshot, model) if req.screenshot else 0
+                cached_tokens = 0
+            response_cost = update_usage(input_tokens, output_tokens, model, image_tokens, cached_tokens)
             _total_time = _time.time() - _start_time
-            # Send completion signal with usage info and per-response cost
-            yield f"data: {json.dumps({'done': True, 'model': model, 'usage': session_usage, 'response_in_tokens': input_tokens, 'response_out_tokens': output_tokens, 'response_cost': round(response_cost, 6), 'ttft': round(_ttft, 2), 'total_time': round(_total_time, 2)})}\n\n"
-            
-        except Exception as e:
-            err_msg = str(e)[:200]
-            print(f"Streaming AI Error: {e}")
-            yield f"data: {json.dumps({'error': err_msg})}\n\n"
-    
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
-
-@app.post("/ai")
-async def generate_ai_response(req: AIRequest):
-    if not check_access_allowed():
-        return {"answer": "Error: Demo expired. Please purchase a license to continue."}
-
-    global conversation_history, conversation_summary
-    print(f"\n[DEBUG] /ai called with: transcript={req.transcript[:50] if req.transcript else None}..., role={req.role}, screenshot={'YES' if req.screenshot else 'NO'}, save_to_context={req.save_to_context}")
-    try:
-        client = get_async_client()
-        
-        current_profile = load_profile()
-        
-        resume_text = ""
-        job_description = ""
-        if current_profile and isinstance(current_profile, dict):
-            resume_text = current_profile.get('resume_text') or ""
-            job_description = current_profile.get('job_description') or ""
-        
-        has_resume = bool(resume_text.strip())
-        print(f"[AI] Has resume: {has_resume}, history len: {len(conversation_history)}")
-
-        is_esl = False
-        short_responses = False
-        if current_profile and isinstance(current_profile, dict):
-            is_esl = current_profile.get('is_esl', False)
-            short_responses = current_profile.get('short_responses', False)
-
-        # Use cached system context (resume + JD baked in) — same optimization as /ai/stream
-        system_content = get_system_context(
-            req.role, req.target_language or 'Python',
-            resume_text, job_description,
-            for_vision=bool(req.screenshot),
-            is_esl=is_esl,
-            short_responses=short_responses,
-            talking_points=(current_profile or {}).get('talking_points') or ""
-        )
-        messages = [{"role": "system", "content": system_content}]
-
-        # Inject rolling summary if available
-        if conversation_summary:
-            messages.append({"role": "system", "content": f"[CONTEXT FROM EARLIER IN THIS SESSION]:\n{conversation_summary}"})
-
-        # Send last 3 raw turns (6 messages) for full-fidelity recent context
-        messages.extend(conversation_history[-6:])
-
-        if req.screenshot:
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": req.transcript},
-                    {"type": "image_url", "image_url": {"url": req.screenshot}}
-                ]
-            })
-            model = DEFAULT_SCREENSHOT_MODEL
-        else:
-            messages.append({"role": "user", "content": req.transcript})
-            model = req.text_model if req.text_model and req.text_model in AVAILABLE_TEXT_MODELS else DEFAULT_TEXT_MODEL
-        
-        # GPT-5+ models are reasoning models: they need higher token limit for thinking + output
-        token_param = {}
-        if model.startswith("gpt-5"):
-            token_param["max_completion_tokens"] = 4096
-        else:
-            token_param["max_tokens"] = 2048
-            token_param["temperature"] = 0.7
-        
-        import time as _time
-        _start_time = _time.time()
-        
-        completion = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **token_param
-        )
-        
-        full_response = ""
-        _ttft = 0
-        async for chunk in completion:
-            if chunk.choices and chunk.choices[0].delta.content:
-                if not full_response:  # First token
-                    _ttft = _time.time() - _start_time
-                full_response += chunk.choices[0].delta.content
-                
-        _total_time = _time.time() - _start_time
-        
-        # Calculate per-response cost
-        input_text = "\n".join([m.get('content', '') if isinstance(m.get('content'), str) else str(m.get('content', '')) for m in messages])
-        _input_tokens = count_tokens(input_text)
-        _output_tokens = count_tokens(full_response)
-        _image_tokens = estimate_image_tokens(req.screenshot, model) if req.screenshot else 0
-        _response_cost = calculate_cost(_input_tokens, _output_tokens, model, _image_tokens)
-        update_usage(_input_tokens, _output_tokens, model, _image_tokens)
-        
-        # Save to conversation history only if save_to_context is True
-        # (skip for one-shot LeetCode problems, save for scenarios needing follow-up)
-        save_to_context = req.save_to_context is not False
-        if save_to_context:
+            # Memory gets the question as asked (Smart: the interviewer's question, without the
+            # "Me (just said)" context that only mattered for this answer)
+            question = (req.display_question or req.transcript).strip()
             if req.screenshot:
-                user_msg = f"[USER SHARED A SCREENSHOT] Question about the screenshot: {req.transcript}"
-            else:
-                user_msg = req.transcript
-            conversation_history.append({"role": "user", "content": user_msg})
-            conversation_history.append({"role": "assistant", "content": full_response})
-            
-            # Save to session folder if active
+                question = f"[Screenshot] {question}"
+            if req.save_to_context is not False:
+                record_turn(question, full_response)
             if current_session_name:
                 try:
-                    save_conversation_to_session(user_msg, full_response, bool(req.screenshot), model, response_time=round(_ttft, 1), total_time=round(_total_time, 1), cost=_response_cost, input_tokens=_input_tokens, output_tokens=_output_tokens)
+                    save_conversation_to_session(question, full_response, bool(req.screenshot), model,
+                                                 response_time=_ttft, total_time=_total_time, cost=response_cost,
+                                                 input_tokens=input_tokens, output_tokens=output_tokens)
                 except Exception as save_err:
                     print(f"[SESSION SAVE ERROR] {save_err}")
-            
-            evict_old_turns()
-            
-            print(f"[AI] Conversation history: {len(conversation_history)} msgs | Summary: {len(conversation_summary)} chars")
-        else:
-            print(f"[AI] Skipped saving to history (save_to_context=False)")
-        
-        print(f"[AI] Conversation history now has {len(conversation_history)} messages")
-        
-        return {
-            "answer": full_response,
-            "usage": session_usage,
-            "response_in_tokens": _input_tokens,
-            "response_out_tokens": _output_tokens,
-            "response_cost": round(_response_cost, 6)
-        }
-    except Exception as e:
-        print(f"AI Generation Error: {e}")
-        return {"answer": f"Error: {str(e)}"}
+
+            yield f"data: {json.dumps({'done': True, 'model': model, 'usage': session_usage, 'response_in_tokens': input_tokens, 'response_cached_tokens': cached_tokens, 'response_out_tokens': output_tokens, 'response_cost': round(response_cost, 6), 'ttft': round(_ttft, 2), 'total_time': round(_total_time, 2)})}\n\n"
+
+        except Exception as e:
+            print(f"Streaming AI Error: {e}")
+            yield f"data: {json.dumps({'error': str(e)[:200]})}\n\n"
+
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 # ── Startup sequence ────────────────────────────────────────────────────────

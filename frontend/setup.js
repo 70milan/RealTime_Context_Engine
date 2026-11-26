@@ -1114,9 +1114,10 @@ window.openPastSession = async function (sessionName) {
                         'padding: 8px 12px; font-size: 11px; color: rgba(255,255,255,0.75); line-height: 1.5;',
                         'word-break: break-word;'
                     ].join('');
-                    const isScreenEntry = entry.question.startsWith('[USER SHARED A SCREENSHOT]');
+                    // Screenshot answers: '[Screenshot] ...' now, '[USER SHARED A SCREENSHOT] ...' in older sessions
+                    const isScreenEntry = /^\[(Screenshot|USER SHARED A SCREENSHOT)\]/.test(entry.question);
                     const displayQ = isScreenEntry
-                        ? window.formatConvoText(entry.question.replace('[USER SHARED A SCREENSHOT] Question about the screenshot: ', '').trim()) || '<em style="color:rgba(255,255,255,0.35);">screen only</em>'
+                        ? window.formatConvoText(entry.question.replace(/^\[(Screenshot|USER SHARED A SCREENSHOT)\]( Question about the screenshot:)?\s*/, '').replace(/^Screenshot$/, '').trim()) || '<em style="color:rgba(255,255,255,0.35);">screen only</em>'
                         : window.formatConvoText(entry.question);
                     const screenLabel = isScreenEntry ? '📷 SCREEN · ' : '';
                     userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${screenLabel}${entryTimeStr}</div>${displayQ}`;
@@ -1253,6 +1254,24 @@ window.openPastSession = async function (sessionName) {
         // Resume handler
         if (resumeBtn) {
             resumeBtn.onclick = async () => {
+                // Make it the backend's active session first: its resume/brief/JD/modes become
+                // the answer context (viewing the history above changes nothing)
+                let act;
+                try {
+                    act = await (await fetch('http://127.0.0.1:5050/session/activate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_name: sessionName })
+                    })).json();
+                } catch (e) {
+                    act = { status: 'error', error: 'Backend not reachable' };
+                }
+                if (act.status !== 'ok') {
+                    const label = resumeBtn.textContent;
+                    resumeBtn.textContent = act.error || 'Could not resume';
+                    setTimeout(() => { resumeBtn.textContent = label; }, 4000);
+                    return;
+                }
                 closeModal();
 
                 // Set session as active
@@ -1682,6 +1701,7 @@ async function handleCreateSession() {
             is_esl: eslCheckbox ? eslCheckbox.checked : false,
             short_responses: shortRespCheckbox ? shortRespCheckbox.checked : false,
             smart_interview: !!window.__smartMode,
+            text_model: window.selectedModel || 'gpt-4o-mini',
             talking_points: (document.getElementById('setup-talking-points')?.value || '').trim(),
             created_at: new Date().toISOString()
         };
