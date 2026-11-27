@@ -191,7 +191,10 @@ npm install
 npm run start:dev
 ```
 
-`build-all.bat` packages the backend with PyInstaller, builds the Windows installer with electron-builder, and publishes a GitHub release. It needs a `GH_TOKEN`, and optionally a code-signing certificate.
+### Build the installer yourself
+Run **`build-local.bat`** from the repo folder. It builds the backend (PyInstaller) and the Windows installer (electron-builder), and leaves the result in `frontend\dist\`. It needs no GitHub token and no signing certificate, uploads nothing, and doesn't change the version number. The installer it produces is unsigned, so Windows shows the "Unknown publisher" warning (More info → Run anyway).
+
+`build-all.bat` is the maintainer's release script: it signs the build with the maintainer's certificate and publishes a GitHub release, so it needs credentials you won't have. If you fork the project and want to publish your own releases, change `owner` and `repo` under `build.publish` in `frontend/package.json` and use your own token.
 
 ### Project layout
 
@@ -232,7 +235,7 @@ Issues and pull requests are welcome. Good places to start:
 - a Mac or Linux port of the audio capture;
 - anything on the [roadmap](#roadmap).
 
-Run the app with `npm run start:dev`, change one thing, and open a pull request with a short description of what and why.
+Run the app with `npm run start:dev`, change one thing, and open a pull request with a short description of what and why. To try a packaged build, use `build-local.bat`.
 
 ---
 
