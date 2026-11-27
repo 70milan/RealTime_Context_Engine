@@ -1,15 +1,15 @@
-# RealTime Context Engine
+# Jobandit
 
 **A free, open-source AI interview copilot and mock-interview coach for Windows.**
 It hears **both sides of the call at once**, tells who is speaking, and answers by itself when a question is finished. It knows your resume and the job description, so its cues come from *your* experience. Or it runs a full mock interview out loud and reviews every answer.
 
 <p align="center">
-  <a href="https://github.com/mjulez70/realtimecontextengine/releases/latest"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20installer-2ea44f?style=for-the-badge&logo=windows"></a>
+  <a href="https://github.com/mjulez70/jobandit/releases/latest"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20installer-2ea44f?style=for-the-badge&logo=windows"></a>
 </p>
 
 <p align="center">
-  <img alt="Latest release" src="https://img.shields.io/github/v/release/mjulez70/realtimecontextengine?label=latest">
-  <img alt="Downloads" src="https://img.shields.io/github/downloads/mjulez70/realtimecontextengine/total">
+  <img alt="Latest release" src="https://img.shields.io/github/v/release/mjulez70/jobandit?label=latest">
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/mjulez70/jobandit/total">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows">
 </p>
@@ -86,7 +86,7 @@ There are good free tools in this space. This is how they differ, taken from eac
 
 ## Install
 
-1. **[Download the latest installer](https://github.com/mjulez70/realtimecontextengine/releases/latest)** (`Windows-Runtime-Host-Setup-x.y.z.exe`).
+1. **[Download the latest installer](https://github.com/mjulez70/jobandit/releases/latest)** (`Windows-Runtime-Host-Setup-x.y.z.exe`).
 2. Run it. Windows may say **"Windows protected your PC"** because the installer isn't signed by a paid certificate yet: click **More info → Run anyway**. The full source code is right here if you want to check what it does.
 3. The app updates itself when a new version is out.
 
