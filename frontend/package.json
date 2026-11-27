@@ -51,7 +51,7 @@
       "**/*.node"
     ],
     "win": {
-      "executableName": "Realtime_ContextEngine",
+      "executableName": "Jobandit",
       "target": [
         {
           "target": "nsis",
