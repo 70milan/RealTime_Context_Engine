@@ -167,7 +167,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const displayQ = isScreen
                 ? (window.formatConvoText(entry.question.replace(/^\[(Screenshot|USER SHARED A SCREENSHOT)\]( Question about the screenshot:)?\s*/, '').replace(/^Screenshot$/, '').trim()) || '<em style="color:rgba(255,255,255,0.35);">screen only</em>')
                 : window.formatConvoText(entry.question);
-            const screenLabel = isScreen ? '📷 SCREEN · ' : '';
+            const screenLabel = isScreen ? '📷 SCREEN · '
+                : entry.practice ? (entry.number ? 'Q' + entry.number + ' · ' : '') + ({ followup: 'FOLLOW-UP · ', coding: 'CODING · ' }[entry.kind] || 'PRACTICE · ')
+                : '';
             userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${screenLabel}${entryTimeStr}</div>${displayQ}`;
             userRow.appendChild(userBubble);
             pairDiv.appendChild(userRow);
@@ -236,6 +238,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             aiRow.appendChild(aiCol);
             pairDiv.appendChild(aiRow);
+        }
+
+        // Practice: what you said (and typed, for coding questions)
+        if (entry.practice || entry.said || entry.code) {
+            const saidRow = document.createElement('div');
+            saidRow.style.cssText = 'display: flex; justify-content: flex-start; margin-top: 4px;';
+            const saidBubble = document.createElement('div');
+            saidBubble.style.cssText = 'max-width: 85%; background: rgba(40,50,80,0.6); border: 1px solid rgba(120,160,255,0.15); border-radius: 14px 14px 14px 3px; padding: 8px 12px; font-size: 11px; color: rgba(215,225,255,0.85); line-height: 1.5; word-break: break-word;';
+            const said = entry.said ? window.escapeHtml(entry.said) : '<em style="opacity:0.5;">(no answer)</em>';
+            const code = entry.code ? window.formatConvoText('```\n' + entry.code + '\n```') : '';
+            saidBubble.innerHTML = '<div style="font-size:9px;color:rgba(140,170,255,0.6);margin-bottom:3px;letter-spacing:0.5px;">YOU SAID</div>' + said + code;
+            saidBubble.querySelectorAll('pre code').forEach(b => { if (typeof hljs !== 'undefined') hljs.highlightElement(b); });
+            saidRow.appendChild(saidBubble);
+            pairDiv.appendChild(saidRow);
         }
 
         return pairDiv;
@@ -310,7 +326,12 @@ document.addEventListener('DOMContentLoaded', () => {
             total_time: payload.totalTime,
             input_tokens: payload.responseInTokens,
             output_tokens: payload.responseOutTokens,
-            cost: payload.responseCost
+            cost: payload.responseCost,
+            said: payload.said,
+            code: payload.code,
+            kind: payload.kind,
+            number: payload.number,
+            practice: payload.practice
         };
 
         const pairDiv = buildBubblePair(entry);

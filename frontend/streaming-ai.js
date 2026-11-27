@@ -451,18 +451,46 @@ function initializeStreamingAI() {
 
 
     // Scroll helper for global shortcuts
-    window.scrollAIOutput = (direction) => {
+    // step: 'line' (arrow keys), 'page' (Page Up/Down), or the default ~40% of the view
+    window.scrollAIOutput = (direction, step) => {
         // Try response-area first, fall back to its parent .section which is the actual scrollable container
         const el = document.getElementById('response-area');
         if (!el) return;
-        
+
         // Walk up to find the scrollable parent (.section)
         const section = el.closest('.section') || el.parentElement;
         const target = (section && section.scrollHeight > section.clientHeight) ? section : el;
-        
-        const amount = Math.max(120, Math.floor(target.clientHeight * 0.4));
+
+        const amount = step === 'line' ? 60
+            : step === 'page' ? Math.floor(target.clientHeight * 0.9)
+            : Math.max(120, Math.floor(target.clientHeight * 0.4));
         target.scrollTop += (direction * amount);
     };
+
+    // Keyboard-only reading while the app has focus: arrows scroll the AI response line by
+    // line, Page Up/Down a screen at a time, Home/End jump to the top/bottom. Not while
+    // typing (transcript, code box, inputs), where the keys keep their normal job.
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
+        const t = e.target;
+        // Esc leaves the transcript box, so the arrows scroll the answer again
+        if (e.key === 'Escape' && t && t.id === 'transcript-area') { t.blur(); return; }
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+        const setup = document.getElementById('setup-overlay');
+        if (setup && setup.style.display !== 'none' && getComputedStyle(setup).display !== 'none') return;
+        const keys = { ArrowUp: [-1, 'line'], ArrowDown: [1, 'line'], PageUp: [-1, 'page'], PageDown: [1, 'page'] };
+        if (keys[e.key]) {
+            e.preventDefault();
+            window.scrollAIOutput(...keys[e.key]);
+        } else if (e.key === 'Home' || e.key === 'End') {
+            const el = document.getElementById('response-area');
+            const section = el && (el.closest('.section') || el.parentElement);
+            const target = section && section.scrollHeight > section.clientHeight ? section : el;
+            if (!target) return;
+            e.preventDefault();
+            target.scrollTop = e.key === 'Home' ? 0 : target.scrollHeight;
+        }
+    });
 
     console.log('[STREAM] Streaming AI initialized successfully!');
 }

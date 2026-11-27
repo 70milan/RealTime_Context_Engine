@@ -161,6 +161,28 @@ function setupAutoUpdaterEvents() {
 
   let updateVersion = '';
 
+  // "What's new" for the update prompt: the GitHub release text (from release-notes.md at
+  // build time), as escaped HTML. It is pasted into a template literal below, so backticks
+  // and ${ are escaped too.
+  function releaseNotesHtml(notes) {
+    if (Array.isArray(notes)) notes = notes.map(n => (n && n.note) || '').join('\n');
+    const text = String(notes || '')
+      .replace(/<\/(p|li|h\d|div)>|<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .split('\n').map(l => l.trim()).filter(Boolean)
+      .filter(l => !/^version\s+\d/i.test(l))  // the version is already shown above the notes
+      .slice(0, 14);
+    if (!text.length) return '';
+    const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/`/g, '&#96;').replace(/\$/g, '&#36;').replace(/\\/g, '&#92;');
+    const items = text.map(l => `<li style="margin:0 0 6px 0;">${esc(l.replace(/^[-*•]\s*/, ''))}</li>`).join('');
+    return `<div style="text-align:left;margin:0 0 20px 0;">
+      <div style="color:rgba(100,255,150,0.7);font-size:10px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;">What's new</div>
+      <ul style="margin:0;padding-left:18px;max-height:190px;overflow-y:auto;color:rgba(255,255,255,0.65);font-size:12px;line-height:1.45;">${items}</ul>
+    </div>`;
+  }
+
   autoUpdater.on('checking-for-update', () => {
     console.log('Checking for updates...');
   });
@@ -171,10 +193,11 @@ function setupAutoUpdaterEvents() {
     if (win) win.webContents.send('update-check-result', 'available');
 
     const content = `\`
-    <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:30px 36px;text-align:center;max-width:340px;width:90%;">
+    <div style="background:rgba(30,30,30,0.98);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:30px 36px;text-align:center;max-width:420px;width:90%;">
       <div style="color:rgba(255,255,255,0.5);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">Update Available</div>
       <div style="color:rgba(255,255,255,0.8);font-size:16px;font-weight:500;margin-bottom:6px;">Version ${info.version}</div>
-      <div style="color:rgba(255,255,255,0.35);font-size:13px;margin-bottom:24px;">A new version is ready to download.</div>
+      <div style="color:rgba(255,255,255,0.35);font-size:13px;margin-bottom:18px;">A new version is ready to download.</div>
+      ${releaseNotesHtml(info.releaseNotes)}
       <div style="display:flex;flex-direction:column;gap:8px;">
         <button id="update-yes-btn" style="width:100%;padding:10px 0;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;text-transform:uppercase;letter-spacing:1px;font-weight:500;transition:all 0.2s;"
           onmouseover="this.style.color='rgba(255,255,255,0.9)';this.style.borderColor='rgba(255,255,255,0.3)';"
@@ -411,6 +434,34 @@ function clampWindowToScreen(windowToClamp) {
   }
 }
 
+// Leave mini mode (Ctrl+Q again, or a click on the green dot): back to the size and place
+// the window had, and the convo window comes back if it was open
+function restoreFromMini() {
+  const [mx, my] = win.getPosition();
+  lastMiniPosition = { x: mx, y: my };
+
+  win.setOpacity(0.95);
+  win.setBackgroundColor('#00000000');
+  win.setResizable(false);
+
+  if (win.lastNormalBounds) {
+    win.setBounds(win.lastNormalBounds);
+    win.webContents.setZoomFactor(win.lastNormalBounds.width / 800);
+  } else {
+    win.setBounds(centerTop(800, 600));
+    win.webContents.setZoomFactor(1.0);
+  }
+
+  win.webContents.executeJavaScript(`document.body.classList.remove('mini');`);
+  win.setMaximizable(true);
+  isMiniMode = false;
+
+  if (convoWin && convoWin.userVisibleBeforeMini) {
+    convoWin.show();
+    convoWin.userVisibleBeforeMini = false;
+  }
+}
+
 function centerTop(width = 800, height = 600) {
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
   const x = Math.round((sw - width) / 2);
@@ -492,6 +543,22 @@ function createWindow() {
 
   win.on('moved', () => {
     clampWindowToScreen(win);
+  });
+
+  // Mini mode: the green dot is a drag region (so it can be moved), which means the page
+  // never sees its clicks. A single click does nothing; a double-click reopens the app.
+  // Windows reports a double-click on a drag region as WM_NCLBUTTONDBLCLK and would
+  // otherwise maximize the window; 'maximize' is the fallback if the hook isn't available.
+  const WM_NCLBUTTONDBLCLK = 0x00A3;
+  if (process.platform === 'win32') {
+    win.hookWindowMessage(WM_NCLBUTTONDBLCLK, () => {
+      setImmediate(() => { if (isMiniMode) restoreFromMini(); });
+    });
+  }
+  win.on('maximize', () => {
+    if (!isMiniMode) return;
+    win.unmaximize();
+    restoreFromMini();
   });
 
   win.on('closed', () => {
@@ -782,6 +849,7 @@ app.whenReady().then(() => {
       win.setBounds({ x: miniPos.x, y: miniPos.y, width: 52, height: 52 });
       win.webContents.setZoomFactor(1.0);
       win.setResizable(false);
+      win.setMaximizable(false);  // a double-click on the dot reopens instead of maximizing
       win.webContents.executeJavaScript(`document.body.classList.add('mini');`);
 
       if (convoWin && convoWin.isVisible()) {
@@ -791,29 +859,7 @@ app.whenReady().then(() => {
         convoWin.userVisibleBeforeMini = false;
       }
     } else {
-      const [mx, my] = win.getPosition();
-      lastMiniPosition = { x: mx, y: my };
-
-      win.setOpacity(0.95);
-      win.setBackgroundColor('#00000000');
-      win.setResizable(false);
-
-      if (win.lastNormalBounds) {
-        win.setBounds(win.lastNormalBounds);
-        win.webContents.setZoomFactor(win.lastNormalBounds.width / 800);
-      } else {
-        const bounds = centerTop(800, 600);
-        win.setBounds(bounds);
-        win.webContents.setZoomFactor(1.0);
-      }
-
-      win.webContents.executeJavaScript(`document.body.classList.remove('mini');`);
-      isMiniMode = false;
-
-      if (convoWin && convoWin.userVisibleBeforeMini) {
-        convoWin.show();
-        convoWin.userVisibleBeforeMini = false;
-      }
+      restoreFromMini();
     }
   });
 
@@ -861,7 +907,7 @@ app.whenReady().then(() => {
     clampWindowToScreen(win);
   });
 
-  /* ---- Ctrl+Alt+[ / ]: Scroll AI response up/down ---- */
+  /* ---- Ctrl+Alt+U / I: Scroll AI response up/down ---- */
   registerShortcut('CommandOrControl+Alt+U', () => {
     if (!win) return;
     win.webContents.executeJavaScript(`if (window.scrollAIOutput) { window.scrollAIOutput(-1); }`);
@@ -942,17 +988,7 @@ app.whenReady().then(() => {
 
   /* ---- IPC: Expand from Mini Mode ---- */
   ipcMain.on('expand-from-mini', () => {
-    if (!win || !isMiniMode) return;
-    const [mx, my] = win.getPosition();
-    lastMiniPosition = { x: mx, y: my };
-    win.setOpacity(0.95);
-    win.setBackgroundColor('#00000000');
-    win.setResizable(false);
-    const bounds = centerTop(800, 600);
-    win.setBounds(bounds);
-    win.webContents.setZoomFactor(1.0);
-    win.webContents.executeJavaScript(`document.body.classList.remove('mini');`);
-    isMiniMode = false;
+    if (win && isMiniMode) restoreFromMini();
   });
 
   /* ---- IPC: Convo Window Control ---- */

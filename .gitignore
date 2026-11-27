@@ -145,3 +145,6 @@ $null
 backend/.venv-build/
 # Stray output from batch files redirecting to "$null"
 $null
+
+# Practice mode: questions already asked, per job description (dev runs)
+backend/practice/

@@ -134,6 +134,65 @@ html, body, *, *::before, *::after { cursor: default !important; }
   color: rgba(255, 255, 255, 0.4);
 }
 
+/* Live interview / Practice switch in the header */
+.mode-switch {
+  display: inline-flex;
+  gap: 6px;
+  align-self: center;
+}
+
+/* Same size as the other header buttons; the selected mode is green */
+.setup-action-btn.mode-btn.on {
+  background: rgba(100, 255, 150, 0.12);
+  border-color: rgba(100, 255, 150, 0.45);
+  color: rgba(100, 255, 150, 0.95);
+}
+
+/* The header stays on one line */
+.setup-title,
+.setup-action-btn {
+  white-space: nowrap;
+}
+
+/* Fields that belong to one mode only */
+#setup-overlay:not(.practice) .practice-only,
+#setup-overlay.practice .live-only {
+  display: none !important;
+}
+
+/* Focus picker: same height as the checkbox row it replaces, dark dropdown */
+.setup-input.setup-select {
+  width: auto;
+  flex: 1;
+  padding: 2px 6px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  border-radius: 8px;
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.45);   /* quiet, like the placeholder text in the other fields */
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.setup-input.setup-select option {
+  background: #16162a;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.setup-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.setup-fallback-note {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(100, 255, 150, 0.5);   /* gentle hint, not an alert */
+  letter-spacing: 0.2px;
+}
+
 .setup-header-actions {
   display: flex;
   gap: 6px;
@@ -701,8 +760,67 @@ html, body, *, *::before, *::after { cursor: default !important; }
   min-height: 0;
 }
 
-/* Console sits under the talking points at a fixed height */
+/* Console sits under the talking points at a fixed height; smaller in Practice,
+   where the Groq key row needs the room. Click it for a large view. */
 .backend-terminal {
   flex: none;
   height: 64px;
+}
+
+#setup-overlay.practice .backend-terminal {
+  height: 30px;
+}
+
+/* Short windows: Talking Points keeps room for a couple of lines and the console gives
+   way first (it opens large on click anyway); groups clip instead of overlapping */
+#points-group {
+  min-height: 96px;
+  overflow: hidden;
+}
+
+#console-group:not(.console-expanded) {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#console-group:not(.console-expanded) .backend-terminal {
+  flex: 0 1 auto;
+  min-height: 16px;
+}
+
+/* The window background is a drag region; the console has to take clicks */
+#console-group,
+#console-toggle {
+  -webkit-app-region: no-drag;
+}
+
+.console-toggle {
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+#console-group.console-expanded {
+  position: fixed;
+  top: 10%;
+  bottom: 10%;
+  left: 8%;
+  right: 8%;
+  z-index: 5000;
+  background: rgba(14, 14, 24, 0.98);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  -webkit-app-region: no-drag;
+}
+
+#console-group.console-expanded .backend-terminal,
+#setup-overlay.practice #console-group.console-expanded .backend-terminal {
+  height: auto;
+  flex: 1;
+  max-height: none !important;
+  font-size: 11px;
+  user-select: text;
 }

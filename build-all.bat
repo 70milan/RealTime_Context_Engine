@@ -96,9 +96,6 @@ call npm run obfuscate || (echo [ERROR] Obfuscation failed & pause & exit /b 1)
 
 :: Build and Publish
 echo [INFO] Running Electron-Builder (Publishing to GitHub)...
-:: Version check logic
-for /f "tokens=*" %%i in ('node -p "require('./package.json').version"') do set "VERSION=%%i"
-
 call npm run build -- --publish always
 if %errorlevel% neq 0 (
     echo.
@@ -108,6 +105,12 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
+
+:: The version just published (prebuild bumped it, so read it again)
+for /f "tokens=*" %%i in ('node -p "require('./package.json').version"') do set "VERSION=%%i"
+
+:: Tag the release locally: the next build's release notes start from this commit
+git tag -f v!VERSION! >nul 2>&1 && echo [INFO] Tagged this release as v!VERSION!
 
 :: Verify Final Signature
 echo.

@@ -426,6 +426,51 @@ function initSession() {
         jdInput.addEventListener('input', checkAllInputs);
     }
 
+    // Live interview / Practice switch: practice swaps the Smart/ESL/Cue checks for a
+    // focus picker and shows the optional Groq key
+    const setupOverlay = document.getElementById('setup-overlay');
+    const setSetupMode = (mode) => {
+        const practice = mode === 'practice';
+        setupOverlay.classList.toggle('practice', practice);
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+        try { localStorage.setItem('session_mode', mode); } catch (e) { }
+    };
+    document.querySelectorAll('.mode-btn').forEach(b => { b.onclick = () => setSetupMode(b.dataset.mode); });
+    try {
+        setSetupMode(localStorage.getItem('session_mode') === 'practice' ? 'practice' : 'live');
+        const groqInput = document.getElementById('setup-groq-key');
+        if (groqInput) groqInput.value = localStorage.getItem('groq_api_key') || '';
+        const focusSelect = document.getElementById('setup-practice-focus');
+        if (focusSelect) {
+            focusSelect.value = localStorage.getItem('practice_focus') || 'mixed';
+            focusSelect.onchange = () => { try { localStorage.setItem('practice_focus', focusSelect.value); } catch (e) { } };
+        }
+    } catch (e) { }
+
+    // Backend console: compact by default; click it (or [expand]) for a large view,
+    // [close] / Esc / a click outside shrinks it again
+    const consoleGroup = document.getElementById('console-group');
+    const consoleToggle = document.getElementById('console-toggle');
+    if (consoleGroup && consoleToggle) {
+        const setConsole = (open) => {
+            consoleGroup.classList.toggle('console-expanded', open);
+            consoleToggle.textContent = open ? '[close]' : '[expand]';
+            const term = document.getElementById('backend-terminal');
+            if (term) term.scrollTop = term.scrollHeight;
+        };
+        consoleGroup.addEventListener('click', (e) => {
+            const open = consoleGroup.classList.contains('console-expanded');
+            if (!open) setConsole(true);
+            else if (e.target === consoleToggle) setConsole(false);
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && consoleGroup.classList.contains('console-expanded')) setConsole(false);
+        });
+        document.addEventListener('mousedown', (e) => {
+            if (consoleGroup.classList.contains('console-expanded') && !consoleGroup.contains(e.target)) setConsole(false);
+        });
+    }
+
     const generatePointsBtn = document.getElementById('btn-generate-points');
     if (generatePointsBtn) generatePointsBtn.onclick = handleGenerateTalkingPoints;
 
@@ -586,7 +631,7 @@ function initSession() {
                              onmouseover="this.style.background='rgba(255,255,255,0.06)'" 
                              onmouseout="this.style.background='rgba(255,255,255,0.03)'">
                             <div style="flex: 1; cursor: pointer; min-width: 0; overflow: hidden;" onclick="window.openPastSession('${session.name.replace(/'/g, "\\'")}')"> 
-                                <div style="color: rgba(255,255,255,0.8); font-size: 13px; margin-bottom: 4px;">${window.escapeHtml(session.name)} ${session.target_role ? `<span style="font-size: 11px; color: rgba(255,255,255,0.4);">(${window.escapeHtml(session.target_role)})</span>` : ''}</div>
+                                <div style="color: rgba(255,255,255,0.8); font-size: 13px; margin-bottom: 4px;">${window.escapeHtml(session.name)} ${session.target_role ? `<span style="font-size: 11px; color: rgba(255,255,255,0.4);">(${window.escapeHtml(session.target_role)})</span>` : ''}${session.mode === 'practice' ? ' <span style="font-size: 9px; font-weight: 700; letter-spacing: 1px; color: #39ff88; border: 1px solid rgba(57,255,136,0.35); border-radius: 6px; padding: 1px 5px; margin-left: 4px;">PRACTICE</span>' : ''}</div>
                                 <div style="color: rgba(255,255,255,0.4); font-size: 10px;">${formattedDate}</div>
                                 <div style="color: rgba(255,255,255,0.3); font-size: 10px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${window.escapeHtml(session.job_description_preview || '')}</div>
                             </div>
@@ -729,6 +774,10 @@ function initSession() {
             tooltip.style.width = '300px';
             tooltip.style.boxShadow = '0 6px 16px rgba(0,0,0,0.6)';
             tooltip.style.lineHeight = '1.5';
+            // The window background is a drag region: without this the bubble can't be
+            // hovered, its text can't be selected and its links can't be clicked
+            tooltip.style.webkitAppRegion = 'no-drag';
+            tooltip.style.userSelect = 'text';
             tooltip.innerHTML = contentHtml;
             document.body.appendChild(tooltip);
 
@@ -769,7 +818,7 @@ function initSession() {
         trigger.onmouseleave = (e) => {
             hideTimeout = setTimeout(() => {
                 tooltip.style.display = 'none';
-            }, 250);
+            }, 450);  // time to move the mouse onto the bubble
         };
 
         tooltip.onmouseenter = () => clearTimeout(hideTimeout);
@@ -930,6 +979,17 @@ function initSession() {
         createHoverTooltip('checks-info-btn', eslHoverContent);
     }
 
+    // Groq key info (Practice)
+    if (document.getElementById('groq-info')) {
+        const groqHoverContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Groq API key (free)</strong> &mdash; makes Practice free: Groq writes the questions and follow-ups and transcribes your answers.<br><br>' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Get one</strong> &mdash; go to <a href="https://console.groq.com/keys" target="_blank" style="color:#39ff88;">console.groq.com/keys</a>, sign up (no card needed), open <em>API Keys</em>, click <em>Create API Key</em> and paste it here. It starts with <code>gsk_</code>.<br><br>' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Leave it empty and Practice uses your OpenAI key</strong> (about 10&cent; a round). The end-of-round critique always uses OpenAI gpt-4o.<br><br>' +
+            '<strong style="color: rgba(100, 255, 150, 0.9);">Models</strong> &mdash; the app always uses these on Groq (they cannot be changed): <code>openai/gpt-oss-120b</code> for questions, follow-ups and hints, and <code>whisper-large-v3-turbo</code> to transcribe your answers.<br><br>' +
+            '<em style="opacity: 0.7;">With Groq your answer text appears when you finish speaking; with OpenAI it appears live.</em></div>';
+        createHoverTooltip('groq-info', groqHoverContent);
+    }
+
     // Talking points info
     if (document.getElementById('points-info-btn')) {
         const pointsHoverContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
@@ -961,9 +1021,15 @@ function initSession() {
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Q</span><span style="color: #ccc;">Toggle mini mode</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Shift+Q</span><span style="color: #ccc;">Quit app</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+F</span><span style="color: #ccc;">Maximize AI response</span>' +
+
+        '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Double-click dot</span><span style="color: #ccc;">Reopen from mini mode</span>' +
+
+        '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Space</span><span style="color: #ccc;">Practice: end your answer</span>' +
         '<div style="grid-column: 1 / -1; height: 1px; background: rgba(255,255,255,0.1); margin: 2px 0;"></div>' +
         '<span style="color: rgba(255,255,255,0.5);">Ctrl+Alt+U</span><span style="color: #aaa;">Scroll AI response up</span>' +        
         '<span style="color: rgba(255,255,255,0.5);">Ctrl+Alt+I</span><span style="color: #aaa;">Scroll AI response down</span>' +
+        
+        '<span style="color: rgba(255,255,255,0.5);">↑ ↓ PgUp PgDn</span><span style="color: #aaa;">Scroll AI response (app focused)</span>' +
         '<span style="color: rgba(255,255,255,0.5);">Ctrl+Shift++</span><span style="color: #aaa;">Increase app size</span>' +
         '<span style="color: rgba(255,255,255,0.5);">Ctrl+Shift+-</span><span style="color: #aaa;">Decrease app size</span>' +
         '<span style="color: rgba(255,255,255,0.5);">Ctrl+Shift+O</span><span style="color: #aaa;">Reset app size</span>' +
@@ -1119,7 +1185,9 @@ window.openPastSession = async function (sessionName) {
                     const displayQ = isScreenEntry
                         ? window.formatConvoText(entry.question.replace(/^\[(Screenshot|USER SHARED A SCREENSHOT)\]( Question about the screenshot:)?\s*/, '').replace(/^Screenshot$/, '').trim()) || '<em style="color:rgba(255,255,255,0.35);">screen only</em>'
                         : window.formatConvoText(entry.question);
-                    const screenLabel = isScreenEntry ? '📷 SCREEN · ' : '';
+                    const screenLabel = isScreenEntry ? '📷 SCREEN · '
+                        : entry.practice ? (entry.number ? 'Q' + entry.number + ' · ' : '') + ({ followup: 'FOLLOW-UP · ', coding: 'CODING · ' }[entry.kind] || 'PRACTICE · ')
+                        : '';
                     userBubble.innerHTML = `<div style="font-size:9px;color:rgba(255,255,255,0.3);margin-bottom:3px;letter-spacing:0.5px;">${screenLabel}${entryTimeStr}</div>${displayQ}`;
                     userBubble.querySelectorAll('pre code').forEach(b => { if (typeof hljs !== 'undefined') hljs.highlightElement(b); });
                     userRow.appendChild(userBubble);
@@ -1180,12 +1248,13 @@ window.openPastSession = async function (sessionName) {
                 }
 
                 // ── WHAT YOU SAID (Answer Review, Smart mode) ──
-                if (entry.said) {
+                if (entry.said || entry.code) {
                     const saidRow = document.createElement('div');
                     saidRow.style.cssText = 'display: flex; justify-content: flex-end; margin-top: 4px;';
                     const saidBubble = document.createElement('div');
                     saidBubble.style.cssText = 'max-width: 80%; background: rgba(40,50,80,0.6); border: 1px solid rgba(120,160,255,0.15); border-radius: 14px 14px 3px 14px; padding: 8px 12px; font-size: 11px; color: rgba(215,225,255,0.85); line-height: 1.5; word-break: break-word;';
-                    saidBubble.innerHTML = '<div style="font-size:9px;color:rgba(140,170,255,0.6);margin-bottom:3px;letter-spacing:0.5px;">YOU SAID</div>' + window.escapeHtml(entry.said);
+                    saidBubble.innerHTML = '<div style="font-size:9px;color:rgba(140,170,255,0.6);margin-bottom:3px;letter-spacing:0.5px;">YOU SAID</div>' + window.escapeHtml(entry.said || '(no answer)')
+                        + (entry.code ? window.formatConvoText('```\n' + entry.code + '\n```') : '');
                     saidRow.appendChild(saidBubble);
                     pairDiv.appendChild(saidRow);
                 }
@@ -1305,6 +1374,9 @@ window.openPastSession = async function (sessionName) {
                 if (shortRespCheckbox) {
                     shortRespCheckbox.checked = !!sessionData.short_responses;
                     localStorage.setItem('short_responses', !!sessionData.short_responses);
+                }
+                if (window.practice) {
+                    sessionData.mode === 'practice' ? window.practice.enter(sessionData.practice_focus || 'mixed') : window.practice.exit();
                 }
                 if (window.setSmartMode) window.setSmartMode(!!sessionData.smart_interview);
 
@@ -1664,6 +1736,8 @@ async function handleCreateSession() {
         }
 
         currentSessionName = sanitizedSessionName;
+        const isPractice = document.getElementById('setup-overlay').classList.contains('practice');
+        const practiceFocus = (document.getElementById('setup-practice-focus') || {}).value || 'mixed';
 
         // Validate API key + upload resume in parallel
         status.innerText = "Validating & uploading...";
@@ -1684,6 +1758,25 @@ async function handleCreateSession() {
         ]);
 
         if (!validateJson.valid) throw new Error(validateJson.error || "Invalid API key");
+
+        // Practice: remember the optional Groq key (empty = use the OpenAI key)
+        if (isPractice) {
+            const groqInput = document.getElementById('setup-groq-key');
+            const groqKey = groqInput ? groqInput.value.trim() : '';
+            status.innerText = groqKey ? "Checking Groq key..." : "Practice will use your OpenAI key";
+            status.style.color = "rgba(100, 255, 150, 0.6)";
+            const groqJson = await fetch('http://127.0.0.1:5050/validate-groq-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: groqKey })
+            }).then(r => r.json());
+            if (!groqJson.valid) throw new Error(groqJson.error || "Invalid Groq API key");
+            try { groqKey ? localStorage.setItem('groq_api_key', groqKey) : localStorage.removeItem('groq_api_key'); } catch (e) { }
+            if (groqKey) {
+                status.innerText = "Groq key verified - Practice runs on Groq";
+                await new Promise(r => setTimeout(r, 900));  // long enough to read
+            }
+        }
         if (upJson.status !== 'ok') throw new Error("Resume upload failed: " + (upJson.error || 'Unknown error'));
         // 3. Save session data (job description, api key, etc.)
         status.innerText = "Saving session data...";
@@ -1700,7 +1793,9 @@ async function handleCreateSession() {
             target_language: targetLang,
             is_esl: eslCheckbox ? eslCheckbox.checked : false,
             short_responses: shortRespCheckbox ? shortRespCheckbox.checked : false,
-            smart_interview: !!window.__smartMode,
+            smart_interview: isPractice ? false : !!window.__smartMode,
+            mode: isPractice ? 'practice' : 'live',
+            practice_focus: practiceFocus,
             text_model: window.selectedModel || 'gpt-4o-mini',
             talking_points: (document.getElementById('setup-talking-points')?.value || '').trim(),
             created_at: new Date().toISOString()
@@ -1743,6 +1838,7 @@ async function handleCreateSession() {
         setTimeout(() => {
             const overlay = document.getElementById('setup-overlay');
             overlay.style.display = 'none';
+            if (window.practice) isPractice ? window.practice.enter(practiceFocus) : window.practice.exit();
             // Clear conversation area for fresh sessions
             const convoArea = document.getElementById('conversation-area');
             if (convoArea) convoArea.innerHTML = '';
@@ -1849,6 +1945,7 @@ async function startSessionTimer() {
     statusText.innerText = isLicensed ? 'Session Running' : 'Demo (12 mins)';
     if (statusDot) statusDot.className = 'dot connected';
     if (window.__smartMode && window.startSmartListening) window.startSmartListening();
+    if (window.__practiceMode && window.practice) window.practice.start();
 
     timerInterval = setInterval(() => {
         const remaining = sessionEndTime - Date.now();
@@ -2058,6 +2155,7 @@ function resetSessionUI() {
     // Reset session state variables
     window.isSessionActive = false;
     if (window.stopListening) window.stopListening();
+    if (window.practice) window.practice.exit();
     sessionCreated = false;
     sessionTimerStarted = false;
     currentSessionName = null;
