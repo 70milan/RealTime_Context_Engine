@@ -23,7 +23,7 @@
     "publish": {
       "provider": "github",
       "owner": "mjulez70",
-      "repo": "job_bandit",
+      "repo": "realtimecontextengine",
       "releaseType": "release"
     },
     "directories": {
