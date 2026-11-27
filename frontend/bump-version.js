@@ -45,7 +45,8 @@ function commitBullets() {
             if (/^\s*-\s+/.test(line)) fromBody.push(line.replace(/^\s*-\s+/, '').trim());
             else if (/^\s{2,}\S/.test(line) && fromBody.length) fromBody[fromBody.length - 1] += ' ' + line.trim();
         }
-        bullets.push(...(fromBody.length ? fromBody : [subject.trim()]));
+        // "Release X.Y.Z." bullets only describe the version bump itself
+        bullets.push(...(fromBody.length ? fromBody : [subject.trim()]).filter(b => !/^release\s+\d/i.test(b)));
     }
     return { base, bullets };
 }
