@@ -1,7 +1,7 @@
 # RealTime Context Engine
 
 **A free, open-source AI interview copilot and mock-interview coach for Windows.**
-It knows your resume and the job description, so its cues come from *your* experience. Or it runs a full mock interview out loud and reviews every answer.
+It hears **both sides of the call at once**, tells who is speaking, and answers by itself when a question is finished. It knows your resume and the job description, so its cues come from *your* experience. Or it runs a full mock interview out loud and reviews every answer.
 
 <p align="center">
   <a href="https://github.com/mjulez70/realtimecontextengine/releases/latest"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20installer-2ea44f?style=for-the-badge&logo=windows"></a>
@@ -36,9 +36,20 @@ It knows your resume and the job description, so its cues come from *your* exper
 - **Never repeats a question** for the same job. Pick the focus: mixed, behavioural, technical, or coding.
 - **Free with a Groq key** (optional). Without one it uses your OpenAI key, about 10¢ a round.
 
+### Smart Interview: hears both sides and answers by itself
+The interviewer comes through **system audio** and you through the **microphone**, captured at the same time and transcribed live as two labelled speakers ("Interviewer" and "Me"). Then:
+- **It answers automatically** as soon as the interviewer finishes a question. No hotkey, no copy and paste. A new answer replaces the old one only when it starts arriving.
+- **It knows when a question is really finished:** the interviewer's "oh", "okay", "hm" and half-sentences don't trigger an answer, and a stray "?" from the speech-to-text isn't trusted on its own.
+- **It handles back-and-forth.** If you ask a clarifying question, it waits for the interviewer's reply and then answers using the whole exchange, and it never answers your own question for you.
+- **It filters echo.** Speaker sound leaking into your mic, or your own voice looping back through a headset, is dropped, while your real answers are kept.
+- **It keeps what you said** next to each suggested answer, so [Answer Review](#answer-review) can compare the two afterwards.
+- **Cue Mode** makes the answers short bullet cues, so you speak in your own words instead of reading.
+
+Turn it on with the **Smart Interview** checkbox when creating a session, or with **Ctrl+Alt+A**.
+
 ### Live sessions
-- **Live transcription** of the interviewer (system audio) and you (microphone).
-- **Smart Interview:** tells who's speaking and answers automatically when a question is finished.
+- **Live transcription** of the interviewer (system audio) and you (microphone), shown as two labelled speakers.
+- **Manual mode** if you prefer: start system audio or the mic yourself and press **Ctrl+Enter** to answer.
 - **Cue Mode:** 3–5 short bullet cues instead of a script, so you answer in your own words.
 - **ESL Mode:** short, simple sentences.
 - **Screenshots:** solve the coding problem or diagram on your screen.
@@ -63,6 +74,7 @@ There are good free tools in this space. This is how they differ, taken from eac
 | **Resume + job description grounding** | **Built in, free** | One pasted context box | Not advertised | Pro (paid) | Not advertised |
 | **Mock-interview practice with follow-ups and reviews** | **Yes** | No | No | Not advertised | No |
 | **Answers avoid inventing experience** | **Built in** | Not a focus | Not a focus | Not a focus | Not a focus |
+| **Hears both sides, labels who's speaking and answers automatically** | **Yes** | Optional mic + speaker audio streamed to one model; no speaker labels or echo handling in the code | Not advertised | Not checked | Not advertised |
 | **Real per-answer cost shown** | **Yes** | No | No | No | No |
 | **AI provider** | OpenAI (Groq for Practice) | Gemini free tier, Groq, local | Any, via custom endpoint | Many, plus local | Gemini or local Ollama |
 | **Runs fully offline** | No | Optional local mode | With a local model | With Ollama | With Ollama |
