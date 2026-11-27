@@ -1,0 +1,783 @@
+/* Main window styles (index.html) */
+/* Custom Scrollbar - Minimal & Slim */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* Rounded window: the BrowserWindow is transparent, so the app background is
+   painted by body::before and everything (incl. fixed overlays) is clipped to the corners. */
+body {
+  background: transparent;
+  clip-path: inset(0 round 16px);
+  color: #ffffff;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  padding: 0;
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #0a0a0a 0%, #141428 100%);
+  pointer-events: none;
+}
+
+/* All interactive elements must remain clickable */
+button,
+input,
+textarea,
+[contenteditable],
+select,
+.btn,
+.session-btn,
+.vol-slider-wrapper,
+#status-bar-hotkeys,
+#auto-mode-indicator,
+#practice-indicator,
+#hints-toggle,
+#btn-toggle-log,
+#btn-toggle-usage,
+#usage-drawer,
+#usage-drawer *,
+#response-area,
+#transcript-area,
+#conversation-area,
+#log-drawer,
+#backend-terminal,
+pre,
+code,
+pre code,
+.model-selector,
+#model-dropdown,
+[role="button"],
+a,
+.modal,
+.modal *,
+#past-sessions-modal,
+#past-sessions-modal *,
+#session-history-modal,
+#session-history-modal *,
+#past-sessions-list,
+#past-sessions-list *,
+#session-history-list,
+#session-history-list *,
+#ethical-modal,
+#ethical-modal *,
+#guide-modal,
+#guide-modal *,
+#hotkeys-modal,
+#hotkeys-modal *,
+#custom-modal,
+#custom-modal * {
+  -webkit-app-region: no-drag;
+  user-select: text;
+}
+
+body.mini {
+  background-color: transparent !important;
+  background: transparent !important;
+  border-radius: 50%;
+  clip-path: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+body.mini>*:not(#mini-icon) {
+  display: none !important;
+}
+
+body.mini::before {
+  display: none;
+}
+
+body.mini #mini-icon {
+  display: flex;
+  animation: mini-breathe 3.5s ease-in-out infinite;
+}
+
+body.mini #mini-icon:hover {
+  animation: none;
+  background: radial-gradient(circle, rgba(100, 255, 150, 0.35) 0%, rgba(100, 255, 150, 0.08) 60%, transparent 75%);
+  box-shadow: 0 0 14px rgba(100, 255, 150, 0.2);
+}
+
+body.mini #mini-icon:hover .mini-dot {
+  background: rgba(100, 255, 150, 0.95);
+  box-shadow: 0 0 8px rgba(100, 255, 150, 0.6);
+  transform: scale(1.15);
+}
+
+#mini-icon {
+  display: none;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.06) 0%, transparent 70%);
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.3s, box-shadow 0.3s;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.mini-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(100, 255, 150, 0.5);
+  box-shadow: 0 0 10px rgba(100, 255, 150, 0.15);
+  transition: background 0.25s, box-shadow 0.25s, transform 0.25s;
+}
+
+@keyframes mini-breathe {
+
+  0%,
+  100% {
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 70%);
+  }
+
+  50% {
+    background: radial-gradient(circle, rgba(100, 255, 150, 0.1) 0%, transparent 70%);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 191, 255, 0.7);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(0, 191, 255, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 191, 255, 0);
+  }
+}
+
+#main-container {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 14px 16px;
+  gap: 10px;
+  min-height: 0;
+}
+
+#controls {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.btn {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 6px;
+  border-radius: 10px;
+  font-size: 9px;
+  cursor: default;
+  font-weight: 500;
+  transition: all 0.15s;
+  background-color: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.btn:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(100, 255, 150, 0.15);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.screen-btn-group:hover {
+  border-color: rgba(100, 255, 150, 0.15);
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.screen-btn-group .btn:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.btn.active {
+  background-color: rgba(100, 255, 150, 0.06);
+  color: rgba(100, 255, 150, 0.9);
+  border-color: rgba(100, 255, 150, 0.2);
+}
+
+.section {
+  flex: 5;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 12px 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: flex 0.3s ease;
+}
+
+.section.compact {
+  flex: 2;
+}
+
+.section.expanded {
+  flex: 8;
+}
+
+.section.maximized {
+  flex: 20;
+}
+
+.section.minimized {
+  flex: 1;
+}
+
+.section-header {
+  font-size: 9px;
+  color: rgba(100, 255, 150, 0.5);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.section-header span {
+  -webkit-app-region: no-drag;
+  user-select: none;
+  cursor: default;
+}
+
+#transcript-area {
+  color: #e6e6e6;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: default;
+  color: #ffffff;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  text-align: left;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: default;
+  line-height: 1.4;
+  flex: 1;
+  min-height: 50px;
+  overflow-y: auto;
+  padding-bottom: 10px;
+}
+
+.model-signature {
+  text-align: right;
+  margin-top: 15px;
+  margin-bottom: 5px;
+  margin-right: -5px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  background: rgba(20, 20, 20, 0.4);
+  padding: 3px 6px;
+  border-radius: 8px;
+  display: block;
+  float: right;
+  clear: both;
+}
+
+#response-area code {
+  background-color: rgba(255, 255, 255, 0.07);
+  padding: 2px 5px;
+  border-radius: 8px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  color: rgba(100, 255, 150, 0.75);
+  display: inline;
+}
+
+#response-area pre {
+  background-color: rgba(10, 10, 18, 0.6);
+  padding: 12px;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: pre;
+}
+
+#response-area pre code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  display: block;
+}
+
+/* ── Log Drawer ─────────────────────────────────────────── */
+#log-drawer {
+  display: none;
+  position: fixed;
+  bottom: 32px;
+  left: 8px;
+  width: 480px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: rgba(10, 10, 18, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  z-index: 9000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  -webkit-app-region: no-drag;
+  user-select: text;
+}
+
+#log-drawer.open {
+  display: block;
+}
+
+#log-drawer::-webkit-scrollbar {
+  width: 3px;
+}
+
+#log-drawer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+
+/* ── Status Bar ─────────────────────────────────────────── */
+#status-bar {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  padding: 4px 8px;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  overflow: visible;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dot.connected {
+  background-color: rgba(100, 255, 150, 0.7);
+  box-shadow: 0 0 6px rgba(100, 255, 150, 0.3);
+}
+
+.dot.error {
+  background-color: rgba(255, 107, 107, 0.6);
+  box-shadow: 0 0 4px rgba(255, 107, 107, 0.3);
+}
+
+/* Session buttons */
+.session-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.02);
+  padding: 3px;
+}
+
+.session-btn {
+  padding: 2px 6px;
+  font-size: 8px;
+  border-radius: 8px;
+  border: none;
+  background-color: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: default;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex: 1;
+}
+
+.session-btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+#btn-session-start:hover {
+  color: #00e6c8;
+  border-color: rgba(0, 230, 200, 0.4);
+  background: rgba(0, 230, 200, 0.08);
+  box-shadow: 0 0 6px rgba(0, 230, 200, 0.2);
+}
+
+#btn-session-start.active {
+  color: rgba(120, 200, 180, 0.85);
+  border-color: rgba(120, 200, 180, 0.4);
+  background: rgba(120, 200, 180, 0.08);
+  box-shadow: 0 0 6px rgba(120, 200, 180, 0.2);
+}
+
+#btn-session-stop:hover {
+  color: #f0c040;
+  border-color: rgba(240, 192, 64, 0.4);
+  background: rgba(240, 192, 64, 0.08);
+  box-shadow: 0 0 6px rgba(240, 192, 64, 0.2);
+}
+
+#btn-session-stop.paused {
+  color: #f0c040;
+  border-color: rgba(240, 192, 64, 0.5);
+  background: rgba(240, 192, 64, 0.12);
+  box-shadow: 0 0 8px rgba(240, 192, 64, 0.3);
+}
+
+#btn-session-end:hover {
+  color: rgba(255, 107, 107, 0.7);
+  border-color: rgba(255, 107, 107, 0.4);
+  background: rgba(255, 107, 107, 0.08);
+  box-shadow: 0 0 6px rgba(255, 107, 107, 0.2);
+}
+
+#btn-session-end.ended {
+  color: rgba(255, 107, 107, 0.8);
+  border-color: rgba(255, 107, 107, 0.5);
+  background: rgba(255, 107, 107, 0.12);
+  box-shadow: 0 0 8px rgba(255, 107, 107, 0.3);
+}
+
+.session-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #555;
+}
+
+.session-indicator.active {
+  background-color: rgba(120, 200, 180, 0.7);
+  box-shadow: 0 0 4px rgba(120, 200, 180, 0.3);
+  animation: blink 1.5s infinite;
+}
+
+.session-indicator.paused {
+  background-color: rgba(255, 180, 50, 0.8);
+  box-shadow: 0 0 4px rgba(255, 180, 50, 0.4);
+}
+
+@keyframes blink {
+
+  0%,
+  49%,
+  100% {
+    opacity: 1;
+  }
+
+  50%,
+  99% {
+    opacity: 0.3;
+  }
+}
+
+#btn-start-session:focus,
+#btn-start-session:active,
+#btn-start-session:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Stealth mode: no pointer cursors in the live session UI ── */
+#main-container *,
+#main-container button,
+#main-container span,
+#main-container .btn,
+#main-container .session-btn {
+  cursor: default !important;
+}
+
+/* Usage chip + drawer */
+/* Buy me a coffee (free app) */
+.coffee-link {
+  color: rgba(255, 200, 120, 0.7);
+  text-decoration: none;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
+.coffee-link:hover {
+  color: rgba(255, 210, 140, 0.95);
+}
+
+.coffee-chip {
+  margin-left: 6px;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 200, 120, 0.2);
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+#btn-toggle-usage {
+  margin-left: 6px;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+#btn-toggle-usage.open {
+  color: rgba(100, 255, 150, 0.7);
+  border-color: rgba(100, 255, 150, 0.3);
+  background: rgba(100, 255, 150, 0.06);
+}
+
+#btn-toggle-usage.low {
+  color: rgba(255, 180, 80, 0.9);
+  border-color: rgba(255, 180, 80, 0.45);
+}
+
+#btn-toggle-usage.empty {
+  color: rgba(255, 107, 107, 0.9);
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+#usage-drawer {
+  display: none;
+  position: fixed;
+  left: 8px;
+  width: 300px;
+  background: rgba(10, 10, 18, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
+  z-index: 9000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  -webkit-app-region: no-drag;
+}
+
+#usage-drawer.open {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#usage-drawer .ud-title {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: rgba(100, 255, 150, 0.5);
+  margin-top: 4px;
+}
+
+#usage-drawer .ud-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+#usage-drawer .ud-row b {
+  font-family: Consolas, 'Courier New', monospace;
+  font-weight: 600;
+  color: rgba(120, 200, 180, 0.95);
+}
+
+#usage-drawer .ud-row i {
+  grid-column: 1 / -1;
+  font-style: normal;
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+#usage-drawer .ud-total {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 5px;
+}
+
+#usage-drawer .ud-balance {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+#usage-drawer .ud-balance b {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 16px;
+  color: #fff;
+}
+
+#usage-drawer .ud-balance.low b { color: rgba(255, 180, 80, 0.95); }
+#usage-drawer .ud-balance.empty b { color: rgba(255, 107, 107, 0.95); }
+
+#usage-drawer .ud-balance span {
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+#usage-drawer .ud-set {
+  display: flex;
+  gap: 6px;
+}
+
+#usage-drawer .ud-set input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  font-size: 11px;
+  outline: none;
+}
+
+#usage-drawer .ud-set input:focus {
+  border-color: rgba(100, 255, 150, 0.35);
+}
+
+#usage-drawer .ud-set button {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 255, 150, 0.25);
+  background: rgba(100, 255, 150, 0.08);
+  color: rgba(100, 255, 150, 0.85);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#usage-drawer .ud-help {
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Smart Interview chip in the status bar */
+#auto-mode-indicator {
+  margin-left: 8px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#auto-mode-indicator.on {
+  color: #00e6c8;
+  border-color: rgba(0, 230, 200, 0.45);
+}
+
+/* Transcript lines (one per utterance); speaker labels in Smart Interview */
+#transcript-area .seg.partial .seg-text {
+  opacity: 0.6;
+}
+
+#transcript-area .seg-who {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  vertical-align: 1px;
+  user-select: none;
+}
+
+#transcript-area .seg-who.system {
+  color: rgba(0, 212, 255, 0.8);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+#transcript-area .seg-who.mic {
+  color: rgba(100, 255, 150, 0.8);
+  background: rgba(100, 255, 150, 0.08);
+}
+
+/* Keep text areas user-selectable */
+#transcript-area,
+#response-area {
+  user-select: text;
+  -webkit-user-select: text;
+}

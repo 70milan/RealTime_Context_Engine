@@ -1,10 +1,7 @@
 fastapi==0.121.3
 uvicorn==0.44.0
-python-dotenv
 openai==2.8.1
-requests
 websockets==16.0
-colorama
 pydantic==2.13.2
 starlette==0.50.0
 pyinstaller

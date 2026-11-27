@@ -2,7 +2,7 @@ const JavaScriptObfuscator = require('javascript-obfuscator');
 const fs = require('fs');
 const path = require('path');
 
-const filesToObfuscate = ['setup.js', 'streaming-ai.js'];
+const filesToObfuscate = ['js/setup.js', 'js/streaming-ai.js'];
 const mode = process.argv[2]; // 'obfuscate' or 'restore'
 
 filesToObfuscate.forEach(file => {
