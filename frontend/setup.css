@@ -471,6 +471,13 @@ html, body, *, *::before, *::after { cursor: default !important; }
 
 
 /* Language autocomplete dropdown */
+/* Dropdowns float over the window's drag area: without no-drag, Windows swallows the
+   clicks on any item that sits above a non-input part of the form */
+.lang-autocomplete,
+.lang-autocomplete-item {
+  -webkit-app-region: no-drag;
+}
+
 .lang-autocomplete {
   position: fixed;
   z-index: 99999;
