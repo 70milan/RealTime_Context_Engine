@@ -56,13 +56,7 @@ PRICING = {
     "gpt-5-mini": {"input": 0.25, "cached": 0.025, "output": 2.00},
 }
 
-# License State (Backend Enforcement)
-# Default to unlicensed until validation
-is_licensed_backend = False
 import threading
-_license_checked = threading.Event()  # set once check_saved_license() has run
-DEMO_LIMIT_MS = 12 * 60 * 1000
-DEMO_COOLDOWN_MS = 47 * 60 * 1000
 
 
 
@@ -169,15 +163,6 @@ if getattr(sys, 'frozen', False):
 else:
     # Running as script - store locally
     BASE_DIR = Path(__file__).parent
-
-# =============================================================================
-# KEY FILE CONFIGURATION (Must be after BASE_DIR)
-# =============================================================================
-PUBLIC_KEY_NAME = "public_key.pem"
-PRIVATE_KEY_NAME = "private_key.pem"
-# Use absolute paths for key files (essential for frozen EXEs)
-PUBLIC_KEY_FILE = BASE_DIR / PUBLIC_KEY_NAME
-PRIVATE_KEY_FILE = BASE_DIR / PRIVATE_KEY_NAME
 
 # Allow the Electron frontend and local testing to call the API
 app.add_middleware(
@@ -351,13 +336,6 @@ async def realtime(ws: WebSocket):
     if source not in ("system", "mic"):
         source = "system"
     tag = f"[WS:{source}]"
-
-    access_allowed = check_access_allowed()
-    if not access_allowed:
-        print(f"{tag} Access denied (demo expired or unlicensed)")
-        await ws.send_json({"type": "error", "message": "Demo expired. Please purchase a license to continue."})
-        await ws.close()
-        return
 
     api_key = get_api_key()
 
@@ -862,7 +840,7 @@ def final_answer_rules(ctx: Dict[str, Any], screenshot: bool = False) -> dict:
 @app.get('/profile')
 async def get_profile():
     # Never return secrets over HTTP - the UI doesn't need them back
-    return {k: v for k, v in (profile_cache or {}).items() if k not in ('openai_api_key', 'groq_api_key', 'license_key')}
+    return {k: v for k, v in (profile_cache or {}).items() if k not in ('openai_api_key', 'groq_api_key')}
 
 @app.post('/validate-api-key')
 async def validate_api_key(data: Dict[str, str]):
@@ -895,277 +873,11 @@ async def validate_api_key(data: Dict[str, str]):
         else:
             return {"valid": False, "error": f"API key validation failed: {error_msg[:100]}"}
 
-# License validation - Hardware-Locked
-import hashlib
-import platform
-import subprocess
-
-
-try:
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.asymmetric import padding
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.exceptions import InvalidSignature
-except ImportError:
-    print("WARNING: cryptography module not found. License validation will fail.")
-
-# =============================================================================
-# HARDWARE ID GENERATION
-# =============================================================================
-_hwid_cache = None  # Computed once, reused everywhere
-
-def get_hwid():
-    """Generate a unique Hardware ID. Identical algorithm to original — cached so
-    it only runs once per process instead of twice (startup + license check)."""
-    global _hwid_cache
-    if _hwid_cache:
-        return _hwid_cache
-    try:
-        # 1. CPU Serial/Info (same as original)
-        cpu_info = ""
-        try:
-            # py-cpuinfo's CPUID probe runs in a multiprocessing child with a
-            # busy-wait join; in the frozen exe that re-launches the whole backend.
-            # On Windows brand_raw comes from the registry before CPUID is tried,
-            # so skipping CPUID leaves the HWID unchanged (and takes ~80ms not ~3s).
-            from cpuinfo import cpuinfo as _ci
-            _ci.DataSource.can_cpuid = False
-            info = _ci._get_cpu_info_internal()
-            cpu_info = f"{info.get('brand_raw', '')}_{info.get('arch', '')}"
-        except (ImportError, Exception):
-            cpu_info = platform.processor()
-
-        # 2. Machine Node/UUID (Mac Address based)
-        import uuid
-        mac_addr = hex(uuid.getnode())
-
-        # 3. OS Info
-        os_info = f"{platform.system()}_{platform.release()}"
-
-        # Same hash formula as original — must not change
-        raw_id = f"{cpu_info}_{mac_addr}_{os_info}"
-        hwid = hashlib.sha256(raw_id.encode()).hexdigest().upper()
-        _hwid_cache = f"{hwid[:4]}-{hwid[4:8]}-{hwid[8:12]}-{hwid[12:16]}"
-        return _hwid_cache
-    except Exception as e:
-        print(f"HWID Error: {e}")
-        return "UNKNOWN-HWID-0000"
-
-# =============================================================================
-# LICENSE VERIFICATION (RSA)
-# =============================================================================
-# =============================================================================
-# LICENSE VERIFICATION (RSA)
-# =============================================================================
-# (PUBLIC_KEY_FILE and PRIVATE_KEY_FILE moved to top of file after BASE_DIR)
-
-def ensure_keys_exist():
-    """Ensure bundled public key exists. Auto-generation disabled in production."""
-    if os.path.exists(PUBLIC_KEY_FILE):
-        return
-
-    print("[WARNING] Public key missing. Application will run in demo mode.")
-
-# Call on import/startup
-def initialize_keys():
-    """Ensure keys exist and enforce bundled public key usage."""
-    # 1. If running as frozen executable, overwrite public key from bundle
-    if getattr(sys, 'frozen', False):
-        try:
-            # PyInstaller extracts to sys._MEIPASS
-            bundle_dir = sys._MEIPASS
-            bundled_key_path = os.path.join(bundle_dir, PUBLIC_KEY_NAME)
-            
-            if os.path.exists(bundled_key_path):
-                # Copy bundled key to BASE_DIR (overwrite existing)
-                dest_path = PUBLIC_KEY_FILE
-                import shutil
-                shutil.copy2(bundled_key_path, dest_path)
-                print(f"[STARTUP] Enforced bundled public key: {dest_path}")
-        except Exception as e:
-            print(f"[STARTUP ERROR] Failed to copy bundled key: {e}")
-
-    # 2. Generate keys if still missing (e.g. dev mode or missing bundle)
-    ensure_keys_exist()
-
-def check_saved_license():
-    """Restore license state from profile on backend startup."""
-    global is_licensed_backend
-    try:
-        profile = load_profile()
-        saved_key = profile.get('license_key')
-        if saved_key:
-            current_hwid = get_hwid()
-            if verify_license_signature(current_hwid, saved_key):
-                is_licensed_backend = True
-                print(f"[STARTUP] License restored from profile — full session mode active")
-            else:
-                print(f"[STARTUP] Saved license invalid for current HWID — demo mode")
-        else:
-            print(f"[STARTUP] No saved license — demo mode")
-    except Exception as e:
-        print(f"[STARTUP ERROR] License check failed: {e}")
-
-# Both MUST run synchronously and in this order — called after all
-# function definitions below to avoid NameError in PyInstaller exe.
-
-import hashlib
-def load_public_key():
-    """Load public key from file (Prioritize Bundled)."""
-    # 1. Try bundled key first (if frozen)
-    if getattr(sys, 'frozen', False):
-        try:
-            bundle_dir = sys._MEIPASS
-            bundled_path = os.path.join(bundle_dir, PUBLIC_KEY_NAME)
-            if os.path.exists(bundled_path):
-                print(f"[VERIFY] Using bundled key from: {bundled_path}")
-                with open(bundled_path, "rb") as f:
-                    return f.read()
-        except Exception as e:
-            print(f"[VERIFY ERROR] Bundled key read failed: {e}")
-
-    # 2. Fallback to local file (Dev mode or missing bundle)
-    if os.path.exists(PUBLIC_KEY_FILE):
-        print(f"[VERIFY] Using local key from: {PUBLIC_KEY_FILE}")
-        with open(PUBLIC_KEY_FILE, "rb") as f:
-            return f.read()
-    return None
-
-def verify_license_signature(hwid: str, license_key_b64: str) -> bool:
-    """Verify that the license key is a valid signature of the HWID."""
-    try:
-        pub_key_bytes = load_public_key()
-        if not pub_key_bytes:
-            print("ERROR: Public key not found for verification.")
-            return False
-            
-        public_key = serialization.load_pem_public_key(pub_key_bytes)
-
-        # 0. Sanitize Input (Remove all whitespace/newlines)
-        license_key_b64 = "".join(license_key_b64.split())
-
-        # 1. Strict Format Check (Regex)
-        import re
-        import base64
-        # RSA-2048 signature in B64 is exactly 344 chars (including ==)
-        if not re.match(r'^[A-Za-z0-9+/]{342}==$', license_key_b64):
-            print("ERROR: Invalid license key format or length.")
-            return False
-
-        # 2. Decode License Key (Base64 -> Bytes)
-        try:
-            signature = base64.b64decode(license_key_b64, validate=True)
-        except Exception:
-            print("ERROR: Base64 decoding failed.")
-            return False
-
-        # 3. Strict Length Check
-        if len(signature) != 256:  # RSA-2048 specific (2048/8)
-            print(f"ERROR: Invalid signature length ({len(signature)} bytes).")
-            return False
-
-        # 4. Verify Signature
-        public_key.verify(
-            signature,
-            hwid.encode('utf-8'),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
-        )
-        return True
-    except (InvalidSignature, Exception) as e:
-        print(f"License Verification Failed: {e}")
-        return False
-
-@app.get('/get-hwid')
-async def endpoint_get_hwid():
-    """Return the Machine's HWID for the user to copy."""
-    return {"hwid": get_hwid()}
-
-@app.post('/validate-license')
-async def validate_license(data: Dict[str, str]):
-    """Validate license key against HWID using RSA signature."""
-    license_key = data.get('license_key', '').strip()
-    
-    if not license_key:
-        return {"valid": False, "status": "empty"}
-    
-    current_hwid = get_hwid()
-    
-    if verify_license_signature(current_hwid, license_key):
-        global is_licensed_backend, profile_cache
-        is_licensed_backend = True
-        if not isinstance(profile_cache, dict):
-            profile_cache = {}
-        profile_cache['license_key'] = license_key
-        save_profile(profile_cache)
-        print(f"[LICENSE] Valid license persisted for HWID: {current_hwid}")
-        return {"valid": True, "status": "valid"}
-    
-    return {"valid": False, "status": "invalid"}
-
-# Demo state lives in the profile (demo_started_at / last_demo_end_time, epoch ms)
-# so restarting the backend no longer resets the 12-minute limit or the cooldown.
-import time
-import math
-
-def _now_ms() -> float:
-    return time.time() * 1000
-
 def _profile() -> Dict[str, Any]:
     global profile_cache
     if not isinstance(profile_cache, dict):
         profile_cache = {}
     return profile_cache
-
-def demo_cooldown_remaining_ms() -> float:
-    p = _profile()
-    started = p.get('demo_started_at')
-    if started:
-        if _now_ms() - started < DEMO_LIMIT_MS:
-            return 0  # a demo is still running
-        last_end = started + DEMO_LIMIT_MS  # ran out without a clean end
-    else:
-        last_end = p.get('last_demo_end_time') or 0
-    return max(0, last_end + DEMO_COOLDOWN_MS - _now_ms())
-
-def start_demo() -> Optional[str]:
-    """Start (or resume) a demo window. Returns an error message if in cooldown."""
-    _license_checked.wait(10)
-    if is_licensed_backend:
-        return None
-    p = _profile()
-    started = p.get('demo_started_at')
-    if started and _now_ms() - started < DEMO_LIMIT_MS:
-        return None  # resume the running demo; the clock does not restart
-    remaining = demo_cooldown_remaining_ms()
-    if remaining > 0:
-        return f"Demo cooldown active. Try again in {math.ceil(remaining / 60000)} min."
-    p['demo_started_at'] = _now_ms()
-    p.pop('last_demo_end_time', None)
-    save_profile(p)
-    print(f"[SECURITY] Demo session started at {p['demo_started_at']}")
-    return None
-
-def end_demo():
-    p = _profile()
-    started = p.pop('demo_started_at', None)
-    if started:
-        p['last_demo_end_time'] = min(_now_ms(), started + DEMO_LIMIT_MS)
-        save_profile(p)
-        print("[SECURITY] Demo session ended. Cooldown started.")
-
-def check_access_allowed() -> bool:
-    """Enforce hardware-locked licensing and trial limits."""
-    _license_checked.wait(10)
-    if is_licensed_backend:
-        return True
-    started = _profile().get('demo_started_at')
-    if not started:
-        return False  # no demo running - one must be started via /session/save or /session/load
-    return _now_ms() - started <= DEMO_LIMIT_MS
 
 
 
@@ -1340,9 +1052,6 @@ async def save_session_data(data: Dict[str, Any]):
     session_dir = safe_session_dir(session_name)
     session_dir.mkdir(parents=True, exist_ok=True)
     
-    demo_error = start_demo()
-    if demo_error:
-        return {"status": "error", "error": demo_error}
 
     session_file = session_dir / 'session.json'
     
@@ -1533,9 +1242,6 @@ async def end_session(data: Dict[str, str]):
     try:
         # Q&A pairs are already written to conversation.json as each answer
         # completes, so there is nothing left to append here.
-        if not is_licensed_backend:
-            end_demo()
-
         clear_active_context()
         print(f"[SESSION] Ended session: {session_name} (context and conversation memory cleared)")
         return {"status": "ok", "message": f"Session '{session_name}' ended"}
@@ -1628,9 +1334,6 @@ async def activate_session(data: Dict[str, str]):
         session_file = safe_session_dir(session_name) / 'session.json'
         if not session_file.exists():
             return {"status": "error", "error": "Session not found"}
-        demo_error = start_demo()
-        if demo_error:
-            return {"status": "error", "error": demo_error}
         set_active_context(session_name, json.loads(session_file.read_text(encoding='utf-8')))
         session_usage = {"input_tokens": 0, "output_tokens": 0, "total_cost": 0.0, "request_count": 0,
                          "ai_cost": 0.0, "transcription_seconds": 0.0, "transcription_cost": 0.0}
@@ -1991,7 +1694,7 @@ class SmartClassifyRequest(BaseModel):
 async def smart_classify(req: SmartClassifyRequest):
     """Fast yes/no: should the candidate answer now? Used only for interviewer turns
     the client-side question heuristics can't decide."""
-    if not check_access_allowed() or not req.exchange.strip():
+    if not req.exchange.strip():
         return {"answer_now": False}
     prompt = (
         "You watch a live job interview transcript. Decide whether the interviewer has just "
@@ -2033,9 +1736,6 @@ async def stream_ai_response(req: AIRequest):
       6. the question (Smart: the labeled exchange), plus the screenshot
     """
     async def generate_stream():
-        if not check_access_allowed():
-            yield f"data: {json.dumps({'error': 'Demo expired. Please purchase a license to continue.'})}\n\n"
-            return
         ctx = get_active_context()
         if not ctx:
             yield f"data: {json.dumps({'error': 'No active session. Create or resume a session first.'})}\n\n"
@@ -2148,22 +1848,22 @@ async def stream_ai_response(req: AIRequest):
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-# ── Startup sequence ────────────────────────────────────────────────────────
-# Must run AFTER all function definitions so PyInstaller exe doesn't hit
-# NameError on verify_license_signature / load_public_key etc.
-# Order matters:
-#   1. initialize_keys  — copies/generates public key so verify can find it
-#   2. check_saved_license — reads profile and verifies RSA signature
-initialize_keys()
+# ── Startup ─────────────────────────────────────────────────────────────────
+# The app is free: older versions kept a license key and demo timers in the
+# profile; they are dropped once so nothing can ever limit a session.
+_LEGACY_LICENSE_FIELDS = ('license_key', 'demo_started_at', 'last_demo_end_time')
+if any(k in _profile() for k in _LEGACY_LICENSE_FIELDS):
+    for _k in _LEGACY_LICENSE_FIELDS:
+        _profile().pop(_k, None)
+    try:
+        save_profile(_profile())
+        print("[STARTUP] Removed old license / demo data from the profile")
+    except Exception as e:
+        print(f"[STARTUP] Could not clean the profile: {e}")
 
 def _warm_up():
-    """Runs in the background so /health answers as soon as FastAPI is up:
-    restores the saved license (HWID takes ~1 s), then loads openai, tiktoken
-    and the client so the first answer doesn't stall the server."""
-    try:
-        check_saved_license()
-    finally:
-        _license_checked.set()
+    """Runs in the background so /health answers as soon as FastAPI is up: loads
+    openai, tiktoken and the client so the first answer doesn't stall the server."""
     try:
         from openai import AsyncOpenAI
         # Touching .chat.completions triggers the SDK's lazy ~1.3 s resource import

@@ -1,123 +1,29 @@
 // Session Setup & Timer Logic
 // Session Setup & Timer Logic
 
-const FULL_SESSION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours (licensed)
-const DEMO_SESSION_DURATION_MS = 12 * 60 * 1000; // 12 minutes (demo)
-const DEMO_COOLDOWN_MS = 47 * 60 * 1000; // 47 minutes cooldown between demo sessions
-let SESSION_DURATION_MS = DEMO_SESSION_DURATION_MS; // Default to demo duration
-let sessionEndTime = null;
 let timerInterval = null;
 let sessionCreated = false;
 let sessionTimerStarted = false;
 let currentSessionName = null;
-let isLicensed = false; // Default to unlicensed
 let sessionStartTimestamp = null;
 let backendReady = false;
 
-// Helper to check demo cooldown remaining time (in ms)
-function getRemainingDemoCooldown() {
-    const lastDemoTime = localStorage.getItem('last_demo_timestamp');
-    if (!lastDemoTime) return 0;
+// Session clock: counts up from 0:00:00 while the session runs; Pause freezes it.
+// There is no time limit.
+let elapsedBeforePause = 0;   // ms counted before the last Pause
+let runStartedAt = null;      // when the clock last started (null while paused)
 
-    const elapsed = Date.now() - parseInt(lastDemoTime);
-    if (elapsed < DEMO_COOLDOWN_MS) {
-        return DEMO_COOLDOWN_MS - elapsed;
-    }
-    return 0;
+function formatElapsed(ms) {
+    const total = Math.floor(ms / 1000);
+    const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), sec = total % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
-// Helper to format ms into "X min and Y second(s)"
-function formatCooldownTime(ms) {
-    const totalSeconds = Math.ceil(ms / 1000);
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-
-    if (mins > 0) {
-        return `${mins} min and ${secs} second(s)`;
-    }
-    return `${secs} second(s)`;
-}
-
-// License validation (Hardware-Locked)
-async function validateLicense(key) {
-    if (!key || key.trim() === '') return 'empty';
-
-    try {
-        console.log('[DEBUG] Calling validate-license endpoint...');
-        const res = await fetch('http://127.0.0.1:5050/validate-license', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ license_key: key.trim() })
-        });
-        console.log('[DEBUG] Response status:', res.status);
-        const data = await res.json();
-        console.log('[DEBUG] Response data:', data);
-        return data.status; // 'valid', 'invalid', or 'empty'
-    } catch (e) {
-        console.error('[DEBUG] License validation error:', e);
-        // If backend is down, allow demo mode
-        return 'empty';
-    }
-}
-
-// Session lock - prevents actions until Start is clicked
-window.isSessionActive = false;
-
-// ── License field lock ────────────────────────────────────────────────────────
-// Call this whenever a valid license is confirmed. It permanently locks the
-// license input for this install (until Reset App) and shows the lock icon.
-function applyLicensedFieldState() {
-    const licenseInput = document.getElementById('setup-license');
-    const licenseInfo  = document.getElementById('license-info');
-    const licenseLock  = document.getElementById('license-lock-icon');
-    const licenseBadge = document.getElementById('license-status-badge');
-    const demoInfoText = document.getElementById('demo-info-text');
-
-    if (licenseInput) {
-        licenseInput.value    = 'License Active';
-        licenseInput.disabled = true;
-        licenseInput.style.opacity    = '0.5';
-        licenseInput.style.cursor     = 'not-allowed';
-        licenseInput.style.userSelect = 'none';
-        licenseInput.style.pointerEvents = 'none';
-    }
-
-    // Hide the (?) info link — replace with lock icon
-    if (licenseInfo)  licenseInfo.style.display  = 'none';
-    if (licenseLock) {
-        licenseLock.style.display = 'inline-flex';
-        licenseLock.style.alignItems = 'center';
-        // SVG: red circle with a horizontal bar (no-entry / locked symbol)
-        licenseLock.innerHTML = `<svg id="license-lock-svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
-            xmlns="http://www.w3.org/2000/svg" style="transition: all 0.2s;">
-            <circle cx="12" cy="12" r="10" stroke="rgba(100,255,150,0.55)" stroke-width="2"/>
-            <path d="M8 12h8" stroke="rgba(100,255,150,0.55)" stroke-width="2.5" stroke-linecap="round"/>
-        </svg>`;
-        // Hover: turn red (no-entry) to signal it cannot be changed
-        licenseLock.onmouseenter = () => {
-            const svg = licenseLock.querySelector('svg');
-            if (svg) {
-                svg.querySelectorAll('circle, path').forEach(el => {
-                    el.setAttribute('stroke', 'rgba(255,80,80,0.85)');
-                });
-            }
-        };
-        licenseLock.onmouseleave = () => {
-            const svg = licenseLock.querySelector('svg');
-            if (svg) {
-                svg.querySelectorAll('circle, path').forEach(el => {
-                    el.setAttribute('stroke', 'rgba(100,255,150,0.55)');
-                });
-            }
-        };
-    }
-
-    if (licenseBadge) {
-        licenseBadge.textContent  = 'Licensed';
-        licenseBadge.style.color  = 'rgba(100, 255, 150, 0.4)';
-    }
-    if (demoInfoText) demoInfoText.style.display = 'none';
-    isLicensed = true;
+function resetSessionClock() {
+    elapsedBeforePause = 0;
+    runStartedAt = null;
+    const timerText = document.getElementById('session-timer-text');
+    if (timerText) timerText.innerText = '0:00:00';
 }
 
 // Custom styled alert/confirm functions
@@ -128,7 +34,7 @@ function showCustomModal(message, isConfirm = false) {
         const okBtn = document.getElementById('custom-modal-ok');
         const cancelBtn = document.getElementById('custom-modal-cancel');
 
-        // Allow HTML in message for HWID display
+        // Messages may contain simple HTML (links, bold)
         msgEl.innerHTML = message.replace(/\n/g, '<br>');
         cancelBtn.style.display = isConfirm ? 'block' : 'none';
         modal.style.display = 'flex';
@@ -160,61 +66,6 @@ function showCustomModal(message, isConfirm = false) {
 
 window.customAlert = (msg) => showCustomModal(msg, false);
 window.customConfirm = (msg) => showCustomModal(msg, true);
-
-// Get HWID helper
-async function getHardwareID() {
-    try {
-        const res = await fetch('http://127.0.0.1:5050/get-hwid');
-        const data = await res.json();
-        return data.hwid || 'Unknown';
-    } catch (e) {
-        console.error("Failed to fetch HWID:", e);
-        return "Backend Offline";
-    }
-}
-
-// License prompt after demo expires
-async function showLicensePrompt() {
-    const hwid = await getHardwareID();
-    const result = await customConfirm(
-        `Demo session expired (12 min).\n\n` +
-        `Your Hardware ID: <strong style="color: #64ff96; user-select: all;">${hwid}</strong>\n\n` +
-        `Email this ID to: <strong style="color: #64ff96; user-select: all;">mjulez70@gmail.com</strong>\n\n` +
-        `One-time payment of $20 only.\n` +
-        `CashApp: <a href="https://cash.app/$passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">$passdpawn</a>\n` +
-        `PayPal: <a href="https://paypal.me/passdpawn" target="_blank" style="color: rgba(100, 255, 150, 0.9); text-decoration: underline;">paypal.me/passdpawn</a>\n\n` +
-        `Click OK to enter license, or Cancel to return to setup.`
-    );
-
-    if (result) {
-        // Show setup overlay again so user can enter license
-        const overlay = document.getElementById('setup-overlay');
-        if (overlay) {
-            overlay.style.display = 'flex';
-            // Focus on license input
-            setTimeout(() => {
-                const licenseInput = document.getElementById('setup-license');
-                if (licenseInput) {
-                    licenseInput.focus();
-                    licenseInput.style.borderColor = 'rgba(100, 255, 150, 0.5)';
-                }
-            }, 100);
-        }
-        // Reset session state
-        sessionCreated = false;
-        window.isSessionActive = false;
-        if (window.stopListening) window.stopListening();
-    } else {
-        // Return to setup screen
-        const overlay = document.getElementById('setup-overlay');
-        if (overlay) {
-            overlay.style.display = 'flex';
-        }
-        sessionCreated = false;
-        window.isSessionActive = false;
-        if (window.stopListening) window.stopListening();
-    }
-}
 
 
 function showSessionError() {
@@ -280,11 +131,6 @@ async function waitForBackend() {
             if (res.ok) {
                 backendReady = true;
                 console.log('[BACKEND] Backend is ready!');
-
-                // Refresh HWID display now that backend is ready
-                if (typeof updateHWIDDisplay === 'function') {
-                    updateHWIDDisplay();
-                }
 
                 if (pastSessionsBtn) {
                     pastSessionsBtn.innerHTML = 'Past Sessions';
@@ -503,60 +349,6 @@ function initSession() {
         });
     }
 
-    // Check for saved valid license - verify it's still valid with current backend/HWID
-    const licenseInput = document.getElementById('setup-license');
-    const savedLicense = localStorage.getItem('valid_license_key');
-    const licenseBadge = document.getElementById('license-status-badge');
-
-    const demoInfoText = document.getElementById('demo-info-text');
-
-    if (savedLicense) {
-        // Apply licensed state immediately — don't wait for async backend validation.
-        // A saved license key means it was already verified against this HWID on a
-        // previous run. The async check below is a background revocation check only.
-        applyLicensedFieldState();
-
-        (async () => {
-            const status = await validateLicense(savedLicense);
-            if (status === 'valid') {
-                // Already applied — nothing extra needed
-                console.log('[DEBUG] Valid license verified on startup');
-            } else if (status === 'invalid') {
-                // Only clear if backend explicitly says invalid (not when unreachable)
-                console.log('[DEBUG] License explicitly invalid - clearing');
-                localStorage.removeItem('valid_license_key');
-                isLicensed = false;
-                if (licenseBadge) {
-                    licenseBadge.textContent = 'Demo';
-                    licenseBadge.style.color = 'rgba(255, 200, 100, 0.4)';
-                }
-                if (demoInfoText) demoInfoText.style.display = 'block';
-                // Re-enable the license input so user can enter a new key
-                if (licenseInput) {
-                    licenseInput.value = '';
-                    licenseInput.disabled = false;
-                    licenseInput.style.opacity = '1';
-                    licenseInput.style.cursor = '';
-                    licenseInput.style.pointerEvents = '';
-                }
-                const lockIcon = document.getElementById('license-lock-icon');
-                const infoLink = document.getElementById('license-info');
-                if (lockIcon) lockIcon.style.display = 'none';
-                if (infoLink) infoLink.style.display = '';
-            } else {
-                // Backend unreachable — already applied, keep as licensed
-                console.log('[DEBUG] Backend not ready yet - preserving saved license');
-            }
-        })();
-    } else {
-        // Show Unlicensed badge
-        if (licenseBadge) {
-            licenseBadge.textContent = 'Demo';
-            licenseBadge.style.color = 'rgba(255, 200, 100, 0.4)';
-        }
-        if (demoInfoText) demoInfoText.style.display = 'block';
-    }
-
     const endBtn = document.getElementById('btn-session-end');
     const startTimerBtn = document.getElementById('btn-session-start');
     const stopTimerBtn = document.getElementById('btn-session-stop');
@@ -735,7 +527,7 @@ function initSession() {
     const resetAppBtn = document.getElementById('btn-reset-app');
     if (resetAppBtn) {
         resetAppBtn.onclick = async () => {
-            const confirmed = await customConfirm('Reset the app?\n\nThis will clear all saved settings (API key, license, preferences) and reload. Your session files on disk are not deleted.');
+            const confirmed = await customConfirm('Reset the app?\n\nThis will clear all saved settings (API key, preferences) and reload. Your session files on disk are not deleted.');
             if (confirmed) {
                 try {
                     if (window.ipcRenderer) {
@@ -1000,15 +792,6 @@ function initSession() {
         createHoverTooltip('points-info-btn', pointsHoverContent);
     }
 
-    // License info toggle
-    const licenseInfo = document.getElementById('license-info');
-    if (licenseInfo) {
-        const licenseContent = '<div style="color: rgba(255, 255, 255, 0.85); font-size: 11px; line-height: 1.5;">' +
-            'Contact <a href="mailto:mjulez70@gmail.com" style="color: rgba(100, 255, 150, 0.75);">mjulez70@gmail.com</a> ' +
-            'with your HWID for license availability and details.</div>';
-        createHoverTooltip('license-info', licenseContent);
-    }
-
     const hotkeysContent = '<div style="color: rgba(100,255,150,0.9); font-weight: bold; margin-bottom: 8px; text-transform: uppercase;">Keyboard Shortcuts</div>' +
         '<div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 11px;">' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+R</span><span style="color: #ccc;">Toggle system audio</span>' +
@@ -1085,41 +868,6 @@ window.openPastSession = async function (sessionName) {
             status.style.color = 'rgba(255, 107, 107, 0.5)';
             return;
         }
-
-        // Check license
-        const savedLicense = localStorage.getItem('valid_license_key');
-        if (savedLicense) {
-            // Already validated and persisted — just apply state
-            applyLicensedFieldState();
-        } else {
-            const licenseInput = document.getElementById('setup-license');
-            // Get the raw value — if field shows placeholder "License Active", treat as no key
-            const rawValue = licenseInput ? licenseInput.value.trim() : '';
-            const licenseKey = (rawValue === 'License Active' || rawValue === '') ? '' : rawValue;
-            const licenseStatus = await validateLicense(licenseKey);
-            isLicensed = (licenseStatus === 'valid');
-            if (isLicensed) {
-                // Persist so we never need to validate again
-                localStorage.setItem('valid_license_key', licenseKey);
-                applyLicensedFieldState();
-            }
-        }
-
-        const demoInfoText = document.getElementById('demo-info-text');
-        if (isLicensed && demoInfoText) demoInfoText.style.display = 'none';
-
-        // Apply demo cooldown check for unlicensed users
-        if (!isLicensed) {
-            const remainingMs = getRemainingDemoCooldown();
-            if (remainingMs > 0) {
-                const timeStr = formatCooldownTime(remainingMs);
-                status.innerText = `Demo cooldown active. Try again in ${timeStr}.`;
-                status.style.color = "rgba(255, 107, 107, 0.5)";
-                return;
-            }
-        }
-
-        SESSION_DURATION_MS = isLicensed ? FULL_SESSION_DURATION_MS : DEMO_SESSION_DURATION_MS;
 
         // Load session data from backend
         status.innerText = 'Loading session...';
@@ -1391,24 +1139,9 @@ window.openPastSession = async function (sessionName) {
                     apiCostEl.style.color = 'rgba(120, 200, 180, 0.85)';
                 }
 
-                // Update license badge
-                const badge = document.getElementById('license-status-badge');
-                if (badge) {
-                    if (isLicensed) {
-                        badge.textContent = 'LICENSED';
-                        badge.style.color = 'rgba(100, 255, 150, 0.8)';
-                    } else {
-                        badge.textContent = 'Demo';
-                        badge.style.color = 'rgba(255, 200, 100, 0.7)';
-                    }
-                }
-
-                // Update timer
-                const timerText = document.getElementById('session-timer-text');
+                // Session clock starts from zero (dimmed until Start)
+                resetSessionClock();
                 const timerBox = document.getElementById('session-timer');
-                if (timerText) {
-                    timerText.innerText = isLicensed ? '2:00:00' : '0:12:00';
-                }
                 // Show timer in "waiting" state — not yet active
                 if (timerBox) {
                     timerBox.style.color = 'rgba(255,255,255,0.35)';
@@ -1669,55 +1402,6 @@ async function handleCreateSession() {
     // Persist agreement
     localStorage.setItem('disclaimer_agreed', 'true');
 
-    // Validate license
-    const licenseInput = document.getElementById('setup-license');
-    const savedLicense = localStorage.getItem('valid_license_key');
-
-    // If license is already saved and validated, skip validation
-    if (savedLicense) {
-        SESSION_DURATION_MS = FULL_SESSION_DURATION_MS;
-        applyLicensedFieldState();
-        console.log('[DEBUG] Using saved license - Full 2-hour session');
-        showStatus("License validated - Full session", false);
-    } else {
-        // No saved license - check what user entered
-        const licenseKey = licenseInput ? licenseInput.value.trim() : '';
-        console.log('[DEBUG] License key:', licenseKey ? '(provided)' : '(empty)');
-        const licenseStatus = await validateLicense(licenseKey);
-        console.log('[DEBUG] License status:', licenseStatus);
-
-        if (licenseKey && licenseStatus === 'invalid') {
-            // User entered something but it's wrong - show error and stop
-            showStatus("Please enter a valid license key");
-            return;
-        }
-
-        // Set session duration based on license
-        if (licenseStatus === 'valid') {
-            // Save valid license to localStorage - never ask again
-            localStorage.setItem('valid_license_key', licenseKey);
-            SESSION_DURATION_MS = FULL_SESSION_DURATION_MS;
-            applyLicensedFieldState();
-            console.log('[DEBUG] Licensed: Full 2-hour session');
-            showStatus("License validated - Full session", false);
-        } else {
-            // Demo mode - no license provided
-            // Check for demo cooldown
-            const remainingMs = getRemainingDemoCooldown();
-            if (remainingMs > 0) {
-                const timeStr = formatCooldownTime(remainingMs);
-                showStatus(`Demo cooldown active. Try again in ${timeStr}.`);
-                return;
-            }
-
-            isLicensed = false;
-            SESSION_DURATION_MS = DEMO_SESSION_DURATION_MS;
-            console.log('Demo: 12-minute session');
-            showStatus("Demo: 12-minute session", false);
-            if (status) status.style.color = "rgba(228, 147, 61, 0.6)"; // Muted orange for demo
-        }
-    }
-
     try {
         startBtn.disabled = true;
         if (status) status.style.color = "#aaa";
@@ -1814,19 +1498,12 @@ async function handleCreateSession() {
 
         // 4. Session created - hide overlay
         sessionCreated = true;
-        status.innerText = isLicensed ? "Session created!" : "Demo session created (12 min)";
+        status.innerText = "Session created!";
         status.style.color = "rgba(100, 255, 150, 0.4)";
 
-        // Update timer display to show correct duration (dimmed - not started yet)
-        const timerText = document.getElementById('session-timer-text');
+        // Session clock starts from zero (dimmed until Start)
+        resetSessionClock();
         const timerBox = document.getElementById('session-timer');
-        if (timerText) {
-            if (isLicensed) {
-                timerText.innerText = '2:00:00';
-            } else {
-                timerText.innerText = '0:12:00';
-            }
-        }
         // Show timer in "waiting" state — not yet active
         if (timerBox) {
             timerBox.style.color = 'rgba(255,255,255,0.35)';
@@ -1914,91 +1591,30 @@ async function startSessionTimer() {
         return;
     }
 
-    // Re-sync license state with the backend before anchoring the timer. The
-    // backend was just pinged above, so /validate-license will reach it and
-    // re-affirm is_licensed_backend=True for a valid license. This closes the
-    // desync bug where the frontend ran a 2h licensed timer while the backend's
-    // own demo enforcement still cut access off at 12 min (a "demo expired"
-    // warning appearing in the middle of a licensed session).
-    const savedLicenseForSync = localStorage.getItem('valid_license_key');
-    if (savedLicenseForSync) {
-        const licStatus = await validateLicense(savedLicenseForSync);
-        if (licStatus === 'valid') {
-            isLicensed = true;
-        } else if (licStatus === 'invalid') {
-            isLicensed = false;
-            localStorage.removeItem('valid_license_key');
-        }
-        // 'empty'/unreachable: backend was just reachable, so keep current state
-    }
-
-    // Anchor session end time to THIS exact moment (when Start is clicked)
-    const duration = isLicensed ? FULL_SESSION_DURATION_MS : DEMO_SESSION_DURATION_MS;
-    sessionEndTime = Date.now() + duration;
-    sessionStartTimestamp = Date.now(); // Track start time for duration calculation
+    if (!sessionStartTimestamp) sessionStartTimestamp = Date.now();
+    runStartedAt = Date.now();
     window.isSessionActive = true;
 
     // Update button states
     startBtn.classList.add('active');
     stopBtn.classList.remove('paused');
     if (endBtn) endBtn.classList.remove('ended');
-    statusText.innerText = isLicensed ? 'Session Running' : 'Demo (12 mins)';
+    statusText.innerText = 'Session Running';
     if (statusDot) statusDot.className = 'dot connected';
     if (window.__smartMode && window.startSmartListening) window.startSmartListening();
     if (window.__practiceMode && window.practice) window.practice.start();
 
-    timerInterval = setInterval(() => {
-        const remaining = sessionEndTime - Date.now();
-
-        if (remaining <= 0) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-
-            // 5-minute Demo and 2-hour Licensed sessions both expire here.
-            resetSessionUI();
-
-            if (isLicensed) {
-                customAlert('Session time expired! (2 hours)\n\nThe current session has been closed. Please create a new session.');
-                const statusText = document.getElementById('status-text');
-                if (statusText) statusText.innerText = 'Session Expired';
-            } else {
-                // Demo expired - show license prompt
-                showLicensePrompt();
-                const statusText = document.getElementById('status-text');
-                if (statusText) statusText.innerText = 'Demo Expired';
-            }
-            return;
-        }
-        const hours = Math.floor(remaining / (1000 * 60 * 60));
-        const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-        const timeStr = `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        timerText.innerText = timeStr;
-
-        // Timer color: green → yellow (last 30 min) → red (last 10 min)
-        const timerBox = document.getElementById('session-timer');
-        const thirtyMin = 30 * 60 * 1000;
-        const tenMin = 10 * 60 * 1000;
-        if (timerBox) {
-            if (remaining <= tenMin) {
-                timerBox.style.color = 'rgba(255, 107, 107, 1)';
-                timerBox.style.borderColor = 'rgba(255, 68, 68, 0.5)';
-                timerBox.style.background = 'rgba(255, 50, 50, 0.1)';
-                timerBox.style.boxShadow = '0 0 12px rgba(255, 50, 50, 0.25)';
-            } else if (remaining <= thirtyMin) {
-                timerBox.style.color = '#f0c040';
-                timerBox.style.borderColor = 'rgba(240, 192, 64, 0.4)';
-                timerBox.style.background = 'rgba(240, 192, 64, 0.06)';
-                timerBox.style.boxShadow = '0 0 8px rgba(240, 192, 64, 0.15)';
-            } else {
-                timerBox.style.color = '#00e6c8';
-                timerBox.style.borderColor = 'rgba(0, 230, 200, 0.3)';
-                timerBox.style.background = 'rgba(0, 230, 200, 0.05)';
-                timerBox.style.boxShadow = '0 0 6px rgba(0, 230, 200, 0.1)';
-            }
-        }
-
-    }, 1000);
+    // The clock only counts up: no limit, no expiry
+    const timerBox = document.getElementById('session-timer');
+    if (timerBox) {
+        timerBox.style.color = '#00e6c8';
+        timerBox.style.borderColor = 'rgba(0, 230, 200, 0.3)';
+        timerBox.style.background = 'rgba(0, 230, 200, 0.05)';
+        timerBox.style.boxShadow = '0 0 6px rgba(0, 230, 200, 0.1)';
+    }
+    const tick = () => { timerText.innerText = formatElapsed(elapsedBeforePause + (Date.now() - runStartedAt)); };
+    tick();
+    timerInterval = setInterval(tick, 1000);
 }
 
 function stopSessionTimer() {
@@ -2019,6 +1635,10 @@ function stopSessionTimer() {
         clearInterval(timerInterval);
         timerInterval = null;
     }
+    if (runStartedAt) {
+        elapsedBeforePause += Date.now() - runStartedAt;
+        runStartedAt = null;
+    }
 
     // Update button states
     startBtn.classList.remove('active');
@@ -2034,8 +1654,7 @@ function resetSessionUI() {
     // Reset usage for next session
     fetch('http://127.0.0.1:5050/usage/reset', { method: 'POST' }).catch(() => { });
 
-    // End the session on the backend: clears history + rolling summary and, in
-    // demo mode, records the end time so the backend enforces the cooldown
+    // End the session on the backend: clears its context and conversation memory
     const endName = currentSessionName || '';
     saidSaved.then(() => fetch('http://127.0.0.1:5050/session/end', {
         method: 'POST',
@@ -2120,7 +1739,7 @@ function resetSessionUI() {
 
     // Reset timer display
     const timerText = document.getElementById('session-timer-text');
-    if (timerText) timerText.innerText = '2:00:00';
+    resetSessionClock();
 
     const timerBox = document.getElementById('session-timer');
     if (timerBox) {
@@ -2159,8 +1778,8 @@ function resetSessionUI() {
     sessionCreated = false;
     sessionTimerStarted = false;
     currentSessionName = null;
-    sessionEndTime = null;
     sessionStartTimestamp = null;
+    resetSessionClock();
 
     // Show the setup overlay again and reset disclaimer only if not persistent
     if (overlay) {
@@ -2173,18 +1792,6 @@ function resetSessionUI() {
         }
     }
 
-    // Restore license badge if saved license exists
-    const savedLicenseKey = localStorage.getItem('valid_license_key');
-    if (savedLicenseKey) {
-        applyLicensedFieldState();
-    }
-
-    // Set demo cooldown timestamp ONLY IF NOT LICENSED
-    // This starts the 47-min timer exactly when the session ends
-    if (!isLicensed) {
-        localStorage.setItem('last_demo_timestamp', Date.now().toString());
-        console.log('[DEBUG] Demo cooldown started');
-    }
 }
 
 async function endSession() {
@@ -2234,45 +1841,6 @@ async function endSession() {
         resetSessionUI();
     }
 }
-
-// AUTO-DISPLAY HWID ON SETUP SCREEN
-async function updateHWIDDisplay() {
-    try {
-        const hwid = await getHardwareID();
-        console.log('[DEBUG] Fetched HWID for display:', hwid);
-
-        const setupDisplay = document.getElementById('hwid-setup-display');
-        const hwidCopyBtn = document.getElementById('hwid-copy-btn');
-        if (setupDisplay) {
-            setupDisplay.style.display = 'flex';
-            setupDisplay.querySelector('span').textContent = hwid;
-
-            if (hwid === "Backend Offline") {
-                setupDisplay.querySelector('span').style.color = "rgba(255, 107, 107, 0.5)";
-                if (hwidCopyBtn) hwidCopyBtn.style.display = 'none';
-            } else {
-                setupDisplay.querySelector('span').style.color = "rgba(100, 255, 150, 0.4)";
-                if (hwidCopyBtn) {
-                    hwidCopyBtn.style.display = 'inline-flex';
-                    hwidCopyBtn.onclick = () => {
-                        navigator.clipboard.writeText(hwid);
-                        const span = setupDisplay.querySelector('span');
-                        span.textContent = 'Copied!';
-                        setTimeout(() => { span.textContent = hwid; }, 1000);
-                    };
-                }
-            }
-            console.log('[DEBUG] HWID display updated on setup screen');
-        } else {
-            console.warn('[DEBUG] hwid-setup-display element not found');
-        }
-    } catch (e) {
-        console.error("Error displaying HWID on setup screen:", e);
-    }
-}
-
-// Initial call
-updateHWIDDisplay();
 
 // Inject API cost and Model Selector elements into status bar dynamically
 (function () {

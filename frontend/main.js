@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, screen, ipcMain, desktopCapturer, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, screen, ipcMain, desktopCapturer, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execSync, exec } = require('child_process');
@@ -543,6 +543,13 @@ function createWindow() {
 
   win.on('moved', () => {
     clampWindowToScreen(win);
+  });
+
+  // Links (Buy me a coffee, console.groq.com, platform.openai.com) open in the
+  // default browser, not in a new app window
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
   });
 
   // Mini mode: the green dot is a drag region (so it can be moved), which means the page

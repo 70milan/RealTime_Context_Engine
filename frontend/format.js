@@ -60,4 +60,10 @@ function renderMarkdownLite(text, variant) {
 }
 
 window.formatConvoText = (text) => renderMarkdownLite(text, 'convo');
+
+// Buy Me a Coffee page (placeholder): every a.coffee-link in the app points here
+window.COFFEE_URL = 'https://www.buymeacoffee.com/YOUR-NAME';
+const setCoffeeLinks = () => document.querySelectorAll('a.coffee-link').forEach(a => { a.href = window.COFFEE_URL; });
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setCoffeeLinks);
+else setCoffeeLinks();
 window.formatResponseText = (text) => renderMarkdownLite(text, 'response');

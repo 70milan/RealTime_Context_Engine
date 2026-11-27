@@ -112,6 +112,21 @@ for /f "tokens=*" %%i in ('node -p "require('./package.json').version"') do set 
 :: Tag the release locally: the next build's release notes start from this commit
 git tag -f v!VERSION! >nul 2>&1 && echo [INFO] Tagged this release as v!VERSION!
 
+:: Put release-notes.md on the GitHub release as its description. electron-builder can
+:: leave it empty, and the app's update prompt shows this text as "What's new".
+for /f "tokens=*" %%r in ('node -p "const p=require('./package.json').build.publish; [p.owner, p.repo].join(String.fromCharCode(47))"') do set "RELEASE_REPO=%%r"
+where gh >nul 2>&1
+if !errorlevel! equ 0 (
+    gh release edit v!VERSION! -R !RELEASE_REPO! --notes-file release-notes.md >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo [INFO] Release notes added to github.com/!RELEASE_REPO!/releases/tag/v!VERSION!
+    ) else (
+        echo [WARNING] Could not add release notes to the GitHub release. Run: gh release edit v!VERSION! -R !RELEASE_REPO! --notes-file frontend\release-notes.md
+    )
+) else (
+    echo [WARNING] GitHub CLI ^(gh^) not found: add the release notes on GitHub by hand.
+)
+
 :: Verify Final Signature
 echo.
 echo [INFO] Verifying installer signature...

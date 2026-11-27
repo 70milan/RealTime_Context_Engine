@@ -577,6 +577,28 @@
     }
 
     /* Usage chip + drawer */
+    /* Buy me a coffee (free app) */
+    .coffee-link {
+      color: rgba(255, 200, 120, 0.7);
+      text-decoration: none;
+      -webkit-app-region: no-drag;
+      cursor: pointer;
+    }
+
+    .coffee-link:hover {
+      color: rgba(255, 210, 140, 0.95);
+    }
+
+    .coffee-chip {
+      margin-left: 6px;
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      border: 1px solid rgba(255, 200, 120, 0.2);
+      padding: 2px 6px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
     #btn-toggle-usage {
       margin-left: 6px;
       color: rgba(255, 255, 255, 0.25);
@@ -942,22 +964,6 @@
                 <input type="password" id="setup-apikey" class="setup-input" placeholder="sk-..."
                   autocomplete="new-password" />
               </div>
-              <div class="setup-field">
-                <label class="setup-label" for="setup-license">
-                  License Key <span id="license-info" class="setup-info-link">(?)</span><span
-                    id="license-lock-icon" style="display:none; margin-left:5px; cursor:not-allowed;"></span>
-                </label>
-                <input type="password" id="setup-license" class="setup-input" placeholder="Demo (12m)"
-                  autocomplete="off" />
-                <div id="hwid-setup-display" class="setup-hwid" style="display: none;">HWID: <span
-                    style="color: rgba(100, 255, 150, 0.4);">Fetching...</span> <button id="hwid-copy-btn"
-                    class="hwid-copy-btn" type="button"><svg width="11" height="11"
-                      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                      stroke-linejoin="round">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg></button></div>
-              </div>
               <div class="setup-field practice-only">
                 <label class="setup-label setup-label-row" for="setup-groq-key">
                   <span>Groq API Key <span id="groq-info" class="setup-info-link">(?)</span></span>
@@ -1011,7 +1017,7 @@
     </div>
 
     <div class="setup-bottom-meta">
-      <span id="license-status-badge"></span>
+      <a class="coffee-link" href="#" target="_blank">&#9749; Buy me a coffee</a>
       <span class="setup-sep">|</span>
       <span class="app-version">v2.0.0</span>
       <span class="setup-sep">|</span>
@@ -1100,9 +1106,7 @@
           </li>
           <li><strong>System Environment:</strong> You acknowledge that system updates, third-party antivirus software,
             or changes to your audio drivers may disrupt this application. We do not provide localized IT support.</li>
-          <li><strong>License Terms:</strong> This session is tied to your single-use Hardware ID.</li>
-          <li><strong>Provided "As-Is":</strong> This software is provided without warranty. Due to the digital nature
-            of the product, all sales are final and non-refundable.</li>
+          <li><strong>Provided "As-Is":</strong> This software is free and provided without warranty.</li>
         </ul>
       </div>
       <button id="btn-ethical-agree-modal" type="button"
@@ -1138,10 +1142,9 @@
           <div
             style="color: rgba(255,255,255,0.5); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
             Why This App?</div>
-          <p style="margin: 0 0 6px 0;">Completely self-hosted with no recurring fees. Just $20 one-time + your own
-            OpenAI API costs (typically $0.05 - $2.00+ per hour depending on model usage, e.g. GPT-5/Reasoning).</p>
-          <p style="margin: 0;">Competitors charge $50-200/month. With Interview Assistant, you own it forever.
-            Includes "Mini Mode" for stealth and streamlined UI.</p>
+          <p style="margin: 0 0 6px 0;">Free, with no time limits and no subscription. You only pay OpenAI for what you use
+            (typically $0.05 - $2.00 per hour depending on the model), and Practice mode is free with a Groq key.</p>
+          <p style="margin: 0;">If it helped you, you can support it: <a class="coffee-link" href="#" target="_blank">&#9749; Buy me a coffee</a></p>
         </div>
         <div style="margin-bottom: 14px;">
           <div
@@ -1370,7 +1373,8 @@
       <button id="btn-conversation" class="btn">Convo</button>
       <div id="session-timer"
         style="padding: 4px 10px; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.75); font-weight: 600; font-size: 13px; font-family: 'Consolas', 'Courier New', monospace; display: flex; align-items: center; gap: 6px; flex-shrink: 0; letter-spacing: 1.5px; transition: all 0.5s ease;">
-        <span id="session-timer-text">2:00:00</span>
+        <span id="session-timer-text">0:00:00</span>
+        <span id="session-timer-inf" style="opacity: 0.55; font-size: 14px; font-weight: 400;">&infin;</span>
       </div>
       <div class="session-btn-group">
         <button id="btn-session-start" class="session-btn">Start</button>
@@ -1417,6 +1421,7 @@
           onclick="window.toggleLogDrawer()">log</span>
         <span id="btn-toggle-usage"
           onclick="window.toggleUsageDrawer()">usage</span>
+        <a class="coffee-link coffee-chip" href="#" target="_blank">&#9749; Buy me a coffee</a>
       </div>
       <!-- Middle container injected by setup.js will go here -->
       <div style="display: flex; gap: 10px; align-items: center; font-size: 11px; flex-shrink: 0; white-space: nowrap;">

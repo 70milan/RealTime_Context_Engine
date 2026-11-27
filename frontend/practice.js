@@ -477,8 +477,9 @@
         const p = panel(`
           <div class="pr-title">Round ${P.round} review</div>
           <div class="pr-review">${esc(review)}</div>
-          <div class="pr-row">
+          <div class="pr-row" style="align-items: center; justify-content: space-between;">
             <button class="pr-btn" id="pr-next-round" type="button">Next round</button>
+            <a class="coffee-link" href="${esc(window.COFFEE_URL || '#')}" target="_blank" style="font-size: 11px;">&#9749; Helped? Buy me a coffee</a>
           </div>`);
         p.querySelector('#pr-next-round').onclick = () => { setHeaders(null, 'Your answer'); generateRound(); };
         status('Round reviewed');

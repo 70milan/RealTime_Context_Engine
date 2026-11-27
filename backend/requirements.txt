@@ -10,7 +10,5 @@ starlette==0.50.0
 pyinstaller
 tiktoken
 python-docx
-cryptography==46.0.7
-py-cpuinfo==9.0.0
 python-multipart==0.0.20
 edge-tts==7.3.1
