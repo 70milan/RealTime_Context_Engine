@@ -68,6 +68,66 @@ window.customAlert = (msg) => showCustomModal(msg, false);
 window.customConfirm = (msg) => showCustomModal(msg, true);
 
 
+// Practice Focus picker: a read-only field with the same dropdown as Language.
+// The chosen key (mixed / behavioural / technical / coding) is kept in a hidden input.
+const FOCUS_OPTIONS = [
+    ['mixed', 'Mixed (7 questions + 2 coding)'],
+    ['behavioural', 'Behavioural (7 questions + 1 coding)'],
+    ['technical', 'Technical deep-dive (7 questions + 2 coding)'],
+    ['coding', 'Coding (2 questions + 5 coding)'],
+];
+function setupFocusPicker() {
+    const field = document.getElementById('setup-practice-focus-label');
+    const value = document.getElementById('setup-practice-focus');
+    if (!field || !value) return;
+    const choose = (key) => {
+        const opt = FOCUS_OPTIONS.find(o => o[0] === key) || FOCUS_OPTIONS[0];
+        value.value = opt[0];
+        field.value = opt[1];
+        try { localStorage.setItem('practice_focus', opt[0]); } catch (e) { }
+    };
+    let saved = 'mixed';
+    try { saved = localStorage.getItem('practice_focus') || 'mixed'; } catch (e) { }
+    choose(saved);
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'lang-autocomplete';
+    document.body.appendChild(dropdown);
+    const open = () => {
+        dropdown.innerHTML = '';
+        FOCUS_OPTIONS.forEach(([key, label]) => {
+            const item = document.createElement('div');
+            item.className = 'lang-autocomplete-item' + (key === value.value ? ' active' : '');
+            item.textContent = label;
+            item.addEventListener('mousedown', (e) => { e.preventDefault(); choose(key); dropdown.classList.remove('open'); });
+            dropdown.appendChild(item);
+        });
+        const rect = field.getBoundingClientRect();
+        dropdown.style.left = rect.left + 'px';
+        dropdown.style.width = rect.width + 'px';
+        dropdown.style.top = (rect.bottom + 2) + 'px';
+        dropdown.style.bottom = 'auto';
+        dropdown.classList.add('open');
+    };
+    field.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        if (dropdown.classList.contains('open')) dropdown.classList.remove('open');
+        else { field.focus(); open(); }
+    });
+    field.addEventListener('blur', () => dropdown.classList.remove('open'));
+    field.addEventListener('keydown', (e) => {
+        const i = FOCUS_OPTIONS.findIndex(o => o[0] === value.value);
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            choose(FOCUS_OPTIONS[(i + (e.key === 'ArrowDown' ? 1 : FOCUS_OPTIONS.length - 1)) % FOCUS_OPTIONS.length][0]);
+            if (dropdown.classList.contains('open')) open();
+        } else if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            dropdown.classList.contains('open') ? dropdown.classList.remove('open') : open();
+        } else if (e.key === 'Escape') dropdown.classList.remove('open');
+    });
+}
+
 function showSessionError() {
     const popup = document.getElementById('session-error-popup');
     if (popup) {
@@ -286,11 +346,7 @@ function initSession() {
         setSetupMode(localStorage.getItem('session_mode') === 'practice' ? 'practice' : 'live');
         const groqInput = document.getElementById('setup-groq-key');
         if (groqInput) groqInput.value = localStorage.getItem('groq_api_key') || '';
-        const focusSelect = document.getElementById('setup-practice-focus');
-        if (focusSelect) {
-            focusSelect.value = localStorage.getItem('practice_focus') || 'mixed';
-            focusSelect.onchange = () => { try { localStorage.setItem('practice_focus', focusSelect.value); } catch (e) { } };
-        }
+        setupFocusPicker();
     } catch (e) { }
 
     // Backend console: compact by default; click it (or [expand]) for a large view,
@@ -804,8 +860,6 @@ function initSession() {
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Q</span><span style="color: #ccc;">Toggle mini mode</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+Shift+Q</span><span style="color: #ccc;">Quit app</span>' +
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Ctrl+F</span><span style="color: #ccc;">Maximize AI response</span>' +
-
-        '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Double-click dot</span><span style="color: #ccc;">Reopen from mini mode</span>' +
 
         '<span style="color: rgba(100,255,150,0.8); font-weight: 600;">Space</span><span style="color: #ccc;">Practice: end your answer</span>' +
         '<div style="grid-column: 1 / -1; height: 1px; background: rgba(255,255,255,0.1); margin: 2px 0;"></div>' +

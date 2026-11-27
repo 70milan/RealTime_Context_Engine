@@ -923,13 +923,10 @@
               </div>
               <div class="setup-checks practice-only">
                 <div class="setup-check-row">
-                  <label class="setup-label" for="setup-practice-focus" style="margin: 0;">Focus</label>
-                  <select id="setup-practice-focus" class="setup-input setup-select">
-                    <option value="mixed">Mixed (7 questions + 2 coding)</option>
-                    <option value="behavioural">Behavioural (7 + 1 coding)</option>
-                    <option value="technical">Technical deep-dive (7 + 2 coding)</option>
-                    <option value="coding">Coding (2 + 5 coding)</option>
-                  </select>
+                  <label class="setup-label" for="setup-practice-focus-label" style="margin: 0;">Focus</label>
+                  <input type="text" id="setup-practice-focus-label" class="setup-input setup-focus-input" readonly
+                    autocomplete="off" value="Mixed (7 questions + 2 coding)" />
+                  <input type="hidden" id="setup-practice-focus" value="mixed" />
                 </div>
               </div>
               <div class="setup-checks live-only">
@@ -1305,8 +1302,6 @@
               AI Response</span>
             <span
               style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Ctrl+Alt+A</span><span>Toggle Smart Interview</span>
-            <span
-              style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Double-click dot</span><span>Reopen from mini mode</span>
             <span
               style="color: rgba(100,255,150,0.75); font-family: monospace; font-weight: 600; font-size: 10px;">Space</span><span>Practice: end your answer</span>
           </div>

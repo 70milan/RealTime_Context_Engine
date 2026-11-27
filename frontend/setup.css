@@ -160,7 +160,14 @@ html, body, *, *::before, *::after { cursor: default !important; }
   display: none !important;
 }
 
-/* Focus picker: same height as the checkbox row it replaces, dark dropdown */
+/* Focus picker: looks and opens like the Language field (uses its dropdown styles) */
+.setup-focus-input {
+  flex: 1;
+  cursor: default;
+  caret-color: transparent;
+}
+
+/* (old <select> styling, unused) */
 .setup-input.setup-select {
   width: auto;
   flex: 1;
