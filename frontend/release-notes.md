@@ -1,4 +1,4 @@
-Version 3.0.2
+Version 3.0.3
 
-- The Practice "Focus" picker now looks and works like the Language field, with a proper dropdown list.
-- Cleaner hotkey list.
+- Fixed: every option in the Practice "Focus" list and the Language list can now be clicked.
+- Faster, cleaner app under the hood (no visible changes).
